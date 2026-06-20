@@ -9,30 +9,39 @@ const { fetchStationStatus } = require('./gbfs');
 const POLL_MS = 30_000;
 const OFFICIAL_URL = 'https://velam.amiens.fr';
 
-/**
- * Génère les clés VAPID au premier démarrage (persistées en base) et
- * configure web-push. Retourne la clé publique.
- */
-function initPush() {
-  let publicKey  = getConfig('vapid_public');
-  let privateKey = getConfig('vapid_private');
+let _vapidPublic = null; // mis en cache au démarrage (accès sync depuis la route)
 
-  if (!publicKey || !privateKey) {
-    const keys = webpush.generateVAPIDKeys();
-    publicKey  = keys.publicKey;
-    privateKey = keys.privateKey;
-    setConfig('vapid_public', publicKey);
-    setConfig('vapid_private', privateKey);
-    console.log('[push] Clés VAPID générées et persistées');
+/**
+ * Configure web-push. En prod : clés VAPID depuis les variables d'env.
+ * En dev : lues/générées dans SQLite (logique existante conservée).
+ */
+async function initPush() {
+  let publicKey, privateKey;
+
+  if (process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY) {
+    publicKey  = process.env.VAPID_PUBLIC_KEY;
+    privateKey = process.env.VAPID_PRIVATE_KEY;
+  } else {
+    publicKey  = await getConfig('vapid_public');
+    privateKey = await getConfig('vapid_private');
+    if (!publicKey || !privateKey) {
+      const keys = webpush.generateVAPIDKeys();
+      publicKey  = keys.publicKey;
+      privateKey = keys.privateKey;
+      await setConfig('vapid_public', publicKey);
+      await setConfig('vapid_private', privateKey);
+      console.log('[push] Clés VAPID générées et persistées');
+    }
   }
 
-  const subject = process.env.VAPID_SUBJECT ?? 'mailto:contact@velam.local';
+  _vapidPublic = publicKey;
+  const subject = 'mailto:' + (process.env.VAPID_EMAIL || 'admin@velopulse.app');
   webpush.setVapidDetails(subject, publicKey, privateKey);
   return publicKey;
 }
 
 function getVapidPublicKey() {
-  return getConfig('vapid_public');
+  return _vapidPublic;
 }
 
 // ── Comptage selon le type de vélo ─────────────────────────────────────────────
@@ -60,14 +69,14 @@ function inWindow(now, start, end) {
 // ── Envoi ──────────────────────────────────────────────────────────────────────
 
 async function sendToUser(userId, payload) {
-  const subs = getSubscriptionsByUser(userId);
+  const subs = await getSubscriptionsByUser(userId);
   await Promise.all(subs.map(async (row) => {
     try {
       await webpush.sendNotification(JSON.parse(row.subscription), JSON.stringify(payload));
     } catch (err) {
       // Subscription expirée / invalide → suppression en base
       if (err.statusCode === 404 || err.statusCode === 410) {
-        removeSubscriptionById(row.id);
+        await removeSubscriptionById(row.id);
         console.log(`[push] subscription ${row.id} expirée — supprimée`);
       } else {
         console.error('[push] échec envoi', err.statusCode, err.body ?? err.message);
@@ -80,12 +89,12 @@ async function sendToUser(userId, payload) {
 
 async function checkAlerts() {
   // Ne rien faire si aucune alerte active n'existe en base
-  if (countActiveAlerts() === 0) return;
+  if (await countActiveAlerts() === 0) return;
 
   const now = nowHHMM();
   // Jour ISO courant : 1 = lundi … 7 = dimanche (getDay() renvoie 0 = dimanche).
   const isoDay = ((new Date().getDay() + 6) % 7) + 1;
-  const due = getActiveAlerts().filter(
+  const due = (await getActiveAlerts()).filter(
     (a) =>
       inWindow(now, a.time_start, a.time_end) &&
       (a.days ? a.days.split(',').map(Number).includes(isoDay) : true)
@@ -116,7 +125,7 @@ async function checkAlerts() {
         icon:  '/icon-192.png',
         badge: '/badge-72.png',
       });
-      setAlertNotifiedDate(alert.id, today);
+      await setAlertNotifiedDate(alert.id, today);
     }
     // Tous les autres cas : ne rien faire (aucun reset, aucune autre écriture)
   }

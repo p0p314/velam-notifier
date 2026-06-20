@@ -5,19 +5,28 @@ const { getConfig, setConfig } = require('./db');
 
 const TOKEN_TTL = '7d';
 
+let _secret = null;
+
 /**
- * Secret de signature JWT. Priorité à la variable d'env JWT_SECRET ;
- * sinon on génère un secret aléatoire persisté en base (table config).
+ * Résout le secret JWT une fois au démarrage et le met en cache (sync ensuite).
+ * Priorité à JWT_SECRET (env) ; sinon secret aléatoire persisté en base (dev).
  */
-function getSecret() {
-  if (process.env.JWT_SECRET) return process.env.JWT_SECRET;
-  let secret = getConfig('jwt_secret');
-  if (!secret) {
-    secret = crypto.randomBytes(48).toString('hex');
-    setConfig('jwt_secret', secret);
+async function initAuth() {
+  if (process.env.JWT_SECRET) {
+    _secret = process.env.JWT_SECRET;
+    return;
+  }
+  _secret = await getConfig('jwt_secret');
+  if (!_secret) {
+    _secret = crypto.randomBytes(48).toString('hex');
+    await setConfig('jwt_secret', _secret);
     console.log('[auth] Secret JWT généré et persisté');
   }
-  return secret;
+}
+
+function getSecret() {
+  if (!_secret) throw new Error('Auth non initialisée (appeler initAuth au démarrage)');
+  return _secret;
 }
 
 function hashPassword(password) {
@@ -53,4 +62,4 @@ function requireAuth(req, res, next) {
   }
 }
 
-module.exports = { hashPassword, verifyPassword, signToken, requireAuth };
+module.exports = { initAuth, hashPassword, verifyPassword, signToken, requireAuth };
