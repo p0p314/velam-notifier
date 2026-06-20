@@ -1,0 +1,16 @@
+# Dépendances
+node_modules/
+
+# Base SQLite générée
+data/
+
+# Build frontend
+frontend/dist/
+
+# Variables d'environnement (config locale, ex. IP LAN)
+.env
+.env.local
+
+# Logs / divers
+*.log
+.DS_Store
