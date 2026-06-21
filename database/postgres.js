@@ -22,10 +22,10 @@ function createPostgresDb() {
     },
     async run(sql, params = []) {
       let finalSql = toPg(sql);
-      // La table `config` n'a pas de colonne id → on n'ajoute pas RETURNING.
+      // Tables sans colonne `id` (PK = station_id / key) → pas de RETURNING id.
       const isInsert = /^\s*insert\s+into/i.test(finalSql);
-      const targetsConfig = /insert\s+into\s+config\b/i.test(finalSql);
-      if (isInsert && !/returning/i.test(finalSql) && !targetsConfig) {
+      const noIdTable = /insert\s+into\s+(config|stations)\b/i.test(finalSql);
+      if (isInsert && !/returning/i.test(finalSql) && !noIdTable) {
         finalSql += ' RETURNING id';
       }
       const result = await pool.query(finalSql, params);

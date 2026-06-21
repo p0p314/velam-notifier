@@ -1,6 +1,7 @@
 const express = require('express');
 const cors    = require('cors');
 const path    = require('path');
+const fs      = require('fs');
 const {
   initialize, countStations, getStations, saveStations,
   createUser, getUserByUsername,
@@ -320,6 +321,9 @@ app.get('/api/health', async (req, res) => {
 
 if (process.env.NODE_ENV === 'production') {
   const distPath = path.join(__dirname, 'frontend', 'dist');
+  // Log de diagnostic temporaire : vérifie la présence du build Vite.
+  if (!fs.existsSync(distPath)) console.error('[STATIC] dist introuvable à :', distPath);
+  else console.log('[STATIC] dist trouvé à :', distPath);
   app.use(express.static(distPath));
   // Fallback SPA : toute route non-API renvoie index.html.
   app.get('*', (req, res, next) => {
@@ -336,8 +340,8 @@ if (process.env.NODE_ENV === 'production') {
   await initPush();     // configure les clés VAPID
   startPolling();
 
-  app.listen(PORT, () => {
-    console.log(`\nVéloPulse server → http://localhost:${PORT}`);
+  app.listen(PORT, '0.0.0.0', () => {
+    console.log(`\nVéloPulse server → port ${PORT} (0.0.0.0)`);
     console.log(`  DB : ${process.env.DATABASE_URL ? 'PostgreSQL' : 'SQLite (dev)'}`);
     console.log(`  CORS autorisé pour : ${ALLOWED_ORIGINS.join(', ')}`);
     console.log(`  GET  /health                — anti-sleep`);
