@@ -38,7 +38,10 @@ function verifyPassword(password, hash) {
 }
 
 function signToken(user) {
-  return jwt.sign({ id: user.id, username: user.username }, getSecret(), { expiresIn: TOKEN_TTL });
+  return jwt.sign({ id: user.id, username: user.username }, getSecret(), {
+    expiresIn: TOKEN_TTL,
+    algorithm: 'HS256',
+  });
 }
 
 /**
@@ -54,7 +57,7 @@ function requireAuth(req, res, next) {
   }
 
   try {
-    const payload = jwt.verify(token, getSecret());
+    const payload = jwt.verify(token, getSecret(), { algorithms: ['HS256'] });
     req.user = { id: payload.id, username: payload.username };
     next();
   } catch {

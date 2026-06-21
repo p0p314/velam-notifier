@@ -1,7 +1,9 @@
-const express = require('express');
-const cors    = require('cors');
-const path    = require('path');
-const fs      = require('fs');
+const express   = require('express');
+const cors      = require('cors');
+const helmet    = require('helmet');
+const rateLimit = require('express-rate-limit');
+const path      = require('path');
+const fs        = require('fs');
 const {
   initialize, countStations, getStations, saveStations,
   createUser, getUserByUsername,
@@ -22,9 +24,45 @@ const ALLOWED_ORIGINS = (process.env.CORS_ORIGIN ?? 'http://localhost:5173,http:
   .filter(Boolean);
 
 const app = express();
+app.set('trust proxy', 1); // derrière le proxy Render → vraie IP client (rate-limit)
 
-app.use(cors({ origin: ALLOWED_ORIGINS }));
-app.use(express.json());
+// En-têtes de sécurité. CSP adaptée au SPA : JS/CSS bundlés en 'self', styles
+// inline React tolérés, API + worker same-origin.
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc:     ["'self'"],
+      scriptSrc:      ["'self'"],
+      styleSrc:       ["'self'", "'unsafe-inline'"],
+      imgSrc:         ["'self'", "data:"],
+      connectSrc:     ["'self'"],
+      manifestSrc:    ["'self'"],
+      workerSrc:      ["'self'"],
+      objectSrc:      ["'none'"],
+      frameAncestors: ["'none'"],
+    },
+  },
+}));
+
+// CORS : whitelist explicite. En prod le domaine public, en dev localhost/LAN.
+const corsOptions = process.env.NODE_ENV === 'production'
+  ? { origin: process.env.FRONTEND_URL || 'https://velam-notifier.onrender.com' }
+  : { origin: ALLOWED_ORIGINS };
+app.use(cors(corsOptions));
+
+app.use(express.json({ limit: '16kb' })); // borne la taille des corps (anti-DoS)
+
+// Rate limiting anti-bruteforce sur l'authentification.
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, max: 10,
+  standardHeaders: true, legacyHeaders: false,
+  message: { ok: false, error: 'Trop de tentatives, réessayez dans 15 minutes.' },
+});
+const registerLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, max: 5,
+  standardHeaders: true, legacyHeaders: false,
+  message: { ok: false, error: 'Trop de comptes créés, réessayez plus tard.' },
+});
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -99,7 +137,7 @@ app.get('/api/stations', async (req, res) => {
     });
   } catch (err) {
     console.error('[GET /api/stations]', err.message);
-    res.status(502).json({ ok: false, error: err.message });
+    res.status(502).json({ ok: false, error: 'Service temporairement indisponible' });
   }
 });
 
@@ -118,20 +156,23 @@ app.post('/api/stations/refresh', async (req, res) => {
     });
   } catch (err) {
     console.error('[POST /api/stations/refresh]', err.message);
-    res.status(502).json({ ok: false, error: err.message });
+    res.status(502).json({ ok: false, error: 'Service temporairement indisponible' });
   }
 });
 
 // ── Routes : auth ─────────────────────────────────────────────────────────────
 
-app.post('/api/auth/register', async (req, res) => {
+app.post('/api/auth/register', registerLimiter, async (req, res) => {
   try {
     const { username, password } = req.body ?? {};
     if (!username?.trim() || !password) {
       return res.status(400).json({ ok: false, error: 'username et password requis' });
     }
-    if (password.length < 6) {
-      return res.status(400).json({ ok: false, error: 'Le mot de passe doit faire au moins 6 caractères' });
+    if (username.trim().length > 32) {
+      return res.status(400).json({ ok: false, error: 'Nom d\'utilisateur trop long (max 32)' });
+    }
+    if (password.length < 8) {
+      return res.status(400).json({ ok: false, error: 'Le mot de passe doit faire au moins 8 caractères' });
     }
     if (await getUserByUsername(username.trim())) {
       return res.status(409).json({ ok: false, error: 'Ce nom d\'utilisateur est déjà pris' });
@@ -146,7 +187,7 @@ app.post('/api/auth/register', async (req, res) => {
   }
 });
 
-app.post('/api/auth/login', async (req, res) => {
+app.post('/api/auth/login', loginLimiter, async (req, res) => {
   try {
     const { username, password } = req.body ?? {};
     if (!username?.trim() || !password) {
@@ -229,17 +270,17 @@ function validateAlertPayload(body, { partial = false } = {}) {
 
   const has = (k) => body[k] !== undefined && body[k] !== null;
 
-  if (!partial || has('station_id'))   { has('station_id')   ? (fields.station_id   = String(body.station_id))   : errors.push('station_id'); }
-  if (!partial || has('station_name')) { has('station_name') ? (fields.station_name = String(body.station_name)) : errors.push('station_name'); }
+  if (!partial || has('station_id'))   { has('station_id')   && String(body.station_id).length   <= 64  ? (fields.station_id   = String(body.station_id))   : errors.push('station_id'); }
+  if (!partial || has('station_name')) { has('station_name') && String(body.station_name).length <= 128 ? (fields.station_name = String(body.station_name)) : errors.push('station_name'); }
   if (!partial || has('bike_type')) {
     if (['mechanical', 'ebike', 'any'].includes(body.bike_type)) fields.bike_type = body.bike_type;
     else errors.push('bike_type (mechanical|ebike|any)');
   }
   if (!partial || has('min_count')) {
     const n = Number(body.min_count);
-    if (Number.isInteger(n) && n >= 1) fields.min_count = n;
+    if (Number.isInteger(n) && n >= 1 && n <= 50) fields.min_count = n;
     else if (!partial) fields.min_count = 1;
-    else errors.push('min_count (entier >= 1)');
+    else errors.push('min_count (entier 1-50)');
   }
   if (!partial || has('time_start')) { HHMM.test(body.time_start ?? '') ? (fields.time_start = body.time_start) : errors.push('time_start (HH:MM)'); }
   if (!partial || has('time_end'))   { HHMM.test(body.time_end ?? '')   ? (fields.time_end   = body.time_end)   : errors.push('time_end (HH:MM)'); }
