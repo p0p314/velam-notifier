@@ -4,7 +4,7 @@
   "description": "Proxy API pour les stations Vélam d'Amiens",
   "main": "server.js",
   "scripts": {
-    "build": "npm install && cd frontend && npm install && npm run build",
+    "build": "npm install && cd frontend && npm install --include=dev && npm run build",
     "start": "node server.js",
     "dev": "node --watch server.js",
     "dev:front": "cd frontend && npm run dev",
