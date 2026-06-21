@@ -72,7 +72,10 @@ async function sendToUser(userId, payload) {
   const subs = await getSubscriptionsByUser(userId);
   await Promise.all(subs.map(async (row) => {
     try {
-      await webpush.sendNotification(JSON.parse(row.subscription), JSON.stringify(payload));
+      await webpush.sendNotification(JSON.parse(row.subscription), JSON.stringify(payload), {
+        urgency: 'high', // réveille l'appareil même en veille
+        TTL: 300,        // notif valable 5 min max (au-delà, vélos périmés → abandon)
+      });
     } catch (err) {
       // Subscription expirée / invalide → suppression en base
       if (err.statusCode === 404 || err.statusCode === 410) {
@@ -119,11 +122,12 @@ async function checkAlerts() {
     if (count < alert.min_count && !dejaEnvoyeAujourdhui) {
       // Sous le seuil et pas encore notifié aujourd'hui → une seule push par jour
       await sendToUser(alert.user_id, {
-        title: `Vélam — ${alert.station_name}`,
-        body:  `${count} vélo(s) disponible(s) • Appuyez pour réserver`,
-        url:   OFFICIAL_URL,
-        icon:  '/icon-192.png',
-        badge: '/badge-72.png',
+        title:     `VéloPulse — ${alert.station_name}`,
+        body:      `${count} vélo(s) disponible(s) · Réservez vite`,
+        url:       OFFICIAL_URL,
+        stationId: alert.station_id, // → tag unique par station côté SW
+        icon:      '/icon-192.png',
+        badge:     '/badge-72.png',
       });
       await setAlertNotifiedDate(alert.id, today);
     }
