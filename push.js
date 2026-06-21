@@ -142,7 +142,6 @@ let isRunning    = false;
 
 /** Enveloppe checkAlerts d'un verrou : un cycle lent ne chevauche pas le suivant. */
 async function runPollCycle() {
-  console.log('[poll tick]', new Date().toISOString());
   if (isRunning) return;
   isRunning = true;
   try {

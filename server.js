@@ -362,9 +362,8 @@ app.get('/api/health', async (req, res) => {
 
 if (process.env.NODE_ENV === 'production') {
   const distPath = path.join(__dirname, 'frontend', 'dist');
-  // Log de diagnostic temporaire : vérifie la présence du build Vite.
-  if (!fs.existsSync(distPath)) console.error('[STATIC] dist introuvable à :', distPath);
-  else console.log('[STATIC] dist trouvé à :', distPath);
+  // Garde-fou : alerte uniquement si le build frontend est absent.
+  if (!fs.existsSync(distPath)) console.error('[server] build frontend introuvable à :', distPath);
   app.use(express.static(distPath));
   // Fallback SPA : toute route non-API renvoie index.html.
   app.get('*', (req, res, next) => {
