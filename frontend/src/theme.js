@@ -1,13 +1,24 @@
-// Palette et helpers partagés (thème sombre Vélam)
+// Palette : alias vers les variables CSS du design system (modes clair/sombre).
+// Aucune couleur en dur — tout bascule via [data-theme] sur <html>.
 
 export const C = {
-  bg: "#07090F", card: "#0C1422", border: "#15203A",
-  elec: "#00C8FF", meca: "#FF9500",
-  green: "#00D98B", amber: "#FFBB33", empty: "#2A3550",
-  text: "#DDE6F5", muted: "#445270", dim: "#1C2A44",
+  bg:     "var(--bg)",
+  card:   "var(--surface)",
+  border: "var(--border)",
+  elec:   "var(--accent)",       // électrique = accent
+  meca:   "var(--neutral-bar)",  // mécanique = neutre
+  green:  "var(--ok)",
+  amber:  "var(--warn)",
+  empty:  "var(--text-3)",
+  text:   "var(--text)",
+  muted:  "var(--text-3)",
+  dim:    "var(--inset)",
+  accent: "var(--accent)",
+  danger: "var(--danger)",
 };
 
-export const bikeColor = (n) => (n === 0 ? C.empty : n <= 2 ? C.amber : C.green);
+// Couleur d'un compteur selon la disponibilité (0 → vide, faible → warn, sinon ok).
+export const bikeColor = (n) => (n === 0 ? "var(--text-3)" : n <= 2 ? "var(--warn)" : "var(--ok)");
 
 export function fmtTime(ts) {
   if (!ts || ts < 1_000_000_000) return null;

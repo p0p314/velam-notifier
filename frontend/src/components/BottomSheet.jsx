@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import Icon from "./Icon";
 
 /**
  * Bottom sheet accessible, sans librairie.
@@ -95,7 +96,7 @@ export default function BottomSheet({ open, onClose, heightVh = 70, children, la
           <div className="sheet-handle" />
         </div>
         {/* Croix de fermeture — visible uniquement en desktop (modale) */}
-        <button className="sheet-close" aria-label="Fermer" onClick={onClose}>×</button>
+        <button className="sheet-close" aria-label="Fermer" onClick={onClose}><Icon name="x" size={17} /></button>
         <div className="sheet-content">{children}</div>
       </div>
     </div>

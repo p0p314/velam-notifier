@@ -1,0 +1,34 @@
+name: Sync rental_apps (GBFS)
+
+# Synchronisation quotidienne des deep links officiels Vélam (rental_apps).
+# Toute la planification vit ici — aucun cron côté serveur (Render/backend).
+on:
+  schedule:
+    - cron: "0 2 * * *" # tous les jours à 02:00 UTC
+  workflow_dispatch: {}   # déclenchement manuel depuis l'onglet Actions
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Appel de l'endpoint de synchronisation
+        env:
+          BACKEND_URL: ${{ secrets.BACKEND_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${BACKEND_URL:-}" ] || [ -z "${CRON_SECRET:-}" ]; then
+            echo "::error::Les secrets BACKEND_URL et CRON_SECRET doivent être définis."
+            exit 1
+          fi
+
+          # -f : échoue (exit ≠ 0) sur statut HTTP >= 400 → marque le job en échec.
+          http_code=$(curl -sS -f -w "%{http_code}" -o response.json \
+            -X POST "${BACKEND_URL%/}/cron/sync-rental-apps" \
+            -H "Authorization: Bearer ${CRON_SECRET}" \
+            -H "Content-Type: application/json")
+
+          echo "HTTP $http_code"
+          echo "Réponse :"
+          cat response.json

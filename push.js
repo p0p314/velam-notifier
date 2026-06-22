@@ -1,38 +1,48 @@
 const webpush = require('web-push');
 const {
   getConfig, setConfig,
-  countActiveAlerts, getActiveAlerts, setAlertNotifiedDate,
+  countActiveAlerts, getActiveAlerts, markAlertNotified, setAlertNotifiedCount,
   getSubscriptionsByUser, removeSubscriptionById,
+  getRentalAppsMap,
 } = require('./db');
 const { fetchStationStatus } = require('./gbfs');
 
 const POLL_MS = 30_000;
 const OFFICIAL_URL = 'https://velam.amiens.fr';
 
-/**
- * Génère les clés VAPID au premier démarrage (persistées en base) et
- * configure web-push. Retourne la clé publique.
- */
-function initPush() {
-  let publicKey  = getConfig('vapid_public');
-  let privateKey = getConfig('vapid_private');
+let _vapidPublic = null; // mis en cache au démarrage (accès sync depuis la route)
 
-  if (!publicKey || !privateKey) {
-    const keys = webpush.generateVAPIDKeys();
-    publicKey  = keys.publicKey;
-    privateKey = keys.privateKey;
-    setConfig('vapid_public', publicKey);
-    setConfig('vapid_private', privateKey);
-    console.log('[push] Clés VAPID générées et persistées');
+/**
+ * Configure web-push. En prod : clés VAPID depuis les variables d'env.
+ * En dev : lues/générées dans SQLite (logique existante conservée).
+ */
+async function initPush() {
+  let publicKey, privateKey;
+
+  if (process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY) {
+    publicKey  = process.env.VAPID_PUBLIC_KEY;
+    privateKey = process.env.VAPID_PRIVATE_KEY;
+  } else {
+    publicKey  = await getConfig('vapid_public');
+    privateKey = await getConfig('vapid_private');
+    if (!publicKey || !privateKey) {
+      const keys = webpush.generateVAPIDKeys();
+      publicKey  = keys.publicKey;
+      privateKey = keys.privateKey;
+      await setConfig('vapid_public', publicKey);
+      await setConfig('vapid_private', privateKey);
+      console.log('[push] Clés VAPID générées et persistées');
+    }
   }
 
-  const subject = process.env.VAPID_SUBJECT ?? 'mailto:contact@velam.local';
+  _vapidPublic = publicKey;
+  const subject = 'mailto:' + (process.env.VAPID_EMAIL || 'admin@velopulse.app');
   webpush.setVapidDetails(subject, publicKey, privateKey);
   return publicKey;
 }
 
 function getVapidPublicKey() {
-  return getConfig('vapid_public');
+  return _vapidPublic;
 }
 
 // ── Comptage selon le type de vélo ─────────────────────────────────────────────
@@ -60,14 +70,17 @@ function inWindow(now, start, end) {
 // ── Envoi ──────────────────────────────────────────────────────────────────────
 
 async function sendToUser(userId, payload) {
-  const subs = getSubscriptionsByUser(userId);
+  const subs = await getSubscriptionsByUser(userId);
   await Promise.all(subs.map(async (row) => {
     try {
-      await webpush.sendNotification(JSON.parse(row.subscription), JSON.stringify(payload));
+      await webpush.sendNotification(JSON.parse(row.subscription), JSON.stringify(payload), {
+        urgency: 'high', // réveille l'appareil même en veille
+        TTL: 300,        // notif valable 5 min max (au-delà, vélos périmés → abandon)
+      });
     } catch (err) {
       // Subscription expirée / invalide → suppression en base
       if (err.statusCode === 404 || err.statusCode === 410) {
-        removeSubscriptionById(row.id);
+        await removeSubscriptionById(row.id);
         console.log(`[push] subscription ${row.id} expirée — supprimée`);
       } else {
         console.error('[push] échec envoi', err.statusCode, err.body ?? err.message);
@@ -76,16 +89,64 @@ async function sendToUser(userId, payload) {
   }));
 }
 
+// ── Construction du payload (adapté si count = 0) ───────────────────────────────
+
+/**
+ * Bloc de redirection pour le service worker : deep link officiel en priorité,
+ * repli sur les stores (iOS/Android), puis sur le site web. `rentalApps` est la
+ * map { ios, android } synchronisée quotidiennement ; absente → seul le web reste.
+ */
+function buildRedirect(rentalApps) {
+  const ios     = rentalApps?.ios;
+  const android = rentalApps?.android;
+  return {
+    deepLink:        ios?.discovery_uri || android?.discovery_uri || null,
+    storeUrlIos:     ios?.store_uri || null,
+    storeUrlAndroid: android?.store_uri || null,
+    webUrl:          OFFICIAL_URL,
+  };
+}
+
+function buildPayload(alerte, count, rentalApps) {
+  const bikeLabel = alerte.bike_type === 'ebike'
+    ? 'vélo(s) électrique(s)'
+    : alerte.bike_type === 'mechanical'
+      ? 'vélo(s) mécanique(s)'
+      : 'vélo(s)';
+
+  const base = {
+    url:       OFFICIAL_URL,
+    stationId: alerte.station_id,
+    icon:      '/icon-192.png',
+    badge:     '/badge-72.png',
+    redirect:  buildRedirect(rentalApps),
+  };
+
+  if (count === 0) {
+    return {
+      ...base,
+      title: `⚠️ VéloPulse — ${alerte.station_name}`,
+      body:  `Plus aucun ${bikeLabel} disponible`,
+    };
+  }
+
+  return {
+    ...base,
+    title: `VéloPulse — ${alerte.station_name}`,
+    body:  `${count} ${bikeLabel} disponible${count > 1 ? 's' : ''} · Réservez vite`,
+  };
+}
+
 // ── Boucle de vérification ──────────────────────────────────────────────────────
 
 async function checkAlerts() {
   // Ne rien faire si aucune alerte active n'existe en base
-  if (countActiveAlerts() === 0) return;
+  if (await countActiveAlerts() === 0) return;
 
   const now = nowHHMM();
   // Jour ISO courant : 1 = lundi … 7 = dimanche (getDay() renvoie 0 = dimanche).
   const isoDay = ((new Date().getDay() + 6) % 7) + 1;
-  const due = getActiveAlerts().filter(
+  const due = (await getActiveAlerts()).filter(
     (a) =>
       inWindow(now, a.time_start, a.time_end) &&
       (a.days ? a.days.split(',').map(Number).includes(isoDay) : true)
@@ -103,22 +164,40 @@ async function checkAlerts() {
   const statusMap = Object.fromEntries(statusList.map((s) => [s.station_id, s]));
   const today = new Date().toISOString().slice(0, 10); // "YYYY-MM-DD"
 
+  // Deep links officiels (sync quotidienne) — chargés une fois par cycle.
+  let rentalApps = {};
+  try {
+    rentalApps = await getRentalAppsMap();
+  } catch (err) {
+    console.error('[push] lecture rental_apps', err.message); // dégrade vers web seul
+  }
+
   for (const alert of due) {
     const count = countForType(statusMap[alert.station_id], alert.bike_type);
-    const dejaEnvoyeAujourdhui = alert.last_notified_date === today;
+    const dejaNotifieAujourdhui = alert.last_notified_date === today;
 
-    if (count < alert.min_count && !dejaEnvoyeAujourdhui) {
-      // Sous le seuil et pas encore notifié aujourd'hui → une seule push par jour
-      await sendToUser(alert.user_id, {
-        title: `Vélam — ${alert.station_name}`,
-        body:  `${count} vélo(s) disponible(s) • Appuyez pour réserver`,
-        url:   OFFICIAL_URL,
-        icon:  '/icon-192.png',
-        badge: '/badge-72.png',
-      });
-      setAlertNotifiedDate(alert.id, today);
+    // ── Condition 1 : première descente sous le seuil aujourd'hui ──────────────
+    if (count < alert.min_count && !dejaNotifieAujourdhui) {
+      await sendToUser(alert.user_id, buildPayload(alert, count, rentalApps));
+      await markAlertNotified(alert.id, today, count);
+      continue;
     }
-    // Tous les autres cas : ne rien faire (aucun reset, aucune autre écriture)
+
+    // ── Condition 2 : déjà notifié aujourd'hui, toujours sous le seuil ──────────
+    // Re-notifie si le nombre a changé depuis le dernier envoi, ou après un reset
+    // (last_notified_count remis à NULL suite à une remontée puis redescente).
+    if (count < alert.min_count && dejaNotifieAujourdhui) {
+      if (alert.last_notified_count === null || count !== alert.last_notified_count) {
+        await sendToUser(alert.user_id, buildPayload(alert, count, rentalApps));
+        await setAlertNotifiedCount(alert.id, count);
+      }
+      continue;
+    }
+
+    // ── Reset : count repassé au-dessus du seuil → prépare la prochaine descente ──
+    if (count >= alert.min_count && dejaNotifieAujourdhui) {
+      await setAlertNotifiedCount(alert.id, null);
+    }
   }
 }
 
@@ -129,7 +208,6 @@ let isRunning    = false;
 
 /** Enveloppe checkAlerts d'un verrou : un cycle lent ne chevauche pas le suivant. */
 async function runPollCycle() {
-  console.log('[poll tick]', new Date().toISOString());
   if (isRunning) return;
   isRunning = true;
   try {

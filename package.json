@@ -4,18 +4,24 @@
   "description": "Proxy API pour les stations Vélam d'Amiens",
   "main": "server.js",
   "scripts": {
+    "build": "npm install && cd frontend && npm install --include=dev && npm run build",
     "start": "node server.js",
-    "dev": "node --watch server.js"
+    "dev": "node --watch server.js",
+    "dev:front": "cd frontend && npm run dev",
+    "dev:back": "node --watch server.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
     "better-sqlite3": "^9.4.3",
     "cors": "^2.8.5",
     "express": "^4.18.2",
+    "express-rate-limit": "^8.5.2",
+    "helmet": "^8.2.0",
     "jsonwebtoken": "^9.0.2",
+    "pg": "^8.22.0",
     "web-push": "^3.6.7"
   },
   "engines": {
-    "node": ">=18.0.0"
+    "node": "20.x"
   }
 }

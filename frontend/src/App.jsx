@@ -1,7 +1,10 @@
 import { Routes, Route, Navigate, Outlet, useNavigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "./auth";
+import { ThemeProvider, useTheme } from "./useTheme";
+import { PwaInstallProvider, usePwaInstall } from "./components/PwaInstallContext";
 import BottomNav from "./components/BottomNav";
 import Navbar from "./components/Navbar";
+import Icon from "./components/Icon";
 import Login from "./pages/Login";
 import Stations from "./pages/Stations";
 import Favorites from "./pages/Favorites";
@@ -14,19 +17,28 @@ function Protected() {
 
 function Layout() {
   const { logout } = useAuth();
+  const { theme, toggle } = useTheme();
+  const { open: openInstall } = usePwaInstall();
   const navigate = useNavigate();
   return (
     <div className="app-shell">
-      {/* Mobile : header simple (masqué en desktop via CSS) */}
+      {/* Mobile : header (masqué en desktop via CSS) */}
       <header className="app-header">
-        <span className="app-title">VéloPulse</span>
-        <button
-          className="icon-btn"
-          aria-label="Déconnexion"
-          onClick={() => { logout(); navigate("/login", { replace: true }); }}
-        >
-          ⎋
-        </button>
+        <div className="brand">
+          <span className="brand-logo"><Icon name="bike" size={18} /></span>
+          <span className="brand-name">VéloPulse</span>
+        </div>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button className="icon-btn" aria-label="Changer de thème" onClick={toggle}>
+            <Icon name={theme === "dark" ? "sun" : "moon"} />
+          </button>
+          <button className="icon-btn" aria-label="Installer l'app" onClick={openInstall}>
+            <Icon name="download" />
+          </button>
+          <button className="icon-btn" aria-label="Déconnexion" onClick={() => { logout(); navigate("/login", { replace: true }); }}>
+            <Icon name="log-out" />
+          </button>
+        </div>
       </header>
       {/* Desktop : top navbar (masquée en mobile via CSS) */}
       <Navbar />
@@ -38,18 +50,22 @@ function Layout() {
 
 export default function App() {
   return (
-    <AuthProvider>
-      <Routes>
-        <Route path="/login" element={<Login />} />
-        <Route element={<Protected />}>
-          <Route element={<Layout />}>
-            <Route path="/" element={<Stations />} />
-            <Route path="/favoris" element={<Favorites />} />
-            <Route path="/alertes" element={<Alerts />} />
-          </Route>
-        </Route>
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
-    </AuthProvider>
+    <ThemeProvider>
+      <AuthProvider>
+        <PwaInstallProvider>
+          <Routes>
+            <Route path="/login" element={<Login />} />
+            <Route element={<Protected />}>
+              <Route element={<Layout />}>
+                <Route path="/" element={<Stations />} />
+                <Route path="/favoris" element={<Favorites />} />
+                <Route path="/alertes" element={<Alerts />} />
+              </Route>
+            </Route>
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </PwaInstallProvider>
+      </AuthProvider>
+    </ThemeProvider>
   );
 }

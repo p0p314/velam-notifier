@@ -1,8 +1,10 @@
 # Dépendances
 node_modules/
 
-# Base SQLite générée
+# Base SQLite générée (dev)
 data/
+*.db
+*.sqlite
 
 # Build frontend
 frontend/dist/
@@ -10,6 +12,8 @@ frontend/dist/
 # Variables d'environnement (config locale, ex. IP LAN)
 .env
 .env.local
+.env.*.local
+.env.vapid
 
 # Logs / divers
 *.log
