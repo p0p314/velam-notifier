@@ -9,6 +9,7 @@ import Login from "./pages/Login";
 import Stations from "./pages/Stations";
 import Favorites from "./pages/Favorites";
 import Alerts from "./pages/Alerts";
+import Redirect from "./pages/Redirect";
 
 function Protected() {
   const { isAuthenticated } = useAuth();
@@ -55,6 +56,8 @@ export default function App() {
         <PwaInstallProvider>
           <Routes>
             <Route path="/login" element={<Login />} />
+            {/* Cible des notifications push — publique, ouvre l'app native puis store/web. */}
+            <Route path="/redirect" element={<Redirect />} />
             <Route element={<Protected />}>
               <Route element={<Layout />}>
                 <Route path="/" element={<Stations />} />

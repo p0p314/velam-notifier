@@ -92,19 +92,29 @@ async function sendToUser(userId, payload) {
 // ── Construction du payload (adapté si count = 0) ───────────────────────────────
 
 /**
- * Bloc de redirection pour le service worker : deep link officiel en priorité,
- * repli sur les stores (iOS/Android), puis sur le site web. `rentalApps` est la
- * map { ios, android } synchronisée quotidiennement ; absente → seul le web reste.
+ * Construit l'URL https:// de la page de redirection interne (/redirect).
+ *
+ * iOS interdit l'ouverture d'un scheme custom (velam://) depuis un Service
+ * Worker via clients.openWindow() — seules les URLs https:// sont acceptées.
+ * On passe donc toujours par une page same-origin qui, côté navigateur, peut
+ * ouvrir l'app native via window.location.href, avec repli store puis web.
+ * Le deep link et les stores sont encodés en query params.
  */
-function buildRedirect(rentalApps) {
-  const ios     = rentalApps?.ios;
-  const android = rentalApps?.android;
-  return {
-    deepLink:        ios?.discovery_uri || android?.discovery_uri || null,
-    storeUrlIos:     ios?.store_uri || null,
-    storeUrlAndroid: android?.store_uri || null,
-    webUrl:          OFFICIAL_URL,
-  };
+function buildRedirectUrl(rentalApps) {
+  const params = new URLSearchParams();
+
+  const deepLink     = rentalApps?.ios?.discovery_uri || rentalApps?.android?.discovery_uri || null;
+  const storeIos     = rentalApps?.ios?.store_uri     || null;
+  const storeAndroid = rentalApps?.android?.store_uri || null;
+
+  if (deepLink)     params.set('deep',    deepLink);
+  if (storeIos)     params.set('ios',     storeIos);
+  if (storeAndroid) params.set('android', storeAndroid);
+  params.set('web', OFFICIAL_URL);
+
+  // URL absolue vers la page de redirection de notre app (même domaine).
+  const base = process.env.APP_URL || 'https://velam-notifier.onrender.com';
+  return `${base}/redirect?${params.toString()}`;
 }
 
 function buildPayload(alerte, count, rentalApps) {
@@ -115,11 +125,11 @@ function buildPayload(alerte, count, rentalApps) {
       : 'vélo(s)';
 
   const base = {
-    url:       OFFICIAL_URL,
+    // Toujours une URL https:// (page /redirect interne) → ouvrable par le SW iOS.
+    url:       buildRedirectUrl(rentalApps),
     stationId: alerte.station_id,
     icon:      '/icon-192.png',
     badge:     '/badge-72.png',
-    redirect:  buildRedirect(rentalApps),
   };
 
   if (count === 0) {

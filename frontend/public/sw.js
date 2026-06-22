@@ -7,12 +7,9 @@ self.addEventListener("push", (event) => {
     body: data.body || "",
     icon: "/icon-192.png",
     badge: "/badge-72.png",
-    // On embarque l'URL web (repli ultime) ET le bloc de redirection (deep link
-    // officiel + stores) synchronisé quotidiennement côté backend.
-    data: {
-      url: data.url || "https://velam.amiens.fr",
-      redirect: data.redirect || null,
-    },
+    // data.url est désormais toujours une URL https:// (page /redirect interne)
+    // qui gère côté navigateur l'ouverture de l'app native, puis store, puis web.
+    data: { url: data.url || "https://velam-notifier.onrender.com" },
 
     // Urgence visuelle et comportementale
     requireInteraction: true, // reste affiché jusqu'au tap (Android)
@@ -35,56 +32,25 @@ self.addEventListener("push", (event) => {
   );
 });
 
-/**
- * Choisit la meilleure destination au clic :
- *   1. deep link officiel (ouvre l'app Vélam si installée)
- *   2. store de la plateforme détectée (repli si app absente)
- *   3. site web (repli ultime)
- * On tente le deep link d'abord ; si l'ouverture échoue (aucun handler),
- * on bascule sur le store puis le web.
- */
-function pickStoreUrl(redirect) {
-  const ua = (self.navigator && self.navigator.userAgent) || "";
-  if (/iPhone|iPad|iPod/i.test(ua)) return redirect.storeUrlIos || redirect.storeUrlAndroid;
-  if (/Android/i.test(ua)) return redirect.storeUrlAndroid || redirect.storeUrlIos;
-  return redirect.storeUrlIos || redirect.storeUrlAndroid || null;
-}
-
-async function openBestDestination(redirect, webFallback) {
-  // Repli si aucune donnée de redirection synchronisée
-  if (!redirect) return clients.openWindow(webFallback);
-
-  const store = pickStoreUrl(redirect);
-
-  if (redirect.deepLink) {
-    try {
-      const win = await clients.openWindow(redirect.deepLink);
-      if (win) return win; // deep link ouvert (app présente)
-    } catch (_) {
-      /* aucun handler pour le scheme → on bascule sur le repli */
-    }
-  }
-
-  return clients.openWindow(store || redirect.webUrl || webFallback);
-}
-
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
+
+  // data.url est maintenant toujours une URL https:// valide (page /redirect).
+  const url = event.notification.data?.url || "https://velam-notifier.onrender.com";
+
   if (event.action === "dismiss") return; // fermer sans ouvrir
 
-  const ndata    = event.notification.data || {};
-  const webUrl   = ndata.url || "https://velam.amiens.fr";
-  const redirect = ndata.redirect;
-
-  // Action 'reserve' ou tap direct → app (deep link) sinon store sinon web.
   event.waitUntil(
     clients
       .matchAll({ type: "window", includeUncontrolled: true })
       .then((list) => {
-        // Une fenêtre VéloPulse/Vélam déjà ouverte → on la refocalise.
-        const existing = list.find((c) => c.url.includes("velam"));
-        if (existing) return existing.focus();
-        return openBestDestination(redirect, webUrl);
+        // Réutiliser un onglet déjà ouvert sur notre app.
+        const existing = list.find((c) => c.url.includes("velam-notifier.onrender.com"));
+        if (existing) {
+          existing.navigate(url);
+          return existing.focus();
+        }
+        return clients.openWindow(url);
       })
   );
 });
