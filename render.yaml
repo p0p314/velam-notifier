@@ -19,3 +19,5 @@ services:
         sync: false
       - key: JWT_SECRET
         sync: false
+      - key: APP_URL
+        sync: false        # base https:// pour la page /redirect des notifs
