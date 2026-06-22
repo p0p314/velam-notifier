@@ -176,8 +176,12 @@ async function deleteAlert(userId, id) {
   return changes > 0;
 }
 
-async function setAlertNotifiedDate(id, date) {
-  await dbc.run('UPDATE alerts SET last_notified_date = ? WHERE id = ?', [date, id]);
+async function markAlertNotified(id, date, count) {
+  await dbc.run('UPDATE alerts SET last_notified_date = ?, last_notified_count = ? WHERE id = ?', [date, count, id]);
+}
+
+async function setAlertNotifiedCount(id, count) {
+  await dbc.run('UPDATE alerts SET last_notified_count = ? WHERE id = ?', [count, id]);
 }
 
 async function countActiveAlerts() {
@@ -204,5 +208,5 @@ module.exports = {
   addSubscription, getSubscriptionsByUser, removeSubscriptionById,
   // alerts
   getAlerts, getAlert, createAlert, updateAlert, deleteAlert,
-  setAlertNotifiedDate, countActiveAlerts, getActiveAlerts,
+  markAlertNotified, setAlertNotifiedCount, countActiveAlerts, getActiveAlerts,
 };

@@ -48,10 +48,13 @@ async function runMigrations(db) {
       time_start         TEXT NOT NULL,
       time_end           TEXT NOT NULL,
       days               TEXT NOT NULL DEFAULT '1,2,3,4,5,6,7',
-      active             INTEGER NOT NULL DEFAULT 1,
-      last_notified_date TEXT DEFAULT NULL,
-      created_at         TIMESTAMPTZ DEFAULT NOW()
+      active              INTEGER NOT NULL DEFAULT 1,
+      last_notified_date  TEXT DEFAULT NULL,
+      last_notified_count INTEGER DEFAULT NULL,
+      created_at          TIMESTAMPTZ DEFAULT NOW()
     )`);
+    // Migration idempotente pour les bases existantes (Postgres supporte IF NOT EXISTS).
+    await db.run('ALTER TABLE alerts ADD COLUMN IF NOT EXISTS last_notified_count INTEGER DEFAULT NULL');
     console.log('[db] migrations PostgreSQL appliquées');
     return;
   }
@@ -114,6 +117,10 @@ async function runMigrations(db) {
   if (!hasColumn('days')) {
     await db.run("ALTER TABLE alerts ADD COLUMN days TEXT NOT NULL DEFAULT '1,2,3,4,5,6,7'");
     console.log('[db] colonne alerts.days ajoutée');
+  }
+  if (!hasColumn('last_notified_count')) {
+    await db.run('ALTER TABLE alerts ADD COLUMN last_notified_count INTEGER DEFAULT NULL');
+    console.log('[db] colonne alerts.last_notified_count ajoutée');
   }
   if (hasColumn('notified')) {
     const { rows } = await db.query('SELECT sqlite_version() AS v');

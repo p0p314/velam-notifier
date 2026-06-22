@@ -1,7 +1,7 @@
 const webpush = require('web-push');
 const {
   getConfig, setConfig,
-  countActiveAlerts, getActiveAlerts, setAlertNotifiedDate,
+  countActiveAlerts, getActiveAlerts, markAlertNotified, setAlertNotifiedCount,
   getSubscriptionsByUser, removeSubscriptionById,
 } = require('./db');
 const { fetchStationStatus } = require('./gbfs');
@@ -88,6 +88,37 @@ async function sendToUser(userId, payload) {
   }));
 }
 
+// ── Construction du payload (adapté si count = 0) ───────────────────────────────
+
+function buildPayload(alerte, count) {
+  const bikeLabel = alerte.bike_type === 'ebike'
+    ? 'vélo(s) électrique(s)'
+    : alerte.bike_type === 'mechanical'
+      ? 'vélo(s) mécanique(s)'
+      : 'vélo(s)';
+
+  const base = {
+    url:       OFFICIAL_URL,
+    stationId: alerte.station_id,
+    icon:      '/icon-192.png',
+    badge:     '/badge-72.png',
+  };
+
+  if (count === 0) {
+    return {
+      ...base,
+      title: `⚠️ VéloPulse — ${alerte.station_name}`,
+      body:  `Plus aucun ${bikeLabel} disponible`,
+    };
+  }
+
+  return {
+    ...base,
+    title: `VéloPulse — ${alerte.station_name}`,
+    body:  `${count} ${bikeLabel} disponible${count > 1 ? 's' : ''} · Réservez vite`,
+  };
+}
+
 // ── Boucle de vérification ──────────────────────────────────────────────────────
 
 async function checkAlerts() {
@@ -117,21 +148,30 @@ async function checkAlerts() {
 
   for (const alert of due) {
     const count = countForType(statusMap[alert.station_id], alert.bike_type);
-    const dejaEnvoyeAujourdhui = alert.last_notified_date === today;
+    const dejaNotifieAujourdhui = alert.last_notified_date === today;
 
-    if (count < alert.min_count && !dejaEnvoyeAujourdhui) {
-      // Sous le seuil et pas encore notifié aujourd'hui → une seule push par jour
-      await sendToUser(alert.user_id, {
-        title:     `VéloPulse — ${alert.station_name}`,
-        body:      `${count} vélo(s) disponible(s) · Réservez vite`,
-        url:       OFFICIAL_URL,
-        stationId: alert.station_id, // → tag unique par station côté SW
-        icon:      '/icon-192.png',
-        badge:     '/badge-72.png',
-      });
-      await setAlertNotifiedDate(alert.id, today);
+    // ── Condition 1 : première descente sous le seuil aujourd'hui ──────────────
+    if (count < alert.min_count && !dejaNotifieAujourdhui) {
+      await sendToUser(alert.user_id, buildPayload(alert, count));
+      await markAlertNotified(alert.id, today, count);
+      continue;
     }
-    // Tous les autres cas : ne rien faire (aucun reset, aucune autre écriture)
+
+    // ── Condition 2 : déjà notifié aujourd'hui, toujours sous le seuil ──────────
+    // Re-notifie si le nombre a changé depuis le dernier envoi, ou après un reset
+    // (last_notified_count remis à NULL suite à une remontée puis redescente).
+    if (count < alert.min_count && dejaNotifieAujourdhui) {
+      if (alert.last_notified_count === null || count !== alert.last_notified_count) {
+        await sendToUser(alert.user_id, buildPayload(alert, count));
+        await setAlertNotifiedCount(alert.id, count);
+      }
+      continue;
+    }
+
+    // ── Reset : count repassé au-dessus du seuil → prépare la prochaine descente ──
+    if (count >= alert.min_count && dejaNotifieAujourdhui) {
+      await setAlertNotifiedCount(alert.id, null);
+    }
   }
 }
 
