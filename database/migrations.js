@@ -55,6 +55,13 @@ async function runMigrations(db) {
     )`);
     // Migration idempotente pour les bases existantes (Postgres supporte IF NOT EXISTS).
     await db.run('ALTER TABLE alerts ADD COLUMN IF NOT EXISTS last_notified_count INTEGER DEFAULT NULL');
+    await db.run(`CREATE TABLE IF NOT EXISTS rental_apps (
+      platform      TEXT PRIMARY KEY,
+      name          TEXT NOT NULL,
+      discovery_uri TEXT,
+      store_uri     TEXT,
+      updated_at    BIGINT NOT NULL DEFAULT 0
+    )`);
     console.log('[db] migrations PostgreSQL appliquées');
     return;
   }
@@ -104,6 +111,14 @@ async function runMigrations(db) {
     active       INTEGER NOT NULL DEFAULT 1,
     days         TEXT NOT NULL DEFAULT '1,2,3,4,5,6,7',
     created_at   DATETIME DEFAULT CURRENT_TIMESTAMP
+  )`);
+
+  await db.run(`CREATE TABLE IF NOT EXISTS rental_apps (
+    platform      TEXT PRIMARY KEY,
+    name          TEXT NOT NULL,
+    discovery_uri TEXT,
+    store_uri     TEXT,
+    updated_at    INTEGER NOT NULL DEFAULT (strftime('%s', 'now'))
   )`);
 
   // Migrations incrémentales SQLite (préservent les bases de dev existantes).

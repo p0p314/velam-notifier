@@ -24,7 +24,7 @@ function createPostgresDb() {
       let finalSql = toPg(sql);
       // Tables sans colonne `id` (PK = station_id / key) → pas de RETURNING id.
       const isInsert = /^\s*insert\s+into/i.test(finalSql);
-      const noIdTable = /insert\s+into\s+(config|stations)\b/i.test(finalSql);
+      const noIdTable = /insert\s+into\s+(config|stations|rental_apps)\b/i.test(finalSql);
       if (isInsert && !/returning/i.test(finalSql) && !noIdTable) {
         finalSql += ' RETURNING id';
       }

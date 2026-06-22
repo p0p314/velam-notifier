@@ -2,6 +2,7 @@
 
 const INFO_URL   = 'https://api.cyclocity.fr/contracts/amiens/gbfs/v2/station_information.json';
 const STATUS_URL = 'https://api.cyclocity.fr/contracts/amiens/gbfs/v2/station_status.json';
+const SYSTEM_URL = 'https://api.cyclocity.fr/contracts/amiens/gbfs/v2/system_information.json';
 
 async function fetchJSON(url) {
   const res = await fetch(url);
@@ -30,4 +31,14 @@ async function fetchStationStatus() {
   return data.data.stations;
 }
 
-module.exports = { fetchStationInfo, fetchStationStatus };
+/**
+ * Retourne les informations du système (data.data) : nom, system_id,
+ * rental_apps (deep links + liens stores), etc. Données quasi statiques,
+ * destinées à une synchronisation quotidienne plutôt qu'à chaque requête.
+ */
+async function fetchSystemInformation() {
+  const data = await fetchJSON(SYSTEM_URL);
+  return data.data;
+}
+
+module.exports = { fetchStationInfo, fetchStationStatus, fetchSystemInformation };

@@ -40,6 +40,37 @@ async function saveStations(stations) {
   console.log(`[db] ${stations.length} stations enregistrées`);
 }
 
+// ── Rental apps (deep links officiels, sync GBFS quotidienne) ────────────────
+
+/**
+ * Upsert d'une application de location (1 ligne par plateforme).
+ * `updated_at` calculé côté JS (portable SQLite/Postgres).
+ */
+async function upsertRentalApp({ platform, name, discovery_uri, store_uri }) {
+  const now = Math.floor(Date.now() / 1000);
+  await dbc.run(
+    `INSERT INTO rental_apps (platform, name, discovery_uri, store_uri, updated_at)
+     VALUES (?, ?, ?, ?, ?)
+     ON CONFLICT(platform) DO UPDATE SET
+       name          = excluded.name,
+       discovery_uri = excluded.discovery_uri,
+       store_uri     = excluded.store_uri,
+       updated_at    = excluded.updated_at`,
+    [platform, name, discovery_uri ?? null, store_uri ?? null, now]
+  );
+}
+
+async function getRentalApps() {
+  const { rows } = await dbc.query('SELECT * FROM rental_apps ORDER BY platform');
+  return rows;
+}
+
+/** { ios: {...}, android: {...} } — pratique pour enrichir les notifications. */
+async function getRentalAppsMap() {
+  const rows = await getRentalApps();
+  return Object.fromEntries(rows.map((r) => [r.platform, r]));
+}
+
 // ── Config (clés/valeurs : secret JWT, clés VAPID) ───────────────────────────
 
 async function getConfig(key) {
@@ -198,6 +229,8 @@ module.exports = {
   initialize,
   // stations
   countStations, getStations, saveStations,
+  // rental apps
+  upsertRentalApp, getRentalApps, getRentalAppsMap,
   // config
   getConfig, setConfig,
   // users

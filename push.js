@@ -3,6 +3,7 @@ const {
   getConfig, setConfig,
   countActiveAlerts, getActiveAlerts, markAlertNotified, setAlertNotifiedCount,
   getSubscriptionsByUser, removeSubscriptionById,
+  getRentalAppsMap,
 } = require('./db');
 const { fetchStationStatus } = require('./gbfs');
 
@@ -90,7 +91,23 @@ async function sendToUser(userId, payload) {
 
 // ── Construction du payload (adapté si count = 0) ───────────────────────────────
 
-function buildPayload(alerte, count) {
+/**
+ * Bloc de redirection pour le service worker : deep link officiel en priorité,
+ * repli sur les stores (iOS/Android), puis sur le site web. `rentalApps` est la
+ * map { ios, android } synchronisée quotidiennement ; absente → seul le web reste.
+ */
+function buildRedirect(rentalApps) {
+  const ios     = rentalApps?.ios;
+  const android = rentalApps?.android;
+  return {
+    deepLink:        ios?.discovery_uri || android?.discovery_uri || null,
+    storeUrlIos:     ios?.store_uri || null,
+    storeUrlAndroid: android?.store_uri || null,
+    webUrl:          OFFICIAL_URL,
+  };
+}
+
+function buildPayload(alerte, count, rentalApps) {
   const bikeLabel = alerte.bike_type === 'ebike'
     ? 'vélo(s) électrique(s)'
     : alerte.bike_type === 'mechanical'
@@ -102,6 +119,7 @@ function buildPayload(alerte, count) {
     stationId: alerte.station_id,
     icon:      '/icon-192.png',
     badge:     '/badge-72.png',
+    redirect:  buildRedirect(rentalApps),
   };
 
   if (count === 0) {
@@ -146,13 +164,21 @@ async function checkAlerts() {
   const statusMap = Object.fromEntries(statusList.map((s) => [s.station_id, s]));
   const today = new Date().toISOString().slice(0, 10); // "YYYY-MM-DD"
 
+  // Deep links officiels (sync quotidienne) — chargés une fois par cycle.
+  let rentalApps = {};
+  try {
+    rentalApps = await getRentalAppsMap();
+  } catch (err) {
+    console.error('[push] lecture rental_apps', err.message); // dégrade vers web seul
+  }
+
   for (const alert of due) {
     const count = countForType(statusMap[alert.station_id], alert.bike_type);
     const dejaNotifieAujourdhui = alert.last_notified_date === today;
 
     // ── Condition 1 : première descente sous le seuil aujourd'hui ──────────────
     if (count < alert.min_count && !dejaNotifieAujourdhui) {
-      await sendToUser(alert.user_id, buildPayload(alert, count));
+      await sendToUser(alert.user_id, buildPayload(alert, count, rentalApps));
       await markAlertNotified(alert.id, today, count);
       continue;
     }
@@ -162,7 +188,7 @@ async function checkAlerts() {
     // (last_notified_count remis à NULL suite à une remontée puis redescente).
     if (count < alert.min_count && dejaNotifieAujourdhui) {
       if (alert.last_notified_count === null || count !== alert.last_notified_count) {
-        await sendToUser(alert.user_id, buildPayload(alert, count));
+        await sendToUser(alert.user_id, buildPayload(alert, count, rentalApps));
         await setAlertNotifiedCount(alert.id, count);
       }
       continue;
