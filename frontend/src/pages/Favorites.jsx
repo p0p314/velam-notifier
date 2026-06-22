@@ -1,8 +1,8 @@
 import { useState, useRef } from "react";
 import StationListItem from "../components/StationListItem";
 import StationDetailSheet from "../components/StationDetailSheet";
+import Icon from "../components/Icon";
 import { useStations, useFavorites } from "../hooks";
-import { C } from "../theme";
 
 const REVEAL = 84;
 
@@ -45,11 +45,12 @@ function FavoriteItem({ s, onOpen, onDelete }) {
         onClick={() => onDelete(s)}
         tabIndex={revealed ? 0 : -1}
         aria-hidden={!revealed}
+        aria-label="Supprimer"
       >
-        Supprimer
+        <Icon name="trash" />
       </button>
       {/* Desktop : corbeille au survol (CSS) */}
-      <button className="fav-trash" aria-label="Retirer des favoris" onClick={() => onDelete(s)}>🗑</button>
+      <button className="fav-trash" aria-label="Retirer des favoris" onClick={() => onDelete(s)}><Icon name="trash" /></button>
       <div
         className="swipe-fg"
         style={{ transform: `translateX(${tx}px)`, transition: startX.current == null ? "transform 0.2s ease" : "none", touchAction: "pan-y" }}
@@ -80,15 +81,18 @@ export default function Favorites() {
 
   return (
     <div className="view-pad">
-      <h2 style={{ fontSize: 18, fontWeight: 800 }}>Mes favoris</h2>
+      <div className="page-head">
+        <h2 className="page-title">Mes favoris</h2>
+        {favStations.length > 0 && <span className="page-count">{favStations.length} station{favStations.length !== 1 ? "s" : ""}</span>}
+      </div>
 
       {(loading || favLoading) ? (
         <div className="view-state">Chargement…</div>
       ) : favStations.length === 0 ? (
-        <div style={{ textAlign: "center", padding: "72px 16px", color: C.muted }}>
-          <div style={{ fontSize: 52, marginBottom: 14, opacity: 0.7 }}>⭐</div>
-          <div style={{ fontSize: 15 }}>Ajoutez des stations en favoris</div>
-          <div style={{ fontSize: 13, marginTop: 6, opacity: 0.8 }}>Depuis l'onglet Stations, tapez une station puis « Ajouter aux favoris ».</div>
+        <div className="empty-state">
+          <Icon name="star" size={40} />
+          <div className="empty-title">Ajoutez des stations en favoris</div>
+          <div className="empty-sub">Depuis l'onglet Stations, ouvrez une station puis « Ajouter aux favoris ».</div>
         </div>
       ) : (
         <div className="favoris-grid">

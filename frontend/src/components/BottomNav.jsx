@@ -1,18 +1,18 @@
 import { NavLink } from "react-router-dom";
-import { BikeIcon, StarIcon, BellIcon } from "./icons";
+import Icon from "./Icon";
 
 const TABS = [
-  { to: "/",        label: "Stations", end: true,  Icon: BikeIcon },
-  { to: "/favoris", label: "Favoris",  end: false, Icon: StarIcon },
-  { to: "/alertes", label: "Alertes",  end: false, Icon: BellIcon },
+  { to: "/",        label: "Stations", end: true,  icon: "map-pin" },
+  { to: "/favoris", label: "Favoris",  end: false, icon: "star" },
+  { to: "/alertes", label: "Alertes",  end: false, icon: "bell" },
 ];
 
 export default function BottomNav() {
   return (
     <nav className="bottom-nav">
-      {TABS.map(({ to, label, end, Icon }) => (
+      {TABS.map(({ to, label, end, icon }) => (
         <NavLink key={to} to={to} end={end} className={({ isActive }) => "bn-tab" + (isActive ? " active" : "")}>
-          <Icon />
+          <Icon name={icon} size={22} />
           <span>{label}</span>
         </NavLink>
       ))}

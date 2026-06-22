@@ -2,24 +2,17 @@ import { useState } from "react";
 import StationCard from "../components/StationCard";
 import StationListItem from "../components/StationListItem";
 import StationDetailSheet from "../components/StationDetailSheet";
+import Icon from "../components/Icon";
 import { useStations, useFavorites } from "../hooks";
-import { C } from "../theme";
 
-// Filtres desktop (style d'origine restauré)
-const FBtn = ({ active, onClick, children }) => (
-  <button onClick={onClick} style={{
-    background: active ? "#152040" : C.card, border: `1px solid ${active ? "#2B4A80" : C.border}`,
-    borderRadius: 8, padding: "8px 13px", color: active ? "#90B8F8" : C.muted,
-    fontSize: 12, fontWeight: 700, cursor: "pointer", letterSpacing: "0.04em",
-  }}>{children}</button>
-);
-const SBtn = ({ active, onClick, children }) => (
-  <button onClick={onClick} style={{
-    background: active ? "#0E2030" : C.card, border: `1px solid ${active ? "#1A4A6A" : C.border}`,
-    borderRadius: 8, padding: "8px 13px", color: active ? "#7AD3F8" : C.muted,
-    fontSize: 12, fontWeight: 700, cursor: "pointer", letterSpacing: "0.04em",
-  }}>{children}</button>
-);
+function SearchBox({ value, onChange }) {
+  return (
+    <div className="search-box">
+      <Icon name="search" />
+      <input className="search-input" value={value} onChange={(e) => onChange(e.target.value)} placeholder="Rechercher une station…" />
+    </div>
+  );
+}
 
 export default function Stations() {
   const { stations, loading, error, reload } = useStations();
@@ -35,10 +28,8 @@ export default function Stations() {
     return !q || s.name.toLowerCase().includes(q) || (s.address ?? "").toLowerCase().includes(q);
   };
 
-  // Mobile : recherche seule, tri alphabétique (comportement inchangé)
   const visibleMobile = stations.filter(matchesSearch).sort((a, b) => a.name.localeCompare(b.name, "fr"));
 
-  // Desktop : recherche + filtre + tri (filtres d'origine)
   const visibleDesktop = stations
     .filter((s) => {
       if (!matchesSearch(s)) return false;
@@ -61,12 +52,9 @@ export default function Stations() {
 
   const ErrorBox = (
     <div className="view-pad">
-      <div style={{ background: "#110808", border: "1px solid #3B1515", borderRadius: 12, padding: 24, textAlign: "center" }}>
-        <div style={{ fontSize: 26, marginBottom: 10 }}>⚠️</div>
-        <div style={{ color: "#FCA5A5", fontSize: 14, marginBottom: 12 }}>Impossible de joindre le serveur</div>
-        <button onClick={reload} style={{ minHeight: 44, padding: "0 20px", background: "#3B1515", border: "1px solid #7F1D1D", borderRadius: 10, color: "#FCA5A5", fontSize: 14, fontWeight: 700, cursor: "pointer" }}>
-          Réessayer
-        </button>
+      <div className="error-box">
+        <div className="error-title">Impossible de joindre le serveur</div>
+        <button className="error-retry" onClick={reload}>Réessayer</button>
       </div>
     </div>
   );
@@ -75,12 +63,9 @@ export default function Stations() {
     <>
       {/* ─────────────── MOBILE ─────────────── */}
       <div className="mobile-only">
-        <div className="view-search">
-          <input className="search-input" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Rechercher une station…" />
-        </div>
-
+        <div className="view-search"><SearchBox value={search} onChange={setSearch} /></div>
         {loading ? (
-          <div className="view-state"><div style={{ fontSize: 36, marginBottom: 12 }}>🚲</div>Connexion au serveur…</div>
+          <div className="view-state">Connexion au serveur…</div>
         ) : error ? ErrorBox
         : visibleMobile.length === 0 ? (
           <div className="view-state">Aucune station pour « {search} »</div>
@@ -96,45 +81,47 @@ export default function Stations() {
       {/* ─────────────── DESKTOP ─────────────── */}
       <div className="desktop-only">
         <div className="stations-toolbar">
-          <div className="stations-stats">
-            <span><b style={{ color: C.green }}>{activeCount}/{stations.length}</b> stations actives</span>
-            <span><b style={{ color: C.elec }}>{totElec}</b> ⚡ électriques</span>
-            <span><b style={{ color: C.meca }}>{totMeca}</b> 🚲 mécaniques</span>
-            <button onClick={reload} title="Rafraîchir" style={{ marginLeft: "auto", background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, padding: "6px 11px", color: C.muted, fontSize: 14, cursor: "pointer" }}>↺</button>
+          <div className="toolbar-top">
+            <h1 className="page-title">Stations</h1>
+            <div className="stations-stats">
+              <span><b>{activeCount}/{stations.length}</b> actives</span>
+              <span><b>{totElec}</b> élec.</span>
+              <span><b>{totMeca}</b> méca.</span>
+            </div>
           </div>
           <div className="stations-filters">
-            <input className="search-input" style={{ maxWidth: 360 }} value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Rechercher une station…" />
-            <div style={{ display: "flex", gap: 6 }}>
-              <FBtn active={filter === "all"}  onClick={() => setFilter("all")}>Toutes</FBtn>
-              <FBtn active={filter === "elec"} onClick={() => setFilter("elec")}>⚡ Élec.</FBtn>
-              <FBtn active={filter === "meca"} onClick={() => setFilter("meca")}>🚲 Méca.</FBtn>
+            <SearchBox value={search} onChange={setSearch} />
+            <div className="seg" style={{ maxWidth: 280 }}>
+              <button className={filter === "all" ? "active" : ""} onClick={() => setFilter("all")}>Toutes</button>
+              <button className={filter === "elec" ? "active" : ""} onClick={() => setFilter("elec")}>Élec.</button>
+              <button className={filter === "meca" ? "active" : ""} onClick={() => setFilter("meca")}>Méca.</button>
             </div>
-            <div style={{ display: "flex", gap: 6 }}>
-              <SBtn active={sort === "name"}  onClick={() => setSort("name")}>A–Z</SBtn>
-              <SBtn active={sort === "elec"}  onClick={() => setSort("elec")}>⚡↓</SBtn>
-              <SBtn active={sort === "meca"}  onClick={() => setSort("meca")}>🚲↓</SBtn>
-              <SBtn active={sort === "total"} onClick={() => setSort("total")}>Total↓</SBtn>
+            <div className="select-wrap" style={{ marginLeft: "auto" }}>
+              <select value={sort} onChange={(e) => setSort(e.target.value)} aria-label="Trier">
+                <option value="name">Nom (A–Z)</option>
+                <option value="elec">Électriques</option>
+                <option value="meca">Mécaniques</option>
+                <option value="total">Total vélos</option>
+              </select>
+              <Icon name="chevron-down" size={15} />
             </div>
           </div>
         </div>
 
         {loading ? (
-          <div className="view-state"><div style={{ fontSize: 36, marginBottom: 12 }}>🚲</div>Connexion au serveur…</div>
+          <div className="view-state">Connexion au serveur…</div>
         ) : error ? ErrorBox
         : (
           <>
-            <div style={{ fontSize: 12, color: C.muted, margin: "4px 0 12px" }}>
+            <div style={{ fontSize: 12, color: "var(--text-3)", margin: "0 0 12px", fontFamily: "var(--font-mono)" }}>
               {visibleDesktop.length} station{visibleDesktop.length !== 1 ? "s" : ""}
-              {(search || filter !== "all") && ` · filtrée${visibleDesktop.length !== 1 ? "s" : ""}`}
             </div>
             <div className="stations-grid">
               {visibleDesktop.map((s) => (
                 <StationCard key={s.station_id} s={s} onClick={() => setSelId(s.station_id)} isFav={favIds.has(s.station_id)} onToggleFav={toggleFav} />
               ))}
             </div>
-            {visibleDesktop.length === 0 && (
-              <div className="view-state">Aucune station ne correspond aux filtres.</div>
-            )}
+            {visibleDesktop.length === 0 && <div className="view-state">Aucune station ne correspond aux filtres.</div>}
           </>
         )}
       </div>
