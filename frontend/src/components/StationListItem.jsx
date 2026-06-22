@@ -39,11 +39,11 @@ export default function StationListItem({ s, onClick }) {
         )}
 
         {/* Compteurs desktop (cards compactes, ex. Favoris) */}
-        <div className="card-counts">
+        {/* <div className="card-counts">
           <span className={"count-item elec" + (elec <= 2 ? " low" : "")}><Icon name="bolt" size={16} /><span className="count-value">{offline ? "—" : elec}</span><span className="count-label">élec</span></span>
           <span className={"count-item meca" + (meca <= 2 ? " low" : "")}><Icon name="bike" size={16} /><span className="count-value">{offline ? "—" : meca}</span><span className="count-label">méca</span></span>
           <span className="count-item places"><Icon name="parking" size={16} /><span className="count-value">{offline ? "—" : places}</span><span className="count-label">places</span></span>
-        </div>
+        </div> */}
       </div>
 
       {Pill}
