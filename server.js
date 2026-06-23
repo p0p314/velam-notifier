@@ -34,12 +34,14 @@ app.use(helmet({
   contentSecurityPolicy: {
     directives: {
       defaultSrc:     ["'self'"],
-      scriptSrc:      ["'self'"],
+      // Mapbox GL crée ses web workers depuis un blob → 'blob:' requis.
+      scriptSrc:      ["'self'", "blob:"],
       styleSrc:       ["'self'", "'unsafe-inline'"],
-      imgSrc:         ["'self'", "data:"],
-      connectSrc:     ["'self'"],
+      imgSrc:         ["'self'", "data:", "blob:"],
+      connectSrc:     ["'self'", "https://api.mapbox.com", "https://events.mapbox.com", "https://*.tiles.mapbox.com"],
       manifestSrc:    ["'self'"],
-      workerSrc:      ["'self'"],
+      workerSrc:      ["'self'", "blob:"],
+      childSrc:       ["'self'", "blob:"],
       objectSrc:      ["'none'"],
       frameAncestors: ["'none'"],
     },
