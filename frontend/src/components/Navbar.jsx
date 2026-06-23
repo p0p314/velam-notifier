@@ -19,7 +19,7 @@ export default function Navbar() {
         <span className="brand-name">VéloPulse</span>
       </div>
       <nav className="nav-links">
-        <NavLink to="/" end className={cls}>Stations</NavLink>
+        <NavLink to="/stations" className={cls}>Stations</NavLink>
         <NavLink to="/favoris" className={cls}>Favoris</NavLink>
         <NavLink to="/alertes" className={cls}>Alertes</NavLink>
       </nav>

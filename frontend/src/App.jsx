@@ -1,5 +1,6 @@
 import { Routes, Route, Navigate, Outlet, useNavigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "./auth";
+import { useIsMobile } from "./hooks";
 import { ThemeProvider, useTheme } from "./useTheme";
 import { PwaInstallProvider, usePwaInstall } from "./components/PwaInstallContext";
 import BottomNav from "./components/BottomNav";
@@ -14,6 +15,13 @@ import Redirect from "./pages/Redirect";
 function Protected() {
   const { isAuthenticated } = useAuth();
   return isAuthenticated ? <Outlet /> : <Navigate to="/login" replace />;
+}
+
+// Landing différenciée : mobile → Favoris (expérience centrée favoris),
+// desktop → Stations (tableau de bord complet).
+function Landing() {
+  const isMobile = useIsMobile();
+  return <Navigate to={isMobile ? "/favoris" : "/stations"} replace />;
 }
 
 function Layout() {
@@ -60,7 +68,8 @@ export default function App() {
             <Route path="/redirect" element={<Redirect />} />
             <Route element={<Protected />}>
               <Route element={<Layout />}>
-                <Route path="/" element={<Stations />} />
+                <Route path="/" element={<Landing />} />
+                <Route path="/stations" element={<Stations />} />
                 <Route path="/favoris" element={<Favorites />} />
                 <Route path="/alertes" element={<Alerts />} />
               </Route>

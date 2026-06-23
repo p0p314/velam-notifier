@@ -205,6 +205,33 @@ select option { background: var(--surface); color: var(--text); }
 }
 .view-state { text-align: center; padding: 48px 16px; color: var(--text-3); font-size: 14px; }
 
+/* Barre d'outils mobile : recherche + déclencheur tri/filtre */
+.mobile-toolbar { display: flex; align-items: center; gap: 10px; }
+.mobile-toolbar .search-box { flex: 1; min-width: 0; }
+.filter-btn {
+  flex: none; position: relative;
+  width: 40px; height: 40px; display: inline-flex; align-items: center; justify-content: center;
+  background: var(--inset); border: 1px solid var(--border-strong); border-radius: var(--r-sm);
+  color: var(--text-2); cursor: pointer; transition: color .15s, border-color .15s;
+}
+.filter-btn.active { color: var(--accent); border-color: var(--accent); }
+.filter-btn.active::after {
+  content: ""; position: absolute; top: 5px; right: 5px;
+  width: 6px; height: 6px; border-radius: 50%; background: var(--accent);
+}
+
+/* Panneau tri/filtre (bottom sheet mobile) */
+.controls-sheet { display: flex; flex-direction: column; gap: 18px; }
+.sort-options { display: flex; flex-direction: column; gap: 6px; }
+.sort-option {
+  display: flex; align-items: center; justify-content: space-between;
+  width: 100%; min-height: 44px; padding: 0 14px;
+  background: var(--inset); border: 1px solid transparent; border-radius: var(--r-sm);
+  color: var(--text-2); font-size: 14px; font-weight: 500; cursor: pointer; transition: all .15s;
+}
+.sort-option.active { background: var(--surface); border-color: var(--accent); color: var(--text); font-weight: 600; }
+.sort-option .ic { color: var(--accent); }
+
 /* En-tête de page + état vide */
 .page-head { display: flex; align-items: baseline; gap: 10px; }
 .page-title { font-size: 22px; font-weight: 600; letter-spacing: -.015em; color: var(--text); }
@@ -278,6 +305,8 @@ select option { background: var(--surface); color: var(--text); }
 .station-item-counts .ci.meca .ic, .station-item-counts .ci.places .ic { color: var(--text-3); }
 .station-item-counts .ci.low b { color: var(--warn); }
 .station-item-addr { display: none; font-size: 12px; color: var(--text-3); margin-top: 3px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.station-item-dist { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 500; color: var(--accent); margin-top: 4px; }
+.station-item-dist .ic { width: 13px; height: 13px; }
 
 /* Pastille statut (point + libellé) */
 .status-pill { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 500; }
@@ -303,6 +332,8 @@ select option { background: var(--surface); color: var(--text); }
 .sc-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; margin-bottom: 14px; }
 .sc-name { font-size: 14px; font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .sc-addr { font-size: 12px; color: var(--text-3); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sc-dist { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 500; color: var(--accent); margin-top: 5px; }
+.sc-dist .ic { width: 12px; height: 12px; }
 .sc-head-right { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
 .sc-fav { background: none; border: none; padding: 0; cursor: pointer; color: var(--text-3); display: inline-flex; }
 .sc-fav.on { color: var(--accent); }

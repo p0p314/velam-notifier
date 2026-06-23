@@ -1,5 +1,6 @@
 import Icon from "./Icon";
 import { fmtTime } from "../theme";
+import { fmtDistance } from "../hooks";
 
 function statusOf(s) {
   if (s.is_renting === false) return { cls: "closed", label: "Hors service" };
@@ -27,11 +28,12 @@ function MiniStat({ kind, label, value, max, offline }) {
   );
 }
 
-export default function StationCard({ s, onClick, isFav, onToggleFav }) {
+export default function StationCard({ s, onClick, isFav, onToggleFav, dist }) {
   const docks   = s.docks_available ?? 0;
   const offline = s.is_renting === false;
   const t       = fmtTime(s.last_reported);
   const st      = statusOf(s);
+  const distLabel = fmtDistance(dist);
 
   return (
     <div className={"sc-card" + (offline ? " offline" : "")} onClick={onClick} role="button" tabIndex={0}>
@@ -39,6 +41,7 @@ export default function StationCard({ s, onClick, isFav, onToggleFav }) {
         <div style={{ minWidth: 0 }}>
           <div className="sc-name">{s.name}</div>
           {s.address?.trim() && <div className="sc-addr">{s.address.trim()}</div>}
+          {distLabel && <div className="sc-dist"><Icon name="map-pin" size={12} /> {distLabel}</div>}
         </div>
         <div className="sc-head-right">
           {onToggleFav && (

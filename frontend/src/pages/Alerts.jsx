@@ -46,7 +46,7 @@ function AlertCard({ a, onToggle, onDelete }) {
           <div className="alert-card-name">{a.station_name}</div>
           <div className="alert-card-sub">
             <Icon name={BIKE_ICON[a.bike_type]} size={14} />
-            {BIKE_LABEL[a.bike_type]} · &lt; {a.min_count} vélos · {a.time_start}–{a.time_end}
+            {BIKE_LABEL[a.bike_type]} · ≤ {a.min_count} vélos · {a.time_start}–{a.time_end}
           </div>
         </div>
         <button role="switch" aria-checked={a.active} aria-label={a.active ? "Désactiver" : "Activer"}
@@ -97,7 +97,7 @@ function AlertForm({ favorites, form, error, onSubmit }) {
       </div>
 
       <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-        <span className="form-label">Notifier si moins de</span>
+        <span className="form-label">Notifier si au plus</span>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <input type="number" inputMode="numeric" min="1" max="50" value={minCount}
             onChange={(e) => setMinCount(e.target.value)} className="field mono" style={{ width: 80 }} />
