@@ -1,3 +1,4 @@
+import { lazy, Suspense } from "react";
 import { Routes, Route, Navigate, Outlet, useNavigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "./auth";
 import { useIsMobile } from "./hooks";
@@ -11,6 +12,9 @@ import Stations from "./pages/Stations";
 import Favorites from "./pages/Favorites";
 import Alerts from "./pages/Alerts";
 import Redirect from "./pages/Redirect";
+
+// Carte chargée à la demande : mapbox-gl (~1,5 Mo) reste hors du bundle principal.
+const MapPage = lazy(() => import("./pages/MapPage"));
 
 function Protected() {
   const { isAuthenticated } = useAuth();
@@ -70,6 +74,7 @@ export default function App() {
               <Route element={<Layout />}>
                 <Route path="/" element={<Landing />} />
                 <Route path="/stations" element={<Stations />} />
+                <Route path="/carte" element={<Suspense fallback={<div className="view-state">Chargement de la carte…</div>}><MapPage /></Suspense>} />
                 <Route path="/favoris" element={<Favorites />} />
                 <Route path="/alertes" element={<Alerts />} />
               </Route>

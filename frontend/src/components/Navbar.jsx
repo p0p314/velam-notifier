@@ -20,6 +20,7 @@ export default function Navbar() {
       </div>
       <nav className="nav-links">
         <NavLink to="/stations" className={cls}>Stations</NavLink>
+        <NavLink to="/carte" className={cls}>Carte</NavLink>
         <NavLink to="/favoris" className={cls}>Favoris</NavLink>
         <NavLink to="/alertes" className={cls}>Alertes</NavLink>
       </nav>
