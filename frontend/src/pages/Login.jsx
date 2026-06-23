@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../auth";
 import { registerPush } from "../push";
-import Icon from "../components/Icon";
+import Logo from "../components/Logo";
 
 export default function Login() {
   const { login, register } = useAuth();
@@ -40,7 +40,7 @@ export default function Login() {
     <div className="auth-wrap">
       <form onSubmit={submit} className="auth-card">
         <div className="auth-brand">
-          <span className="auth-logo"><Icon name="bike" size={24} /></span>
+          <span className="auth-logo"><Logo /></span>
           <div className="auth-name">VéloPulse</div>
           <div className="auth-sub">Vélam · Amiens</div>
         </div>

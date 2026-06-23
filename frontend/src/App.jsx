@@ -7,6 +7,7 @@ import { PwaInstallProvider, usePwaInstall } from "./components/PwaInstallContex
 import BottomNav from "./components/BottomNav";
 import Navbar from "./components/Navbar";
 import Icon from "./components/Icon";
+import Logo from "./components/Logo";
 import Login from "./pages/Login";
 import Stations from "./pages/Stations";
 import Favorites from "./pages/Favorites";
@@ -38,7 +39,7 @@ function Layout() {
       {/* Mobile : header (masqué en desktop via CSS) */}
       <header className="app-header">
         <div className="brand">
-          <span className="brand-logo"><Icon name="bike" size={18} /></span>
+          <span className="brand-logo"><Logo /></span>
           <span className="brand-name">VéloPulse</span>
         </div>
         <div style={{ display: "flex", gap: 8 }}>
