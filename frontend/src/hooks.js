@@ -45,6 +45,18 @@ export function useGeolocation() {
   return { coords, status };
 }
 
+/**
+ * Détection device fiable (mobile vs desktop) pour le flow d'installation PWA.
+ * UA mobile, + cas iPadOS 13+ qui se présente comme un Mac (écran tactile).
+ * Centralisé ici pour éviter toute détection éparpillée.
+ */
+export function isMobileDevice() {
+  if (typeof navigator === "undefined") return false;
+  const ua = navigator.userAgent || "";
+  if (/android|iphone|ipad|ipod|iemobile|blackberry|opera mini|mobile/i.test(ua)) return true;
+  return /Macintosh/.test(ua) && navigator.maxTouchPoints > 1; // iPad « desktop class »
+}
+
 /** True si le viewport est mobile (≤ 768px), réactif au redimensionnement. */
 export function useIsMobile(query = "(max-width: 768px)") {
   const get = () => typeof window !== "undefined" && window.matchMedia(query).matches;

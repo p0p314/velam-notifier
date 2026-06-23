@@ -8,7 +8,7 @@ import Icon from "./Icon";
 export default function Navbar() {
   const { user, logout } = useAuth();
   const { theme, toggle } = useTheme();
-  const { open: openInstall } = usePwaInstall();
+  const { open: openInstall, isMobile } = usePwaInstall();
   const navigate = useNavigate();
   const cls = ({ isActive }) => "nav-link" + (isActive ? " active" : "");
 
@@ -24,7 +24,8 @@ export default function Navbar() {
         <NavLink to="/alertes" className={cls}>Alertes</NavLink>
       </nav>
       <div className="nav-right">
-        <button className="nav-btn" onClick={openInstall}><Icon name="download" /> Installer</button>
+        {/* Installation PWA : pertinente uniquement sur mobile (jamais sur desktop). */}
+        {isMobile && <button className="nav-btn" onClick={openInstall}><Icon name="download" /> Installer</button>}
         <button className="icon-btn" aria-label="Changer de thème" onClick={toggle}>
           <Icon name={theme === "dark" ? "sun" : "moon"} />
         </button>
