@@ -2,7 +2,7 @@ import { NavLink } from "react-router-dom";
 import Icon from "./Icon";
 
 const TABS = [
-  { to: "/",        label: "Stations", end: true,  icon: "map-pin" },
+  { to: "/stations", label: "Stations", end: false, icon: "map-pin" },
   { to: "/favoris", label: "Favoris",  end: false, icon: "star" },
   { to: "/alertes", label: "Alertes",  end: false, icon: "bell" },
 ];

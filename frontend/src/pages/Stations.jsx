@@ -2,8 +2,23 @@ import { useState } from "react";
 import StationCard from "../components/StationCard";
 import StationListItem from "../components/StationListItem";
 import StationDetailSheet from "../components/StationDetailSheet";
+import BottomSheet from "../components/BottomSheet";
 import Icon from "../components/Icon";
-import { useStations, useFavorites } from "../hooks";
+import { useStations, useFavorites, useGeolocation, distanceKm } from "../hooks";
+
+const FILTERS = [
+  { value: "all",  label: "Toutes" },
+  { value: "elec", label: "Élec." },
+  { value: "meca", label: "Méca." },
+];
+
+const SORTS = [
+  { value: "distance", label: "Distance" },
+  { value: "name",     label: "Nom (A–Z)" },
+  { value: "elec",     label: "Électriques" },
+  { value: "meca",     label: "Mécaniques" },
+  { value: "total",    label: "Total vélos" },
+];
 
 function SearchBox({ value, onChange }) {
   return (
@@ -17,20 +32,21 @@ function SearchBox({ value, onChange }) {
 export default function Stations() {
   const { stations, loading, error, reload } = useStations();
   const { favIds, toggleFav } = useFavorites();
+  const { coords } = useGeolocation();
 
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("all");
-  const [sort,   setSort]   = useState("name");
+  const [sort,   setSort]   = useState("distance"); // proximité par défaut
   const [selId,  setSelId]  = useState(null);
+  const [controlsOpen, setControlsOpen] = useState(false); // tri/filtre mobile
 
   const matchesSearch = (s) => {
     const q = search.trim().toLowerCase();
     return !q || s.name.toLowerCase().includes(q) || (s.address ?? "").toLowerCase().includes(q);
   };
 
-  const visibleMobile = stations.filter(matchesSearch).sort((a, b) => a.name.localeCompare(b.name, "fr"));
-
-  const visibleDesktop = stations
+  // Liste filtrée + triée — partagée par le mobile (liste) et le desktop (grille).
+  const visible = stations
     .filter((s) => {
       if (!matchesSearch(s)) return false;
       if (filter === "elec") return (s.electrical ?? 0) > 0;
@@ -41,6 +57,10 @@ export default function Stations() {
       if (sort === "elec")  return (b.electrical ?? 0) - (a.electrical ?? 0);
       if (sort === "meca")  return (b.mechanical ?? 0) - (a.mechanical ?? 0);
       if (sort === "total") return (b.total_bikes ?? 0) - (a.total_bikes ?? 0);
+      if (sort === "distance" && coords) {
+        return distanceKm(coords, a) - distanceKm(coords, b); // proximité croissante
+      }
+      // Fallback (tri distance sans position autorisée, ou tri "name") → alphabétique
       return a.name.localeCompare(b.name, "fr");
     });
 
@@ -49,6 +69,8 @@ export default function Stations() {
   const totElec = stations.reduce((a, s) => a + (s.electrical ?? 0), 0);
   const totMeca = stations.reduce((a, s) => a + (s.mechanical ?? 0), 0);
   const activeCount = stations.filter((s) => s.is_renting !== false).length;
+
+  const filtersActive = filter !== "all" || sort !== "distance";
 
   const ErrorBox = (
     <div className="view-pad">
@@ -59,20 +81,61 @@ export default function Stations() {
     </div>
   );
 
+  // Contrôles tri/filtre partagés (rendus dans le bottom sheet mobile).
+  const Controls = (
+    <div className="controls-sheet">
+      <div className="form-title" style={{ marginBottom: 4 }}>Trier et filtrer</div>
+
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        <span className="form-label">Type de vélo</span>
+        <div className="seg">
+          {FILTERS.map((f) => (
+            <button key={f.value} type="button" className={filter === f.value ? "active" : ""} onClick={() => setFilter(f.value)}>
+              {f.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        <span className="form-label">Trier par</span>
+        <div className="sort-options">
+          {SORTS.map((o) => (
+            <button key={o.value} type="button" className={"sort-option" + (sort === o.value ? " active" : "")} onClick={() => setSort(o.value)}>
+              <span>{o.label}</span>
+              {sort === o.value && <Icon name="check" size={16} />}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <button className="submit-btn" onClick={() => setControlsOpen(false)}>Voir {visible.length} station{visible.length !== 1 ? "s" : ""}</button>
+    </div>
+  );
+
   return (
     <>
       {/* ─────────────── MOBILE ─────────────── */}
       <div className="mobile-only">
-        <div className="view-search"><SearchBox value={search} onChange={setSearch} /></div>
+        <div className="view-search mobile-toolbar">
+          <SearchBox value={search} onChange={setSearch} />
+          <button
+            className={"filter-btn" + (filtersActive ? " active" : "")}
+            aria-label="Trier et filtrer"
+            onClick={() => setControlsOpen(true)}
+          >
+            <Icon name="sliders" size={18} />
+          </button>
+        </div>
         {loading ? (
           <div className="view-state">Connexion au serveur…</div>
         ) : error ? ErrorBox
-        : visibleMobile.length === 0 ? (
-          <div className="view-state">Aucune station pour « {search} »</div>
+        : visible.length === 0 ? (
+          <div className="view-state">Aucune station ne correspond aux filtres.</div>
         ) : (
           <div className="station-list">
-            {visibleMobile.map((s) => (
-              <StationListItem key={s.station_id} s={s} onClick={() => setSelId(s.station_id)} />
+            {visible.map((s) => (
+              <StationListItem key={s.station_id} s={s} dist={coords ? distanceKm(coords, s) : null} onClick={() => setSelId(s.station_id)} />
             ))}
           </div>
         )}
@@ -92,16 +155,13 @@ export default function Stations() {
           <div className="stations-filters">
             <SearchBox value={search} onChange={setSearch} />
             <div className="seg" style={{ maxWidth: 280 }}>
-              <button className={filter === "all" ? "active" : ""} onClick={() => setFilter("all")}>Toutes</button>
-              <button className={filter === "elec" ? "active" : ""} onClick={() => setFilter("elec")}>Élec.</button>
-              <button className={filter === "meca" ? "active" : ""} onClick={() => setFilter("meca")}>Méca.</button>
+              {FILTERS.map((f) => (
+                <button key={f.value} className={filter === f.value ? "active" : ""} onClick={() => setFilter(f.value)}>{f.label}</button>
+              ))}
             </div>
             <div className="select-wrap" style={{ marginLeft: "auto" }}>
               <select value={sort} onChange={(e) => setSort(e.target.value)} aria-label="Trier">
-                <option value="name">Nom (A–Z)</option>
-                <option value="elec">Électriques</option>
-                <option value="meca">Mécaniques</option>
-                <option value="total">Total vélos</option>
+                {SORTS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
               </select>
               <Icon name="chevron-down" size={15} />
             </div>
@@ -114,17 +174,21 @@ export default function Stations() {
         : (
           <>
             <div style={{ fontSize: 12, color: "var(--text-3)", margin: "0 0 12px", fontFamily: "var(--font-mono)" }}>
-              {visibleDesktop.length} station{visibleDesktop.length !== 1 ? "s" : ""}
+              {visible.length} station{visible.length !== 1 ? "s" : ""}
             </div>
             <div className="stations-grid">
-              {visibleDesktop.map((s) => (
-                <StationCard key={s.station_id} s={s} onClick={() => setSelId(s.station_id)} isFav={favIds.has(s.station_id)} onToggleFav={toggleFav} />
+              {visible.map((s) => (
+                <StationCard key={s.station_id} s={s} dist={coords ? distanceKm(coords, s) : null} onClick={() => setSelId(s.station_id)} isFav={favIds.has(s.station_id)} onToggleFav={toggleFav} />
               ))}
             </div>
-            {visibleDesktop.length === 0 && <div className="view-state">Aucune station ne correspond aux filtres.</div>}
+            {visible.length === 0 && <div className="view-state">Aucune station ne correspond aux filtres.</div>}
           </>
         )}
       </div>
+
+      <BottomSheet open={controlsOpen} onClose={() => setControlsOpen(false)} heightVh={62}>
+        {Controls}
+      </BottomSheet>
 
       <StationDetailSheet
         station={selected}

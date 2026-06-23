@@ -186,17 +186,17 @@ async function checkAlerts() {
     const count = countForType(statusMap[alert.station_id], alert.bike_type);
     const dejaNotifieAujourdhui = alert.last_notified_date === today;
 
-    // ── Condition 1 : première descente sous le seuil aujourd'hui ──────────────
-    if (count < alert.min_count && !dejaNotifieAujourdhui) {
+    // ── Condition 1 : première atteinte du seuil aujourd'hui (count <= seuil) ───
+    if (count <= alert.min_count && !dejaNotifieAujourdhui) {
       await sendToUser(alert.user_id, buildPayload(alert, count, rentalApps));
       await markAlertNotified(alert.id, today, count);
       continue;
     }
 
-    // ── Condition 2 : déjà notifié aujourd'hui, toujours sous le seuil ──────────
+    // ── Condition 2 : déjà notifié aujourd'hui, toujours au seuil ou en dessous ─
     // Re-notifie si le nombre a changé depuis le dernier envoi, ou après un reset
     // (last_notified_count remis à NULL suite à une remontée puis redescente).
-    if (count < alert.min_count && dejaNotifieAujourdhui) {
+    if (count <= alert.min_count && dejaNotifieAujourdhui) {
       if (alert.last_notified_count === null || count !== alert.last_notified_count) {
         await sendToUser(alert.user_id, buildPayload(alert, count, rentalApps));
         await setAlertNotifiedCount(alert.id, count);
@@ -204,8 +204,8 @@ async function checkAlerts() {
       continue;
     }
 
-    // ── Reset : count repassé au-dessus du seuil → prépare la prochaine descente ──
-    if (count >= alert.min_count && dejaNotifieAujourdhui) {
+    // ── Reset : count repassé strictement au-dessus du seuil → prochaine descente ─
+    if (count > alert.min_count && dejaNotifieAujourdhui) {
       await setAlertNotifiedCount(alert.id, null);
     }
   }

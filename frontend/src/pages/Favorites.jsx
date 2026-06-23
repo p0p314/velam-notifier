@@ -2,12 +2,12 @@ import { useState, useRef } from "react";
 import StationListItem from "../components/StationListItem";
 import StationDetailSheet from "../components/StationDetailSheet";
 import Icon from "../components/Icon";
-import { useStations, useFavorites } from "../hooks";
+import { useStations, useFavorites, useGeolocation, distanceKm } from "../hooks";
 
 const REVEAL = 84;
 
 /** Card favori avec swipe gauche → bouton supprimer (pointer events natifs). */
-function FavoriteItem({ s, onOpen, onDelete }) {
+function FavoriteItem({ s, onOpen, onDelete, dist }) {
   const [tx, setTx] = useState(0);
   const base = useRef(0);
   const startX = useRef(null);
@@ -60,7 +60,7 @@ function FavoriteItem({ s, onOpen, onDelete }) {
         onPointerCancel={up}
         onClick={click}
       >
-        <StationListItem s={s} />
+        <StationListItem s={s} dist={dist} />
       </div>
     </div>
   );
@@ -69,13 +69,17 @@ function FavoriteItem({ s, onOpen, onDelete }) {
 export default function Favorites() {
   const { stations, loading } = useStations();
   const { favorites, favIds, toggleFav, loading: favLoading } = useFavorites();
+  const { coords } = useGeolocation();
   const [selId, setSelId] = useState(null);
 
+  // Tri par proximité si la position est autorisée, sinon ordre alphabétique.
   const favStations = favorites
     .map((f) => stations.find((s) => s.station_id === f.station_id) ?? {
       station_id: f.station_id, name: f.station_name, electrical: 0, mechanical: 0, capacity: 0, docks_available: 0,
     })
-    .sort((a, b) => a.name.localeCompare(b.name, "fr"));
+    .sort((a, b) =>
+      coords ? distanceKm(coords, a) - distanceKm(coords, b) : a.name.localeCompare(b.name, "fr")
+    );
 
   const selected = stations.find((s) => s.station_id === selId) ?? null;
 
@@ -100,6 +104,7 @@ export default function Favorites() {
             <FavoriteItem
               key={s.station_id}
               s={s}
+              dist={coords ? distanceKm(coords, s) : null}
               onOpen={() => setSelId(s.station_id)}
               onDelete={(st) => toggleFav(st)}
             />

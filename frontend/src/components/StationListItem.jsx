@@ -1,4 +1,5 @@
 import Icon from "./Icon";
+import { fmtDistance } from "../hooks";
 
 // Statut : Hors service (fermé), Faible (peu de vélos), Ouverte.
 function statusOf(s) {
@@ -8,12 +9,13 @@ function statusOf(s) {
   return { cls: "open", label: "Ouverte" };
 }
 
-export default function StationListItem({ s, onClick }) {
+export default function StationListItem({ s, onClick, dist }) {
   const offline = s.is_renting === false;
   const st = statusOf(s);
   const meca   = s.mechanical ?? 0;
   const elec   = s.electrical ?? 0;
   const places = s.docks_available ?? 0;
+  const distLabel = fmtDistance(dist);
 
   const onKey = (e) => {
     if (onClick && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); onClick(); }
@@ -28,6 +30,7 @@ export default function StationListItem({ s, onClick }) {
       <div style={{ flex: 1, minWidth: 0 }}>
         <div className="station-item-name">{s.name}</div>
         {s.address?.trim() && <div className="station-item-addr">{s.address.trim()}</div>}
+        {distLabel && <div className="station-item-dist"><Icon name="map-pin" size={13} /> {distLabel}</div>}
 
         {/* Compteurs mobile */}
         {!offline && (
