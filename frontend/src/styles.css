@@ -128,7 +128,7 @@ select option { background: var(--surface); color: var(--text); }
 .auth-wrap { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 20px; background: var(--bg); }
 .auth-card { width: 100%; max-width: 320px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg); padding: 28px 24px; box-shadow: var(--shadow-pop); }
 .auth-brand { text-align: center; margin-bottom: 22px; }
-.auth-logo { width: 42px; height: 42px; border-radius: 11px; background: var(--accent); color: #fff; display: inline-flex; align-items: center; justify-content: center; margin-bottom: 12px; }
+.auth-logo { width: 42px; height: 42px; border-radius: 11px; overflow: hidden; display: inline-flex; align-items: center; justify-content: center; margin-bottom: 12px; }
 .auth-name { font-size: 19px; font-weight: 600; letter-spacing: -.015em; color: var(--text); }
 .auth-sub { font-size: 12px; color: var(--text-3); margin-top: 2px; }
 .auth-tabs { display: flex; margin-bottom: 20px; border-bottom: 1px solid var(--hairline); }
@@ -149,14 +149,14 @@ select option { background: var(--surface); color: var(--text); }
 }
 .app-content { flex: 1; padding-bottom: calc(80px + env(safe-area-inset-bottom)); }
 
-/* Logo (carré accent + icône) + nom */
+/* Logo principal (image auto-adaptée au thème) + nom */
 .brand { display: flex; align-items: center; gap: 9px; }
 .brand-logo {
   width: 30px; height: 30px; border-radius: var(--r-sm);
-  background: var(--accent); color: #fff;
-  display: flex; align-items: center; justify-content: center;
+  display: flex; align-items: center; justify-content: center; overflow: hidden;
 }
-.brand-logo .ic { width: 18px; height: 18px; }
+/* Le logo apporte sa propre plaque/arrondi → l'image remplit le conteneur. */
+.app-logo { width: 100%; height: 100%; display: block; object-fit: contain; }
 .brand-name { font-size: 16px; font-weight: 600; letter-spacing: -.015em; color: var(--text); }
 .brand-sub { font-size: 11px; color: var(--text-3); }
 

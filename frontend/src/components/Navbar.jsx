@@ -3,6 +3,7 @@ import { useAuth } from "../auth";
 import { useTheme } from "../useTheme";
 import { usePwaInstall } from "./PwaInstallContext";
 import Icon from "./Icon";
+import Logo from "./Logo";
 
 // Top navbar — affichée uniquement en desktop (> 768px) via CSS.
 export default function Navbar() {
@@ -15,7 +16,7 @@ export default function Navbar() {
   return (
     <header className="top-navbar">
       <div className="brand">
-        <span className="brand-logo"><Icon name="bike" size={18} /></span>
+        <span className="brand-logo"><Logo /></span>
         <span className="brand-name">VéloPulse</span>
       </div>
       <nav className="nav-links">

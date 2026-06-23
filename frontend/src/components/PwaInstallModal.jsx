@@ -1,6 +1,7 @@
 import { useState } from "react";
 import BottomSheet from "./BottomSheet";
 import Icon from "./Icon";
+import Logo from "./Logo";
 
 const isIOS     = /iphone|ipad|ipod/i.test(navigator.userAgent);
 const isAndroid = /android/i.test(navigator.userAgent);
@@ -41,7 +42,7 @@ export default function PwaInstallModal({ isOpen, onClose, isInstalled }) {
       ) : (
         <>
           <div style={{ display: "flex", alignItems: "center", gap: 11, marginBottom: 6 }}>
-            <span className="brand-logo"><Icon name="bike" size={18} /></span>
+            <span className="brand-logo"><Logo /></span>
             <div id="pwa-title" style={{ fontSize: 17, fontWeight: 600, color: "var(--text)" }}>
               Recevoir les notifications
             </div>
