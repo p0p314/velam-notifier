@@ -37,7 +37,7 @@ function DayPicker({ value, onChange, disabled }) {
   );
 }
 
-function AlertCard({ a, onToggle, onDelete }) {
+function AlertCard({ a, onToggle, onDelete, onEdit }) {
   const dayVals = a.days ? a.days.split(",").map(Number) : [1, 2, 3, 4, 5, 6, 7];
   return (
     <div className={"alert-card" + (a.active ? "" : " off")}>
@@ -53,7 +53,12 @@ function AlertCard({ a, onToggle, onDelete }) {
           className={"switch" + (a.active ? " on" : "")} onClick={() => onToggle(a)}>
           <span className="switch-knob" />
         </button>
-        <button className="alert-del" aria-label="Supprimer" onClick={() => onDelete(a)}><Icon name="trash" size={17} /></button>
+        <button className="alert-edit" aria-label="Modifier" onClick={() => onEdit(a)}>
+          <Icon name="pencil" size={16} />
+        </button>
+        <button className="alert-del" aria-label="Supprimer" onClick={() => onDelete(a)}>
+          <Icon name="trash" size={17} />
+        </button>
       </div>
       <div style={{ marginTop: 12 }}>
         <DayPicker value={dayVals} onChange={() => {}} disabled />
@@ -62,24 +67,28 @@ function AlertCard({ a, onToggle, onDelete }) {
   );
 }
 
-// Formulaire réutilisé dans le bottom sheet (mobile) et le panneau (desktop).
-function AlertForm({ favorites, form, error, onSubmit }) {
+function AlertForm({ favorites, form, error, onSubmit, onCancel, editingAlert }) {
   const { stationId, setStationId, bikeType, setBikeType, minCount, setMinCount,
           timeStart, setTimeStart, timeEnd, setTimeEnd, days, setDays } = form;
 
-  if (favorites.length === 0) {
+  // Inclure la station de l'alerte si elle n'est plus dans les favoris
+  const stationOptions = editingAlert && !favorites.find((f) => f.station_id === editingAlert.station_id)
+    ? [{ station_id: editingAlert.station_id, station_name: editingAlert.station_name }, ...favorites]
+    : favorites;
+
+  if (stationOptions.length === 0) {
     return <div style={{ fontSize: 14, color: "var(--text-3)" }}>Ajoutez d'abord des stations en favoris.</div>;
   }
 
   return (
     <form onSubmit={onSubmit} style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-      <div className="form-title">Nouvelle alerte</div>
+      <div className="form-title">{editingAlert ? "Modifier l'alerte" : "Nouvelle alerte"}</div>
 
       <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
         <span className="form-label">Station</span>
         <div className="select-wrap select-inset">
           <select value={stationId} onChange={(e) => setStationId(e.target.value)} required>
-            {favorites.map((f) => <option key={f.station_id} value={f.station_id}>{f.station_name}</option>)}
+            {stationOptions.map((f) => <option key={f.station_id} value={f.station_id}>{f.station_name}</option>)}
           </select>
           <Icon name="chevron-down" size={15} />
         </div>
@@ -124,7 +133,12 @@ function AlertForm({ favorites, form, error, onSubmit }) {
       {error && <div style={{ color: "var(--danger)", fontSize: 13 }}>{error}</div>}
 
       <div className="form-submit-row">
-        <button type="submit" data-autofocus className="submit-btn">Créer l'alerte</button>
+        {editingAlert && (
+          <button type="button" className="cancel-btn" onClick={onCancel}>Annuler</button>
+        )}
+        <button type="submit" data-autofocus className="submit-btn">
+          {editingAlert ? "Enregistrer" : "Créer l'alerte"}
+        </button>
       </div>
     </form>
   );
@@ -135,6 +149,7 @@ export default function Alerts() {
   const [alerts, setAlerts] = useState([]);
   const [error,  setError]  = useState(null);
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [editingAlert, setEditingAlert] = useState(null);
 
   const [stationId, setStationId] = useState("");
   const [bikeType,  setBikeType]  = useState("any");
@@ -149,23 +164,73 @@ export default function Alerts() {
   }, []);
 
   useEffect(() => { reload(); }, [reload]);
-  useEffect(() => { setStationId((prev) => prev || favorites[0]?.station_id || ""); }, [favorites]);
+  useEffect(() => {
+    if (!editingAlert) setStationId((prev) => prev || favorites[0]?.station_id || "");
+  }, [favorites, editingAlert]);
 
-  const create = async (e) => {
+  const resetForm = useCallback(() => {
+    setStationId(favorites[0]?.station_id || "");
+    setBikeType("any");
+    setMinCount(1);
+    setTimeStart("08:00");
+    setTimeEnd("10:00");
+    setDays([1, 2, 3, 4, 5, 6, 7]);
+  }, [favorites]);
+
+  const startEdit = (a) => {
+    setEditingAlert(a);
+    setStationId(a.station_id);
+    setBikeType(a.bike_type);
+    setMinCount(a.min_count);
+    setTimeStart(a.time_start);
+    setTimeEnd(a.time_end);
+    setDays(a.days ? a.days.split(",").map(Number) : [1, 2, 3, 4, 5, 6, 7]);
+    setError(null);
+    if (window.innerWidth < 769) setSheetOpen(true);
+  };
+
+  const cancelEdit = useCallback(() => {
+    setEditingAlert(null);
+    resetForm();
+    setSheetOpen(false);
+    setError(null);
+  }, [resetForm]);
+
+  const save = async (e) => {
     e.preventDefault();
     setError(null);
-    const fav = favorites.find((f) => f.station_id === stationId);
-    if (!fav) { setError("Choisissez une station favorite"); return; }
-    if (!timeStart || !timeEnd || timeEnd <= timeStart) { setError("L'heure de fin doit être postérieure à l'heure de début"); return; }
-    try {
-      await api("/api/alerts", { method: "POST", body: {
-        station_id: fav.station_id, station_name: fav.station_name,
-        bike_type: bikeType, min_count: Number(minCount),
-        time_start: timeStart, time_end: timeEnd, days: days.join(","),
-      }});
-      setSheetOpen(false);
-      reload();
-    } catch (e) { setError(e.message); }
+    if (!timeStart || !timeEnd || timeEnd <= timeStart) {
+      setError("L'heure de fin doit être postérieure à l'heure de début");
+      return;
+    }
+
+    if (editingAlert) {
+      const selectedFav = favorites.find((f) => f.station_id === stationId);
+      const stationName = selectedFav?.station_name ?? editingAlert.station_name;
+      try {
+        await api(`/api/alerts/${editingAlert.id}`, { method: "PATCH", body: {
+          station_id: stationId, station_name: stationName,
+          bike_type: bikeType, min_count: Number(minCount),
+          time_start: timeStart, time_end: timeEnd, days: days.join(","),
+        }});
+        setSheetOpen(false);
+        setEditingAlert(null);
+        resetForm();
+        reload();
+      } catch (err) { setError(err.message); }
+    } else {
+      const fav = favorites.find((f) => f.station_id === stationId);
+      if (!fav) { setError("Choisissez une station favorite"); return; }
+      try {
+        await api("/api/alerts", { method: "POST", body: {
+          station_id: fav.station_id, station_name: fav.station_name,
+          bike_type: bikeType, min_count: Number(minCount),
+          time_start: timeStart, time_end: timeEnd, days: days.join(","),
+        }});
+        setSheetOpen(false);
+        reload();
+      } catch (err) { setError(err.message); }
+    }
   };
 
   const toggle = async (a) => {
@@ -183,7 +248,9 @@ export default function Alerts() {
     form: { stationId, setStationId, bikeType, setBikeType, minCount, setMinCount,
             timeStart, setTimeStart, timeEnd, setTimeEnd, days, setDays },
     error,
-    onSubmit: create,
+    onSubmit: save,
+    onCancel: cancelEdit,
+    editingAlert,
   };
 
   return (
@@ -202,7 +269,9 @@ export default function Alerts() {
               <div className="empty-sub">Touchez « + » pour en créer une.</div>
             </div>
           ) : (
-            alerts.map((a) => <AlertCard key={a.id} a={a} onToggle={toggle} onDelete={remove} />)
+            alerts.map((a) => (
+              <AlertCard key={a.id} a={a} onToggle={toggle} onDelete={remove} onEdit={startEdit} />
+            ))
           )}
 
           {error && !sheetOpen && <div style={{ color: "var(--danger)", fontSize: 13 }}>{error}</div>}
@@ -213,10 +282,10 @@ export default function Alerts() {
         </div>
       </div>
 
-      <button className="fab" aria-label="Créer une alerte" onClick={() => { setError(null); setSheetOpen(true); }}>
+      <button className="fab" aria-label="Créer une alerte" onClick={() => { cancelEdit(); setSheetOpen(true); }}>
         <Icon name="plus" />
       </button>
-      <BottomSheet open={sheetOpen} onClose={() => setSheetOpen(false)} heightVh={88}>
+      <BottomSheet open={sheetOpen} onClose={cancelEdit} heightVh={88}>
         <AlertForm {...formProps} />
       </BottomSheet>
     </>
