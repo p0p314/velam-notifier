@@ -112,9 +112,12 @@ async function sendToUser(userId, payload) {
 
 // ── Construction du payload (adapté si count = 0) ───────────────────────────────
 
-// velam.amiens.fr/fr/home gère elle-même l'ouverture de l'app native (universal links).
+// Le SW iOS ne peut pas ouvrir directement une URL cross-origin via clients.openWindow().
+// On passe par /open (même domaine) qui répond avec un 302 vers velam.amiens.fr ;
+// iOS détecte la navigation cross-origin et ouvre Safari (+ universal link → app native).
 function buildRedirectUrl(_rentalApps) {
-  return OFFICIAL_URL;
+  const base = (process.env.APP_URL || 'https://velam-notifier.onrender.com').replace(/\/$/, '');
+  return `${base}/open?url=${encodeURIComponent(OFFICIAL_URL)}`;
 }
 
 function buildPayload(alerte, count, rentalApps) {
