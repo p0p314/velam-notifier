@@ -7,8 +7,6 @@ self.addEventListener("push", (event) => {
     body: data.body || "",
     icon: "/icon-192.png",
     badge: "/badge-72.png",
-    // data.url est désormais toujours une URL https:// (page /redirect interne)
-    // qui gère côté navigateur l'ouverture de l'app native, puis store, puis web.
     data: { url: data.url || "https://velam.amiens.fr/fr/home" },
 
     // Urgence visuelle et comportementale
@@ -35,7 +33,6 @@ self.addEventListener("push", (event) => {
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
 
-  // data.url est maintenant toujours une URL https:// valide (page /redirect).
   const url = event.notification.data?.url || "https://velam.amiens.fr/fr/home";
 
   if (event.action === "dismiss") return; // fermer sans ouvrir
@@ -44,8 +41,8 @@ self.addEventListener("notificationclick", (event) => {
     clients
       .matchAll({ type: "window", includeUncontrolled: true })
       .then((list) => {
-        // Réutiliser un onglet déjà ouvert sur notre app.
-        const existing = list.find((c) => c.url.includes("velam-notifier.onrender.com"));
+        // Réutiliser un onglet déjà ouvert sur velam.amiens.fr.
+        const existing = list.find((c) => c.url.includes("velam.amiens.fr"));
         if (existing) {
           existing.navigate(url);
           return existing.focus();
