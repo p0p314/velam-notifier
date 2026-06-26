@@ -8,7 +8,7 @@ const {
 const { fetchStationStatus } = require('./gbfs');
 
 const POLL_MS = 30_000;
-const OFFICIAL_URL = 'https://velam.amiens.fr';
+const OFFICIAL_URL = 'https://velam.amiens.fr/fr/home';
 
 let _vapidPublic = null; // mis en cache au démarrage (accès sync depuis la route)
 

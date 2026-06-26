@@ -9,7 +9,7 @@ self.addEventListener("push", (event) => {
     badge: "/badge-72.png",
     // data.url est désormais toujours une URL https:// (page /redirect interne)
     // qui gère côté navigateur l'ouverture de l'app native, puis store, puis web.
-    data: { url: data.url || "https://velam-notifier.onrender.com" },
+    data: { url: data.url || "https://velam.amiens.fr/fr/home" },
 
     // Urgence visuelle et comportementale
     requireInteraction: true, // reste affiché jusqu'au tap (Android)
@@ -36,7 +36,7 @@ self.addEventListener("notificationclick", (event) => {
   event.notification.close();
 
   // data.url est maintenant toujours une URL https:// valide (page /redirect).
-  const url = event.notification.data?.url || "https://velam-notifier.onrender.com";
+  const url = event.notification.data?.url || "https://velam.amiens.fr/fr/home";
 
   if (event.action === "dismiss") return; // fermer sans ouvrir
 
