@@ -1,8 +1,11 @@
 /* Service Worker VéloPulse — réception des push et clic sur notification. */
 
-// Gestionnaire fetch minimal requis par Chrome pour valider l'installabilité PWA.
-// Ne met rien en cache : toutes les requêtes passent directement au réseau.
-self.addEventListener("fetch", (_event) => {});
+// Chrome 111+ détecte les handlers "vides" (kEmptyFetchHandler) et les exclut du
+// critère d'installabilité PWA. Il faut appeler respondWith() pour compter.
+// Stratégie : pass-through réseau sans cache.
+self.addEventListener("fetch", (event) => {
+  event.respondWith(fetch(event.request));
+});
 
 self.addEventListener("push", (event) => {
   const data = event.data ? event.data.json() : {};

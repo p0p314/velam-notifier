@@ -36,7 +36,8 @@ app.use(helmet({
       defaultSrc:     ["'self'"],
       // Mapbox GL crée ses web workers depuis un blob → 'blob:' requis.
       scriptSrc:      ["'self'", "blob:"],
-      styleSrc:       ["'self'", "'unsafe-inline'"],
+      styleSrc:       ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
+      fontSrc:        ["'self'", "https://fonts.gstatic.com"],
       imgSrc:         ["'self'", "data:", "blob:"],
       connectSrc:     ["'self'", "https://api.mapbox.com", "https://events.mapbox.com", "https://*.tiles.mapbox.com"],
       manifestSrc:    ["'self'"],
