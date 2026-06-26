@@ -3,11 +3,14 @@
 self.addEventListener("push", (event) => {
   const data = event.data ? event.data.json() : {};
 
+  // Fallback same-origin : iOS ne peut pas ouvrir une URL cross-origin depuis le SW.
+  const fallbackUrl = self.location.origin + "/open?url=" + encodeURIComponent("https://velam.amiens.fr/fr/home");
+
   const options = {
     body: data.body || "",
     icon: "/icon-192.png",
     badge: "/badge-72.png",
-    data: { url: data.url || "https://velam.amiens.fr/fr/home" },
+    data: { url: data.url || fallbackUrl },
 
     // Urgence visuelle et comportementale
     requireInteraction: true, // reste affiché jusqu'au tap (Android)
@@ -33,7 +36,8 @@ self.addEventListener("push", (event) => {
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
 
-  const url = event.notification.data?.url || "https://velam.amiens.fr/fr/home";
+  const fallbackUrl = self.location.origin + "/open?url=" + encodeURIComponent("https://velam.amiens.fr/fr/home");
+  const url = event.notification.data?.url || fallbackUrl;
 
   if (event.action === "dismiss") return; // fermer sans ouvrir
 
@@ -41,8 +45,8 @@ self.addEventListener("notificationclick", (event) => {
     clients
       .matchAll({ type: "window", includeUncontrolled: true })
       .then((list) => {
-        // Réutiliser un onglet déjà ouvert sur velam.amiens.fr.
-        const existing = list.find((c) => c.url.includes("velam.amiens.fr"));
+        // Réutiliser une fenêtre PWA existante pour y déclencher la navigation.
+        const existing = list.find((c) => c.url.startsWith(self.location.origin));
         if (existing) {
           existing.navigate(url);
           return existing.focus();

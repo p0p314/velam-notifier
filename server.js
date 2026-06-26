@@ -411,6 +411,17 @@ app.get('/api/health', async (req, res) => {
   });
 });
 
+// ── Redirection notifications → app Vélam ────────────────────────────────────────
+// Le SW iOS ne peut ouvrir que des URLs same-origin ; cette route redirige (302)
+// vers velam.amiens.fr pour que iOS brise le contexte PWA et ouvre Safari/l'app.
+app.get('/open', (req, res) => {
+  const target = String(req.query.url || '');
+  if (target.startsWith('https://velam.amiens.fr/')) {
+    return res.redirect(302, target);
+  }
+  res.redirect(302, 'https://velam.amiens.fr/fr/home');
+});
+
 // ── Production : sert le build Vite (SPA) après toutes les routes /api ───────────
 
 if (process.env.NODE_ENV === 'production') {
