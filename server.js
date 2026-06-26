@@ -15,7 +15,7 @@ const { fetchStationInfo, fetchStationStatus } = require('./gbfs');
 const { initAuth, hashPassword, verifyPassword, signToken, requireAuth } = require('./auth');
 const { initPush, getVapidPublicKey, startPolling } = require('./push');
 const { syncRentalApps } = require('./rentalApps');
-const { getRentalApps } = require('./db');
+const { getRentalApps, getRentalAppsMap } = require('./db');
 
 const PORT = process.env.PORT ?? 3001;
 // Origine(s) du frontend autorisée(s) en dev (CORS). En prod, front et back
@@ -411,15 +411,64 @@ app.get('/api/health', async (req, res) => {
   });
 });
 
-// ── Redirection notifications → app Vélam ────────────────────────────────────────
-// Le SW iOS ne peut ouvrir que des URLs same-origin ; cette route redirige (302)
-// vers velam.amiens.fr pour que iOS brise le contexte PWA et ouvre Safari/l'app.
-app.get('/open', (req, res) => {
-  const target = String(req.query.url || '');
-  if (target.startsWith('https://velam.amiens.fr/')) {
-    return res.redirect(302, target);
-  }
-  res.redirect(302, 'https://velam.amiens.fr/fr/home');
+// ── Cible des notifications push → app Vélam ─────────────────────────────────────
+// Page HTML autonome (hors SPA React) : tente le deep link natif, puis le store,
+// puis le site web. Servie same-origin pour satisfaire iOS clients.openWindow().
+app.get('/open', async (req, res) => {
+  let apps = {};
+  try { apps = await getRentalAppsMap(); } catch (_) {}
+
+  const WEB = 'https://velam.amiens.fr/fr/home';
+  const safe = (v) => JSON.stringify(v ?? null).replace(/<\//g, '<\\/');
+  const deepLink    = apps.ios?.discovery_uri    || apps.android?.discovery_uri || null;
+  const storeIos    = apps.ios?.store_uri        || null;
+  const storeAndroid = apps.android?.store_uri   || null;
+
+  res.setHeader('Content-Type', 'text/html; charset=utf-8');
+  res.setHeader('Cache-Control', 'no-store');
+  res.send(`<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="robots" content="noindex">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Ouverture Vélam…</title>
+  <style>
+    body{font-family:sans-serif;display:flex;flex-direction:column;
+         align-items:center;justify-content:center;height:100vh;
+         margin:0;gap:16px;color:#374151}
+    a{color:#2563eb;font-size:14px}
+  </style>
+</head>
+<body>
+  <img src="/icon-192.png" alt="VéloPulse" width="64" height="64">
+  <p id="msg">Ouverture de l'application Vélam…</p>
+  <a href="https://velam.amiens.fr/fr/home">Ouvrir le site web</a>
+  <script>
+    var deep        = ${safe(deepLink)};
+    var storeIos    = ${safe(storeIos)};
+    var storeAndroid= ${safe(storeAndroid)};
+    var web         = ${safe(WEB)};
+    var isIOS     = /iphone|ipad|ipod/i.test(navigator.userAgent);
+    var isAndroid = /android/i.test(navigator.userAgent);
+    var store = isIOS ? storeIos : isAndroid ? storeAndroid : null;
+    if (!deep) {
+      window.location.replace(web);
+    } else {
+      window.location.href = deep;
+      setTimeout(function() {
+        if (store) {
+          document.getElementById('msg').textContent = 'Redirection vers le store…';
+          window.location.href = store;
+          setTimeout(function() { window.location.replace(web); }, 2000);
+        } else {
+          window.location.replace(web);
+        }
+      }, 2000);
+    }
+  </script>
+</body>
+</html>`);
 });
 
 // ── Production : sert le build Vite (SPA) après toutes les routes /api ───────────
