@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { api } from "../api";
 import { useFavorites } from "../hooks";
+import { pushSupported, notifPermission, registerPush } from "../push";
 import BottomSheet from "../components/BottomSheet";
 import Icon from "../components/Icon";
 
@@ -150,6 +151,7 @@ export default function Alerts() {
   const [error,  setError]  = useState(null);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [editingAlert, setEditingAlert] = useState(null);
+  const [notifPerm, setNotifPerm] = useState(() => notifPermission());
 
   const [stationId, setStationId] = useState("");
   const [bikeType,  setBikeType]  = useState("any");
@@ -157,6 +159,12 @@ export default function Alerts() {
   const [timeStart, setTimeStart] = useState("08:00");
   const [timeEnd,   setTimeEnd]   = useState("10:00");
   const [days,      setDays]      = useState([1, 2, 3, 4, 5, 6, 7]);
+
+  const enableNotifs = async () => {
+    const ok = await registerPush();
+    setNotifPerm(notifPermission());
+    if (!ok && Notification.permission === "denied") setNotifPerm("denied");
+  };
 
   const reload = useCallback(async () => {
     try { setAlerts((await api("/api/alerts")).alerts); }
@@ -261,6 +269,20 @@ export default function Alerts() {
             <h2 className="page-title">Mes alertes</h2>
             {alerts.length > 0 && <span className="page-count">{activeCount} active{activeCount !== 1 ? "s" : ""}</span>}
           </div>
+
+          {pushSupported() && notifPerm !== "granted" && notifPerm !== "unsupported" && (
+            <div className="notif-banner">
+              <Icon name="bell" size={15} />
+              {notifPerm === "denied" ? (
+                <span>Notifications bloquées — autorisez-les dans les paramètres du navigateur.</span>
+              ) : (
+                <>
+                  <span>Activez les notifications pour recevoir vos alertes.</span>
+                  <button className="notif-banner-btn" onClick={enableNotifs}>Activer</button>
+                </>
+              )}
+            </div>
+          )}
 
           {alerts.length === 0 ? (
             <div className="empty-state">

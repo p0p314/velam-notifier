@@ -12,17 +12,27 @@ export function pushSupported() {
   return "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
 }
 
+/** État courant de la permission, ou "unsupported" si l'API est absente. */
+export function notifPermission() {
+  if (!("Notification" in window)) return "unsupported";
+  return Notification.permission; // "default" | "granted" | "denied"
+}
+
 /**
- * Demande la permission, souscrit au PushManager et envoie la subscription
- * au backend. Best-effort : ne lève pas (log seulement) pour ne pas bloquer
- * le flux de login.
+ * Demande la permission si besoin, souscrit et envoie la subscription au backend.
+ * Ne jamais appeler automatiquement — uniquement sur action explicite de l'utilisateur.
+ * Ne déclenche AUCUN dialog si la permission est déjà "granted" ou "denied".
  */
 export async function registerPush() {
   if (!pushSupported()) return false;
+  if (Notification.permission === "denied") return false;
 
   try {
-    const permission = await Notification.requestPermission();
-    if (permission !== "granted") return false;
+    // Demander uniquement si l'état est "default" — jamais re-demander si déjà accordé
+    if (Notification.permission !== "granted") {
+      const perm = await Notification.requestPermission();
+      if (perm !== "granted") return false;
+    }
 
     const reg = await navigator.serviceWorker.ready;
     const { publicKey } = await api("/api/push/vapid-public-key", { auth: false });
@@ -41,5 +51,22 @@ export async function registerPush() {
   } catch (err) {
     console.warn("[push] activation échouée :", err.message);
     return false;
+  }
+}
+
+/**
+ * Re-synchronise silencieusement l'abonnement push avec le backend après un
+ * re-login. N'affiche AUCUN dialog et ne fait rien si la permission n'est pas
+ * "granted" ou si aucun abonnement n'existe dans le navigateur.
+ */
+export async function syncPushSubscription() {
+  if (!pushSupported() || Notification.permission !== "granted") return;
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    const sub = await reg.pushManager.getSubscription();
+    if (!sub) return; // abonnement absent → l'utilisateur devra réactiver depuis Alertes
+    await api("/api/push/subscribe", { method: "POST", body: { subscription: sub } });
+  } catch (err) {
+    console.warn("[push] sync échouée :", err.message);
   }
 }
