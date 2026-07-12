@@ -22,13 +22,43 @@ async function fetchStationInfo() {
 }
 
 /**
- * Retourne le statut temps réel de toutes les stations.
- * La liste brute est retournée telle quelle — la fusion avec les infos
- * se fait côté serveur.
+ * Retourne le statut temps réel de toutes les stations (fetch upstream brut).
+ * La liste est retournée telle quelle — la fusion avec les infos se fait côté serveur.
  */
 async function fetchStationStatus() {
   const data = await fetchJSON(STATUS_URL);
   return data.data.stations;
+}
+
+// ── Cache court du statut live ──────────────────────────────────────────────
+// La disponibilité change lentement (quelques vélos par minute), mais chaque
+// client rafraîchit toutes les 60 s. Sans cache, N clients = N fetchs GBFS/min.
+// TTL court + coalescence des requêtes concurrentes → au plus 1 fetch upstream
+// par fenêtre, quel que soit le nombre de clients (éco-conception, RGESN).
+const STATUS_TTL_MS = Number(process.env.STATUS_CACHE_TTL_MS) || 10_000;
+
+let statusCache    = { at: 0, data: null };
+let statusInflight = null;
+
+/**
+ * Statut live mutualisé : sert la valeur en cache si elle a moins de STATUS_TTL_MS,
+ * sinon lance (ou réutilise) un unique fetch partagé par tous les appelants
+ * simultanés. Propage l'erreur upstream (502 géré par l'appelant) sans polluer le cache.
+ */
+async function getStationStatus() {
+  if (statusCache.data && Date.now() - statusCache.at < STATUS_TTL_MS) {
+    return statusCache.data;
+  }
+  if (statusInflight) return statusInflight;
+
+  statusInflight = fetchStationStatus()
+    .then((data) => {
+      statusCache = { at: Date.now(), data };
+      return data;
+    })
+    .finally(() => { statusInflight = null; });
+
+  return statusInflight;
 }
 
 /**
@@ -41,4 +71,4 @@ async function fetchSystemInformation() {
   return data.data;
 }
 
-module.exports = { fetchStationInfo, fetchStationStatus, fetchSystemInformation };
+module.exports = { fetchStationInfo, fetchStationStatus, getStationStatus, fetchSystemInformation };

@@ -5,7 +5,7 @@ const {
   getSubscriptionsByUser, removeSubscriptionById,
   getRentalAppsMap,
 } = require('./db');
-const { fetchStationStatus } = require('./gbfs');
+const { getStationStatus } = require('./gbfs');
 
 const POLL_MS = 30_000;
 const OFFICIAL_URL = 'https://velam.amiens.fr';
@@ -47,6 +47,8 @@ function getVapidPublicKey() {
 
 // ── Comptage selon le type de vélo ─────────────────────────────────────────────
 
+// Rappel sémantique : `min_count` est un PLAFOND. Une alerte est « due » quand le
+// nombre de vélos du type visé est <= min_count (basse disponibilité), pas >=.
 function countForType(status, bikeType) {
   if (!status) return 0;
   if (bikeType === 'any') return status.num_bikes_available ?? 0;
@@ -185,7 +187,7 @@ async function checkAlerts() {
 
   let statusList;
   try {
-    statusList = await fetchStationStatus();
+    statusList = await getStationStatus();
   } catch (err) {
     console.error('[push] fetch GBFS status', err.message);
     return;
