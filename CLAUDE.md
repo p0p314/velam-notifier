@@ -1,105 +1,210 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+Guide de référence pour travailler sur ce dépôt (destiné à Claude Code comme à tout
+nouveau développeur). Le code et les chaînes d'interface sont **en français** — conserver
+cette convention (commentaires, libellés UI, messages d'erreur).
 
-## Project
+## Projet
 
-Proxy API + dashboard for the Vélam bike-share stations in Amiens. The backend is an Express
-proxy over the Cyclocity **GBFS v2** feed, plus JWT auth, per-user favorites, and time-windowed
-availability alerts delivered via Web Push. The frontend is a multi-page React/Vite app.
-UI strings and code comments are in French — keep that convention.
+**VéloPulse** — PWA de suivi des stations de vélos en libre-service **Vélam** (Amiens).
 
-## Commands
+- **Backend** : proxy Express (CommonJS) au-dessus du flux **GBFS v2** de Cyclocity, avec
+  auth JWT, favoris par utilisateur et **alertes de disponibilité** notifiées par **Web Push**.
+- **Frontend** : application **React / Vite** multi-pages (PWA installable), carte **Mapbox**,
+  thème clair/sombre, expérience mobile-first.
+- **Déploiement** : service web unique sur **Render** (front + back même domaine).
+  Base **PostgreSQL** (Supabase) en prod, **SQLite** en dev.
 
-Backend (repo root):
+> Le dépôt s'appelle encore `velam-notifier` (et l'URL Render est
+> `velam-notifier.onrender.com`), mais le produit est **VéloPulse** (`package.json` → `velopulse`).
+
+## Commandes
+
+Backend (racine) — Node **20.x** (fetch natif, pas de client HTTP tiers) :
 
 ```bash
-npm install            # requires Node >= 18 (uses native fetch, no http client dep)
-npm start              # node server.js — serves on PORT (default 3001)
-npm run dev            # node --watch server.js — auto-restart on file change
+npm install
+npm start          # node server.js — écoute sur PORT (défaut 3001)
+npm run dev        # node --watch server.js — redémarrage auto
+npm run build      # installe deps racine + frontend, puis build Vite → frontend/dist
 ```
 
-Frontend (`frontend/` — separate npm project, ESM/Vite, kept apart from the CommonJS backend):
+Frontend (`frontend/` — projet npm séparé, ESM/Vite, distinct du backend CommonJS) :
 
 ```bash
 cd frontend
 npm install
-npm run dev            # Vite dev server on http://localhost:5173
-npm run build          # production build → frontend/dist
+npm run dev        # Vite → http://localhost:5173
+npm run build      # build de prod → frontend/dist
+npm run preview    # prévisualise le build
 ```
 
-Run both together: backend on 3001, frontend on 5173. There are no tests or linter configured.
+En dev, lancer les deux : backend sur 3001, frontend sur 5173 (proxy via `VITE_API_URL`).
+En prod, un seul process : Express sert `frontend/dist` en statique **après** les routes `/api`
+(fallback SPA vers `index.html`). **Aucun test ni linter** n'est configuré à ce jour.
 
-## Architecture
+## Variables d'environnement
 
-Backend modules (CommonJS), clean separation:
+Backend (voir `render.yaml`) :
 
-- **gbfs.js** — fetches the two GBFS endpoints (`station_information.json` static,
-  `station_status.json` live). Filters out phantom station `761` (no name/capacity) at the
-  info-fetch boundary. Returns raw GBFS data; no merging here.
-- **db.js** — `better-sqlite3` store at `data/velam.db` (WAL mode, FK on, auto-created). Owns
-  every table and all SQL: `stations` (static info), `config` (JWT secret + VAPID keys),
-  `users`, `favorites`, `push_subscriptions`, `alerts`. All `CREATE TABLE IF NOT EXISTS` in
-  `initDb()` — no migration step. Lazy singleton connection.
-- **auth.js** — bcrypt hashing + JWT (`{ id, username }`, 7-day expiry). Signing secret comes
-  from `JWT_SECRET` env, else a random secret generated once and persisted in `config`.
-  `requireAuth` middleware reads `Authorization: Bearer`, sets `req.user`, 401s otherwise.
-- **push.js** — VAPID keys generated once into `config`; `web-push` sender; the 30s alert poll
-  (`startPolling` → `checkAlerts`). See the alert-polling invariant below.
-- **server.js** — wires it together, owns the merge logic (`mergeWithStatus`, `extractCount`)
-  and all route handlers + payload validation (`validateAlertPayload`, `HHMM` regex).
+- `PORT` — port d'écoute (défaut 3001).
+- `NODE_ENV=production` — active le service statique du build + le CORS de prod.
+- `DATABASE_URL` — **présence = mode PostgreSQL** ; absente = SQLite (`data/velam.db`).
+- `JWT_SECRET` — secret de signature JWT (sinon secret aléatoire persisté en `config`, dev).
+- `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` / `VAPID_EMAIL` — Web Push (sinon générés en dev).
+- `CRON_SECRET` — protège `POST /cron/sync-rental-apps` (obligatoire pour l'activer).
+- `APP_URL` — base `https://` des liens de notification (page `/redirect`).
+- `CORS_ORIGIN` — origines autorisées en dev (CSV) ; `FRONTEND_URL` en prod.
+- `ALERT_TZ` — fuseau d'évaluation des alertes (défaut `Europe/Paris`).
 
-### The key data-flow invariant
+Frontend (préfixe `VITE_`, injectées au build) :
 
-Static station info is **cached in SQLite**; live availability (bike counts, docks, renting
-status) is **always fetched fresh** from GBFS on every `GET /api/stations` and merged in at
-request time. The DB is never the source of truth for availability — only for the slow-changing
-station roster.
+- `VITE_API_URL` — base de l'API (vide en prod = même domaine ; `http://localhost:3001` en dev).
+- `VITE_MAPBOX_TOKEN` — token Mapbox (jamais commité ; via `.env.*.local` ou env Render).
 
-- `GET /api/stations` — auto-populates SQLite on first call if empty, then merges cached info
-  with a live status fetch. Bike counts come from `vehicle_types_available` (`mechanical` /
-  `electrical` type ids).
-- `POST /api/stations/refresh` — force re-fetch of the static roster (call when stations are
-  added/removed upstream).
-- `GET /api/health` — station count, uptime, node version.
+## Architecture backend
 
-Upstream/proxy errors return HTTP **502** with `{ ok: false, error }`. All responses carry an
-`ok` envelope; the `api()` client throws on `!res.ok || data.ok === false`. Protected routes
-(`/api/favorites`, `/api/alerts`, `/api/push/subscribe`) require a valid Bearer token; auth
-routes and `GET /api/push/vapid-public-key` are public.
+Modules CommonJS, séparation nette des responsabilités :
 
-### The alert-polling invariant
+- **gbfs.js** — accès au flux GBFS Cyclocity (fetch natif). Trois endpoints :
+  `station_information` (statique), `station_status` (live), `system_information` (rental_apps).
+  Filtre la station fantôme `761` (sans nom/capacité) au moment du fetch info. Renvoie les
+  données brutes ; **aucune fusion ici**.
+- **database/** — couche d'abstraction base de données (**seule** autorisée à parler à un driver) :
+  - `index.js` — choisit l'adaptateur : `createPostgresDb()` si `DATABASE_URL`, sinon
+    `createSQLiteDb()`. Exporte le singleton `dbc`.
+  - `sqlite.js` — adaptateur `better-sqlite3` (WAL, FK ON), enrobé dans une interface **async**.
+  - `postgres.js` — adaptateur `pg` (Pool). Traduit les placeholders `?` → `$1, $2…` et
+    ajoute `RETURNING id` sur les INSERT concernés (sauf tables sans colonne `id`).
+  - `migrations.js` — schéma des deux dialectes + migrations idempotentes (colonnes ajoutées
+    à la volée). Pas d'outil de migration externe.
+  - Interface : `dbc.query(sql, params) → { rows }`, `dbc.run(sql, params) → { id, changes }`,
+    `dbc.get(sql, params) → row|null`, `dbc.initialize()`.
+- **db.js** — **dépôt de données** (accès domaine). N'utilise **que** `dbc`, jamais un driver
+  directement. Regroupe le SQL de tous les domaines : `stations`, `config`, `users`,
+  `favorites`, `push_subscriptions`, `alerts`, `rental_apps`. Toutes les fonctions sont `async`.
+- **auth.js** — bcrypt + JWT (`{ id, username }`, expiration 7 j, HS256). Secret résolu une
+  fois au boot (`JWT_SECRET` env, sinon aléatoire persisté). `requireAuth` lit
+  `Authorization: Bearer`, pose `req.user`, sinon 401.
+- **push.js** — clés VAPID (env ou générées), envoi `web-push`, et la **boucle d'alerte**
+  (`startPolling` → cycle non concurrent toutes les 30 s). Voir l'invariant d'alerte plus bas.
+  Construit l'URL de notification via la page `/redirect` (deep link + stores).
+- **rentalApps.js** — synchronise les `rental_apps` (deep links officiels Vélam) depuis
+  `system_information`. Données quasi statiques → **sync quotidienne**, jamais par requête.
+- **server.js** — assemble le tout : middlewares de sécurité, **toutes** les routes,
+  validation des payloads (`validateAlertPayload`, regex `HHMM`), fusion
+  (`mergeWithStatus`, `extractCount`), et service du build SPA en prod. Boot séquentiel :
+  `initialize()` → `initAuth()` → `initPush()` → `startPolling()` → `listen`.
 
-`startPolling` runs `checkAlerts` every 30s but **does nothing unless ≥1 alert has `active=1`**
-(`countActiveAlerts()` guard) — and only fetches GBFS if at least one active alert's time window
-covers the current `HH:MM`. For each due alert it compares the live count (by `bike_type`:
-`mechanical` → mechanical, `ebike` → GBFS `electrical`, `any` → total) against `min_count`;
-on `count >= min_count` it pushes to **all** of that user's subscriptions. There is **no
-dedup** — a notification fires on every satisfying tick by design. Web-push 404/410 responses
-delete the dead subscription from `push_subscriptions`.
+### Invariant clé du flux de données
 
-### CORS
+Les **infos statiques** de station sont mises en **cache SQL** ; la **disponibilité live**
+(vélos, places, statut) est **toujours refetchée** depuis GBFS à chaque `GET /api/stations`
+et fusionnée à la volée. La base n'est **jamais** la source de vérité pour la disponibilité,
+seulement pour le référentiel lent des stations.
 
-Restricted to `http://localhost:5173` by default; override with the `CORS_ORIGIN` env var
-(comma-separated for multiple origins).
+- `GET /api/stations` — auto-peuple la base au premier appel si vide, puis fusionne l'info en
+  cache avec un fetch statut live. Le détail par type vient de `vehicle_types_available`
+  (`mechanical` / `electrical`).
+- `POST /api/stations/refresh` — force le rechargement du référentiel statique.
+- `GET /api/health` — nb de stations, uptime, version Node. `GET /health` — sonde anti-veille.
 
-### Frontend (`frontend/src/`)
+Erreurs upstream/proxy → **HTTP 502** `{ ok:false, error }`. Toutes les réponses portent une
+enveloppe `ok` ; le client `api()` lève sur `!res.ok || data.ok === false`. Routes protégées
+(`/api/favorites`, `/api/alerts`, `/api/push/subscribe`) : Bearer requis. Publiques : auth,
+`GET /api/stations`, `GET /api/rental-apps`, `GET /api/push/vapid-public-key`.
 
-Multi-page React app, `react-router-dom`. Entry `main.jsx` registers `/sw.js`, injects global
-CSS, mounts `<BrowserRouter><App/></BrowserRouter>`. `App.jsx` holds `<AuthProvider>` + routes;
-all app routes sit behind `<Protected>` (redirects to `/login` when `!isAuthenticated`).
+### Invariant de la boucle d'alerte
 
-- **auth.jsx** — `AuthContext` / `useAuth` (login/register/logout, `isAuthenticated`). Token +
-  user persisted in `localStorage` via **api.js** helpers.
-- **api.js** — single `api(path, {method, body, auth})` client; injects the Bearer token,
-  normalizes errors. Base URL from `VITE_API_URL` env, default `http://localhost:3001`.
-- **hooks.js** — `useStations` (60s polling) and `useFavorites` (list + optimistic toggle).
-- **push.js** + **public/sw.js** — native `PushManager`; `registerPush()` (called after login)
-  requests permission, subscribes, POSTs the subscription. SW handles `push` + `notificationclick`.
-- **pages/** — `Login`, `Stations` (dashboard + favorite ★ toggle + detail modal),
-  `Favorites`, `Alerts` (create from favorites / toggle active / delete).
-- **components/** — `StationCard`, `StationDetailModal`. **theme.js** holds the shared `C`
-  palette + `fmtTime`/`bikeColor` helpers (inline styling, no CSS framework).
+`startPolling` exécute un cycle toutes les 30 s, protégé par un verrou (`isRunning`) pour ne
+pas se chevaucher, et **ne fait rien** tant qu'aucune alerte n'est `active=1`
+(`countActiveAlerts`). Il ne fetch GBFS que si au moins une alerte active a sa **fenêtre
+horaire** (`time_start`–`time_end`) et son **jour** (`days`, 1=lundi…7=dimanche) qui couvrent
+l'instant courant. L'heure est évaluée dans **`ALERT_TZ`** (Europe/Paris), pas en UTC serveur.
 
-Note the bike-type naming seam: the UI/DB use `ebike` for electric, but GBFS calls it
-`electrical` — `push.js` (`countForType`) and `server.js` (`extractCount`) map between them.
+Sémantique du seuil : l'alerte se déclenche sur **basse disponibilité** —
+`count <= min_count` (par type : `mechanical`, `ebike`→GBFS `electrical`, `any`→total).
+Anti-spam par jour : notifie une fois quand le seuil est atteint (`last_notified_date`), re-notifie
+uniquement si le compte **change** (`last_notified_count`), et se réarme quand le compte
+repasse strictement au-dessus du seuil. Envoi à **toutes** les subscriptions de l'utilisateur ;
+les réponses 404/410 suppriment la subscription morte.
+
+> ⚠️ Dette de nommage : `min_count` désigne en réalité un **plafond** (« notifier si au plus N
+> vélos »). Le nom est trompeur — à considérer lors d'une refonte.
+
+### rental_apps & redirection push
+
+Le flux `system_information` expose des `rental_apps` (deep link `discovery_uri` + `store_uri`
+par plateforme). Ils sont synchronisés **une fois par jour** par **GitHub Actions**
+(`.github/workflows/sync-rental-apps.yml`, 02:00 UTC) qui appelle `POST /cron/sync-rental-apps`
+(garde `CRON_SECRET`, comparaison à **temps constant**). Aucun cron côté serveur.
+
+Les notifications pointent toujours vers une URL `https://` (`/redirect`) car le Service Worker
+iOS refuse les schemes custom (`velam://`). La page `/redirect` (publique, `noindex`) tente le
+deep link, puis le store de la plateforme, puis le web.
+
+### Sécurité (backend)
+
+`helmet` avec CSP adaptée au SPA (JS `'self'`+`blob:` pour les workers Mapbox, styles inline
+React, `connectSrc` Mapbox). CORS en whitelist. Corps JSON borné à **16 kb**. `express-rate-limit`
+sur `login` (10/15 min) et `register` (5/h). `trust proxy` pour l'IP réelle derrière Render.
+
+## Architecture frontend (`frontend/src/`)
+
+React + `react-router-dom`. `main.jsx` enregistre `/sw.js`, injecte le CSS global, monte
+`<BrowserRouter><App/></BrowserRouter>`. `App.jsx` empile les providers
+(`ThemeProvider` → `AuthProvider` → `PwaInstallProvider`) et les routes ; les routes applicatives
+sont derrière `<Protected>` + `<Layout>` (header mobile / navbar desktop / bottom-nav). La **carte
+est lazy-loadée** (`React.lazy`) pour garder mapbox-gl hors du bundle principal. Landing
+différenciée : mobile → `/favoris`, desktop → `/stations`.
+
+- **api.js** — client `api(path, {method, body, auth})` unique : injecte le Bearer, normalise
+  les erreurs, gère token/user en `localStorage`. Base = `VITE_API_URL`.
+- **auth.jsx** — `AuthContext` / `useAuth` (login/register/logout, `isAuthenticated`).
+- **useTheme.jsx** — thème clair/sombre via `data-theme` sur `<html>`, persisté.
+- **hooks.js** — `useStations` (poll 60 s), `useFavorites` (liste + toggle optimiste),
+  `useGeolocation`, `useIsMobile`, helpers `distanceKm` / `fmtDistance` (tri par proximité).
+- **push.js** + **public/sw.js** — `PushManager` natif ; `registerPush()` (après login) demande
+  la permission, souscrit, POST la subscription. Le SW gère `push` + `notificationclick`.
+- **usePwaInstallPrompt.js** + **components/PwaInstall*** — modal d'installation **réservée au
+  mobile** (jamais desktop), réapparaît le lendemain si ignorée.
+- **pages/** — `Login`, `Stations` (recherche/tri/filtre + détail), `Favorites` (swipe-to-delete),
+  `MapPage` (carte + filtres), `Alerts` (CRUD depuis les favoris), `Redirect` (cible push).
+- **components/** — `StationCard` (desktop), `StationListItem` (mobile), `StationDetailSheet`,
+  `BottomSheet`, `BottomNav` / `Navbar`, `Icon` (SVG inline style Lucide), `Logo`,
+  `map/StationMap` (markers diffés, pas de recréation), `map/MapFilters`.
+- **lib/mapConfig.js** — config Mapbox + logique de disponibilité (couleur des markers).
+- **theme.js** — alias palette (variables CSS), `fmtTime`, `bikeColor`. Styles inline + `styles.css`
+  (variables CSS, pas de framework CSS).
+
+### Seam de nommage des types de vélo
+
+L'UI et la DB utilisent **`ebike`** (électrique) ; GBFS l'appelle **`electrical`**. Le mapping
+se fait dans `push.js` (`countForType`) et `server.js` (`extractCount`). Bien conserver ce seam.
+
+## Base de données (schéma)
+
+Tables (créées/migrées par `database/migrations.js`, dialecte selon `DATABASE_URL`) :
+`stations` (référentiel statique), `config` (clé/valeur : secret JWT, clés VAPID),
+`users`, `favorites` (unique `user_id+station_id`), `push_subscriptions`, `alerts`
+(fenêtre horaire + `days` + suivi de notification), `rental_apps` (deep links par plateforme).
+
+## Conventions & bonnes pratiques
+
+- **Français** partout (code, UI, commentaires, logs).
+- **Backend** : ne jamais appeler un driver DB hors de `database/` — passer par `db.js` / `dbc`.
+  Toute réponse porte l'enveloppe `{ ok, … }`. Erreurs upstream → 502, erreurs serveur → 500,
+  validation → 400. Routes protégées via `requireAuth`.
+- **Frontend** : tout appel réseau passe par `api()`. Aucune couleur en dur — utiliser les
+  variables CSS / la palette `C`. Détection mobile centralisée dans `hooks.js`.
+- **Éco-conception / performance** : la disponibilité est volatile mais coûteuse à fetcher —
+  minimiser les appels GBFS upstream (mutualiser, mettre en cache court) ; préférer les
+  markers diffés et le lazy-loading ; borner les tailles de payload.
+- **Sécurité** : secrets uniquement via env/`config`, jamais commités ; garder le CSP à jour
+  si de nouvelles origines externes sont ajoutées.
+
+## Déploiement
+
+`render.yaml` : service web `velopulse`, `buildCommand: npm run build`, `startCommand: npm start`.
+Secrets (`DATABASE_URL`, `VAPID_*`, `JWT_SECRET`, `APP_URL`, `CRON_SECRET`) en variables d'env
+Render. Après un merge sur `main`, déclencher un déploiement Render (voir mémoire projet).
