@@ -1,18 +1,12 @@
 import Icon from "./Icon";
 import { fmtTime } from "../theme";
 import { fmtDistance } from "../hooks";
-
-function statusOf(s) {
-  if (s.is_renting === false) return { cls: "closed", label: "Hors service" };
-  const total = (s.electrical ?? 0) + (s.mechanical ?? 0);
-  if (total <= 2) return { cls: "warn", label: "Faible" };
-  return { cls: "open", label: "Ouverte" };
-}
+import { stationStatus, LOW_BIKES } from "../lib/station";
 
 function MiniStat({ kind, label, value, max, offline }) {
   const pct = max > 0 ? Math.min(100, (value / max) * 100) : 0;
   const isElec = kind === "elec";
-  const low = !offline && value <= 2;
+  const low = !offline && value <= LOW_BIKES;
   return (
     <div className="mini-stat">
       <div className={"mini-stat-label " + kind}>
@@ -32,7 +26,7 @@ export default function StationCard({ s, onClick, isFav, onToggleFav, dist }) {
   const docks   = s.docks_available ?? 0;
   const offline = s.is_renting === false;
   const t       = fmtTime(s.last_reported);
-  const st      = statusOf(s);
+  const st      = stationStatus(s);
   const distLabel = fmtDistance(dist);
 
   return (

@@ -1,19 +1,11 @@
 import Icon from "./Icon";
 import { fmtDistance } from "../hooks";
-
-// Statut : Hors service (fermé), Faible (peu de vélos), Ouverte.
-function statusOf(s) {
-  if (s.is_renting === false) return { cls: "closed", label: "Hors service" };
-  const total = (s.electrical ?? 0) + (s.mechanical ?? 0);
-  if (total <= 2) return { cls: "warn", label: "Faible" };
-  return { cls: "open", label: "Ouverte" };
-}
+import { stationStatus, bikeCounts, LOW_BIKES } from "../lib/station";
 
 export default function StationListItem({ s, onClick, dist }) {
   const offline = s.is_renting === false;
-  const st = statusOf(s);
-  const meca   = s.mechanical ?? 0;
-  const elec   = s.electrical ?? 0;
+  const st = stationStatus(s);
+  const { elec, meca } = bikeCounts(s);
   const places = s.docks_available ?? 0;
   const distLabel = fmtDistance(dist);
 
@@ -35,18 +27,12 @@ export default function StationListItem({ s, onClick, dist }) {
         {/* Compteurs mobile */}
         {!offline && (
           <div className="station-item-counts">
-            <span className={"ci elec" + (elec <= 2 ? " low" : "")}><Icon name="bolt" /> <b>{elec}</b> élec</span>
-            <span className={"ci meca" + (meca <= 2 ? " low" : "")}><Icon name="bike" /> <b>{meca}</b> méca</span>
+            <span className={"ci elec" + (elec <= LOW_BIKES ? " low" : "")}><Icon name="bolt" /> <b>{elec}</b> élec</span>
+            <span className={"ci meca" + (meca <= LOW_BIKES ? " low" : "")}><Icon name="bike" /> <b>{meca}</b> méca</span>
             <span className="ci places"><Icon name="parking" /> <b>{places}</b> places</span>
           </div>
         )}
 
-        {/* Compteurs desktop (cards compactes, ex. Favoris) */}
-        {/* <div className="card-counts">
-          <span className={"count-item elec" + (elec <= 2 ? " low" : "")}><Icon name="bolt" size={16} /><span className="count-value">{offline ? "—" : elec}</span><span className="count-label">élec</span></span>
-          <span className={"count-item meca" + (meca <= 2 ? " low" : "")}><Icon name="bike" size={16} /><span className="count-value">{offline ? "—" : meca}</span><span className="count-label">méca</span></span>
-          <span className="count-item places"><Icon name="parking" size={16} /><span className="count-value">{offline ? "—" : places}</span><span className="count-label">places</span></span>
-        </div> */}
       </div>
 
       {Pill}
