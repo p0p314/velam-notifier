@@ -5,7 +5,7 @@
 // officiel vers l'app Vélam, avec repli sur le store puis le web.
 
 const { fetchSystemInformation } = require('./gbfs');
-const { upsertRentalApp, getRentalAppsMap } = require('./db');
+const { upsertRentalApp } = require('./db');
 
 /**
  * Transforme `system_information.data.rental_apps` (objet indexé par plateforme)
@@ -45,4 +45,4 @@ async function syncRentalApps() {
   return apps;
 }
 
-module.exports = { syncRentalApps, normalizeRentalApps, getRentalAppsMap };
+module.exports = { syncRentalApps, normalizeRentalApps };

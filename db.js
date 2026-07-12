@@ -18,26 +18,35 @@ async function getStations() {
   return rows;
 }
 
-/** Upsert d'une liste de stations (timestamp calculé côté JS, portable). */
+/**
+ * Upsert du référentiel stations en un seul INSERT multi-lignes (1 aller-retour DB,
+ * atomique). Déduplique par station_id (dernier gagne) pour éviter un conflit
+ * dupliqué dans la même instruction. Timestamp calculé côté JS (portable).
+ */
 async function saveStations(stations) {
+  const unique = [...new Map(stations.map((s) => [s.station_id, s])).values()];
+  if (unique.length === 0) return;
+
   const now = Math.floor(Date.now() / 1000);
-  const sql = `
-    INSERT INTO stations (station_id, name, address, lat, lon, capacity, fetched_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
-    ON CONFLICT(station_id) DO UPDATE SET
-      name       = excluded.name,
-      address    = excluded.address,
-      lat        = excluded.lat,
-      lon        = excluded.lon,
-      capacity   = excluded.capacity,
-      fetched_at = excluded.fetched_at
-  `;
-  for (const s of stations) {
-    await dbc.run(sql, [
-      s.station_id, s.name, s.address?.trim() ?? '', s.lat, s.lon, s.capacity ?? 0, now,
-    ]);
-  }
-  console.log(`[db] ${stations.length} stations enregistrées`);
+  const row = '(?, ?, ?, ?, ?, ?, ?)';
+  const values = unique.map(() => row).join(', ');
+  const params = unique.flatMap((s) => [
+    s.station_id, s.name, s.address?.trim() ?? '', s.lat, s.lon, s.capacity ?? 0, now,
+  ]);
+
+  await dbc.run(
+    `INSERT INTO stations (station_id, name, address, lat, lon, capacity, fetched_at)
+     VALUES ${values}
+     ON CONFLICT(station_id) DO UPDATE SET
+       name       = excluded.name,
+       address    = excluded.address,
+       lat        = excluded.lat,
+       lon        = excluded.lon,
+       capacity   = excluded.capacity,
+       fetched_at = excluded.fetched_at`,
+    params
+  );
+  console.log(`[db] ${unique.length} stations enregistrées`);
 }
 
 // ── Rental apps (deep links officiels, sync GBFS quotidienne) ────────────────

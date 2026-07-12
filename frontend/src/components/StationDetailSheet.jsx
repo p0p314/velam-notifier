@@ -1,13 +1,7 @@
 import BottomSheet from "./BottomSheet";
 import Icon from "./Icon";
 import { fmtTime } from "../theme";
-
-function statusOf(s) {
-  if (s.is_renting === false) return { cls: "closed", label: "Hors service" };
-  const total = (s.electrical ?? 0) + (s.mechanical ?? 0);
-  if (total <= 2) return { cls: "warn", label: "Faible disponibilité" };
-  return { cls: "open", label: "Ouverte" };
-}
+import { stationStatus } from "../lib/station";
 
 function Row({ icon, kind, label, value }) {
   return (
@@ -24,14 +18,14 @@ export default function StationDetailSheet({ station, open, onClose, isFav, onTo
 
   const offline = s.is_renting === false;
   const t = fmtTime(s.last_reported);
-  const st = statusOf(s);
+  const st = stationStatus(s);
 
   return (
     <BottomSheet open={open} onClose={onClose} heightVh={70} labelledBy="sheet-station-title">
       <div id="sheet-station-title" className="detail-title">{s.name}</div>
       {s.address?.trim() && <div className="detail-addr">{s.address.trim()}</div>}
 
-      <span className={"detail-badge " + st.cls}><span className="dot" />{st.label}</span>
+      <span className={"detail-badge " + st.cls}><span className="dot" />{st.labelLong}</span>
 
       <Row icon="bolt" kind="elec" label="Vélos électriques" value={offline ? "—" : (s.electrical ?? 0)} />
       <Row icon="bike" kind="meca" label="Vélos mécaniques" value={offline ? "—" : (s.mechanical ?? 0)} />
