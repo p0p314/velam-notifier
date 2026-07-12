@@ -18,7 +18,7 @@ export default function Redirect() {
   const deep    = params.get("deep");
   const ios     = params.get("ios");
   const android = params.get("android");
-  const web     = params.get("web") || "https://velam.amiens.fr";
+  const web     = params.get("web") || "https://velam.amiens.fr/fr/home";
 
   // Détection de la plateforme pour choisir le bon store.
   const isIOS     = /iphone|ipad|ipod/i.test(navigator.userAgent);

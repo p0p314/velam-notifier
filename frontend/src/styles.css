@@ -461,12 +461,19 @@ select option { background: var(--surface); color: var(--text); }
 .alertes-list { display: flex; flex-direction: column; gap: 10px; }
 .alert-form-panel { display: none; }
 
+.form-submit-row { display: flex; flex-direction: column; gap: 8px; }
 .submit-btn {
   width: 100%; min-height: 48px; border-radius: var(--r-sm);
   background: var(--accent); border: none; color: #fff;
   font-size: 14px; font-weight: 600; cursor: pointer; transition: background .15s;
 }
 .submit-btn:hover { background: var(--accent-hover); }
+.cancel-btn {
+  width: 100%; min-height: 48px; border-radius: var(--r-sm);
+  background: var(--inset); border: 1px solid var(--border-strong); color: var(--text-2);
+  font-size: 14px; font-weight: 600; cursor: pointer; transition: background .15s;
+}
+.cancel-btn:hover { background: var(--border); }
 
 /* Carte alerte */
 .alert-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-md); padding: 14px; box-shadow: var(--shadow-card); }
@@ -475,6 +482,8 @@ select option { background: var(--surface); color: var(--text); }
 .alert-card-name { font-size: 14px; font-weight: 600; color: var(--text); }
 .alert-card-sub { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-3); margin-top: 4px; font-family: var(--font-mono); }
 .alert-card-sub .ic { color: var(--text-3); }
+.alert-edit { width: 34px; height: 34px; display: inline-flex; align-items: center; justify-content: center; background: none; border: none; color: var(--text-3); cursor: pointer; border-radius: var(--r-sm); }
+.alert-edit:hover { background: var(--inset); color: var(--accent); }
 .alert-del { width: 34px; height: 34px; display: inline-flex; align-items: center; justify-content: center; background: none; border: none; color: var(--danger); cursor: pointer; border-radius: var(--r-sm); }
 .alert-del:hover { background: var(--inset); }
 
@@ -660,8 +669,8 @@ select option { background: var(--surface); color: var(--text); }
     background: var(--surface); border: 1px solid var(--border);
     border-radius: var(--r-lg); padding: 20px; box-shadow: var(--shadow-card);
   }
-  .form-submit-row { display: flex; justify-content: flex-end; }
-  .submit-btn { width: auto; min-height: 44px; padding: 0 20px; }
+  .form-submit-row { flex-direction: row; justify-content: flex-end; gap: 8px; }
+  .submit-btn, .cancel-btn { width: auto; min-height: 44px; padding: 0 20px; }
 }
 
 @media (min-width: 1280px) {

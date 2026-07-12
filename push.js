@@ -8,7 +8,7 @@ const {
 const { getStationStatus } = require('./gbfs');
 
 const POLL_MS = 30_000;
-const OFFICIAL_URL = 'https://velam.amiens.fr';
+const OFFICIAL_URL = 'https://velam.amiens.fr/fr/home';
 
 let _vapidPublic = null; // mis en cache au démarrage (accès sync depuis la route)
 
@@ -114,30 +114,12 @@ async function sendToUser(userId, payload) {
 
 // ── Construction du payload (adapté si count = 0) ───────────────────────────────
 
-/**
- * Construit l'URL https:// de la page de redirection interne (/redirect).
- *
- * iOS interdit l'ouverture d'un scheme custom (velam://) depuis un Service
- * Worker via clients.openWindow() — seules les URLs https:// sont acceptées.
- * On passe donc toujours par une page same-origin qui, côté navigateur, peut
- * ouvrir l'app native via window.location.href, avec repli store puis web.
- * Le deep link et les stores sont encodés en query params.
- */
-function buildRedirectUrl(rentalApps) {
-  const params = new URLSearchParams();
-
-  const deepLink     = rentalApps?.ios?.discovery_uri || rentalApps?.android?.discovery_uri || null;
-  const storeIos     = rentalApps?.ios?.store_uri     || null;
-  const storeAndroid = rentalApps?.android?.store_uri || null;
-
-  if (deepLink)     params.set('deep',    deepLink);
-  if (storeIos)     params.set('ios',     storeIos);
-  if (storeAndroid) params.set('android', storeAndroid);
-  params.set('web', OFFICIAL_URL);
-
-  // URL absolue vers la page de redirection de notre app (même domaine).
-  const base = process.env.APP_URL || 'https://velam-notifier.onrender.com';
-  return `${base}/redirect?${params.toString()}`;
+// Le SW iOS ne peut pas ouvrir directement une URL cross-origin via clients.openWindow().
+// On passe par /open (même domaine) qui répond avec un 302 vers velam.amiens.fr ;
+// iOS détecte la navigation cross-origin et ouvre Safari (+ universal link → app native).
+function buildRedirectUrl(_rentalApps) {
+  const base = (process.env.APP_URL || 'https://velam-notifier.onrender.com').replace(/\/$/, '');
+  return `${base}/open?url=${encodeURIComponent(OFFICIAL_URL)}`;
 }
 
 function buildPayload(alerte, count, rentalApps) {

@@ -1,8 +1,10 @@
 // Routes rental_apps : endpoint cron (sync quotidienne GBFS) + lecture publique.
 const express = require('express');
 const crypto  = require('crypto');
-const { getRentalApps } = require('../db');
+const { getRentalApps, getRentalAppsMap } = require('../db');
 const { syncRentalApps } = require('../rentalApps');
+
+const OFFICIAL_WEB = 'https://velam.amiens.fr/fr/home';
 
 const router = express.Router();
 
@@ -49,6 +51,67 @@ router.get('/api/rental-apps', async (req, res) => {
     console.error('[GET /api/rental-apps]', err.message);
     res.status(500).json({ ok: false, error: 'Erreur serveur' });
   }
+});
+
+/**
+ * GET /open — cible des notifications push vers l'app Vélam.
+ * Page HTML autonome (hors SPA React) servie same-origin pour satisfaire
+ * iOS clients.openWindow() : tente le deep link natif, puis le store, puis le web.
+ */
+router.get('/open', async (req, res) => {
+  let apps = {};
+  try { apps = await getRentalAppsMap(); } catch (_) { /* dégrade vers web seul */ }
+
+  const safe = (v) => JSON.stringify(v ?? null).replace(/<\//g, '<\\/');
+  const deepLink     = apps.ios?.discovery_uri || apps.android?.discovery_uri || null;
+  const storeIos     = apps.ios?.store_uri     || null;
+  const storeAndroid = apps.android?.store_uri || null;
+
+  res.setHeader('Content-Type', 'text/html; charset=utf-8');
+  res.setHeader('Cache-Control', 'no-store');
+  res.send(`<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="robots" content="noindex">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Ouverture Vélam…</title>
+  <style>
+    body{font-family:sans-serif;display:flex;flex-direction:column;
+         align-items:center;justify-content:center;height:100vh;
+         margin:0;gap:16px;color:#374151}
+    a{color:#2563eb;font-size:14px}
+  </style>
+</head>
+<body>
+  <img src="/icon-192.png" alt="VéloPulse" width="64" height="64">
+  <p id="msg">Ouverture de l'application Vélam…</p>
+  <a href="${OFFICIAL_WEB}">Ouvrir le site web</a>
+  <script>
+    var deep        = ${safe(deepLink)};
+    var storeIos    = ${safe(storeIos)};
+    var storeAndroid= ${safe(storeAndroid)};
+    var web         = ${safe(OFFICIAL_WEB)};
+    var isIOS     = /iphone|ipad|ipod/i.test(navigator.userAgent);
+    var isAndroid = /android/i.test(navigator.userAgent);
+    var store = isIOS ? storeIos : isAndroid ? storeAndroid : null;
+    if (!deep) {
+      window.location.replace(web);
+    } else {
+      window.location.href = deep;
+      setTimeout(function() {
+        if (store) {
+          document.getElementById('msg').textContent = 'Redirection vers le store…';
+          window.location.href = store;
+          setTimeout(function() { window.location.replace(web); }, 2000);
+        } else {
+          window.location.replace(web);
+        }
+      }, 2000);
+    }
+  </script>
+</body>
+</html>`);
 });
 
 module.exports = router;

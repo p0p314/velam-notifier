@@ -20,6 +20,7 @@ const PATHS = {
   moon: <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />,
   check: <polyline points="20 6 9 17 4 12" />,
   share: <><path d="M12 2v13" /><path d="m8 6 4-4 4 4" /><path d="M20 12v7a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-7" /></>,
+  pencil: <><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" /><path d="m15 5 4 4" /></>,
 };
 
 export default function Icon({ name, size = 20, strokeWidth, className = "", style, ...rest }) {
