@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../auth";
-import { registerPush } from "../push";
+import { syncPushSubscription } from "../push";
 import Logo from "../components/Logo";
 
 export default function Login() {
@@ -21,7 +21,7 @@ export default function Login() {
     try {
       if (mode === "login") await login(username.trim(), password);
       else                  await register(username.trim(), password);
-      registerPush();
+      syncPushSubscription(); // silencieux : re-sync si permission déjà accordée, sinon no-op
       navigate("/", { replace: true });
     } catch (err) {
       setError(err.message);

@@ -475,6 +475,24 @@ select option { background: var(--surface); color: var(--text); }
 }
 .cancel-btn:hover { background: var(--border); }
 
+/* Bannière d'activation des notifications */
+.notif-banner {
+  display: flex; align-items: center; gap: 10px;
+  padding: 11px 14px; margin-bottom: 16px;
+  background: color-mix(in srgb, var(--warn) 10%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--warn) 22%, var(--border));
+  border-radius: var(--r-md);
+  font-size: 13px; color: var(--warn);
+}
+.notif-banner .ic { flex-shrink: 0; }
+.notif-banner span { flex: 1; line-height: 1.4; }
+.notif-banner-btn {
+  flex-shrink: 0; padding: 5px 12px;
+  border-radius: var(--r-sm); background: var(--warn); border: none;
+  color: #fff; font-size: 12px; font-weight: 600; cursor: pointer;
+}
+.notif-banner-btn:hover { opacity: .88; }
+
 /* Carte alerte */
 .alert-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-md); padding: 14px; box-shadow: var(--shadow-card); }
 .alert-card.off { opacity: .6; }
