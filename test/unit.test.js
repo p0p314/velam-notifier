@@ -5,7 +5,8 @@ const assert = require('node:assert/strict');
 
 const { validateAlertPayload } = require('../routes/alerts');
 const { mergeWithStatus } = require('../routes/stations');
-const { countForType, docksOf, evaluateAlert, buildMessage, buildPayload, inWindow, nowInTz } = require('../push');
+const { countForType, docksOf, evaluateAlert, buildMessage, buildPayload, findFallback, fallbacksFor, inWindow, nowInTz } = require('../push');
+const { distanceKm, fmtDistance } = require('../geo');
 const { addDays } = require('../time');
 const { normalizeRentalApps } = require('../rentalApps');
 const { toPg } = require('../database/postgres');
@@ -323,5 +324,65 @@ describe('normalizeRentalApps', () => {
 describe('toPg (placeholders Postgres)', () => {
   test('numérote les ?', () => {
     assert.equal(toPg('SELECT * FROM t WHERE a = ? AND b = ?'), 'SELECT * FROM t WHERE a = $1 AND b = $2');
+  });
+});
+
+describe('stations de repli', () => {
+  // Gare (0 m), Proche (~330 m), Loin (~1,4 km)
+  const stations = [
+    { station_id: '1', name: 'Gare',   lat: 49.8900, lon: 2.3000 },
+    { station_id: '2', name: 'Proche', lat: 49.8930, lon: 2.3000 },
+    { station_id: '3', name: 'Moyen',  lat: 49.8950, lon: 2.3000 },
+    { station_id: '4', name: 'Loin',   lat: 49.9030, lon: 2.3000 },
+  ];
+  const st = (bikes, docks) => ({ num_bikes_available: bikes, num_docks_available: docks });
+  const bikes = (s) => countForType(s, 'any');
+
+  test('la plus proche qui ne pose pas le même problème', () => {
+    const map = { 1: st(0, 9), 2: st(1, 9), 3: st(5, 9), 4: st(9, 9) };
+    const f = findFallback('1', stations, map, bikes, 1); // Proche n'a qu'1 vélo (≤ seuil)
+    assert.equal(f.name, 'Moyen');
+    assert.equal(f.count, 5);
+    assert.ok(f.km > 0.5 && f.km < 0.6);
+  });
+
+  test('au-delà de 1 km → aucune', () => {
+    const map = { 1: st(0, 9), 2: st(0, 9), 3: st(0, 9), 4: st(9, 9) };
+    assert.equal(findFallback('1', stations, map, bikes, 1), null);
+  });
+
+  test('station inconnue du référentiel → aucune', () => {
+    assert.equal(findFallback('99', stations, {}, bikes, 1), null);
+  });
+
+  test('alerte trajet : repli pour chaque bout en problème', () => {
+    const alert = { station_id: '1', bike_type: 'any', target: 'bikes', comparison: 'at_most', threshold: 0,
+      arrival_station_id: '3', arrival_threshold: 0 };
+    const map = { 1: st(0, 9), 2: st(4, 6), 3: st(9, 0), 4: st(9, 9) };
+    const f = fallbacksFor(alert, { departureHit: true, arrivalHit: true }, stations, map);
+    assert.equal(f.departure.name, 'Proche');
+    assert.equal(f.arrival.name, 'Proche'); // plus proche de Moyen avec des places
+  });
+
+  test('« au moins N » → pas de repli', () => {
+    const alert = { station_id: '1', bike_type: 'any', target: 'bikes', comparison: 'at_least', threshold: 3 };
+    assert.deepEqual(fallbacksFor(alert, { departureHit: true }, stations, { 2: st(9, 9) }), {});
+  });
+
+  test('le repli est ajouté au corps de la notification', () => {
+    const alert = { station_id: '1', station_name: 'Gare', bike_type: 'any', target: 'bikes', comparison: 'at_most', threshold: 1 };
+    const p = buildPayload(alert, { count: 0 }, { departure: { name: 'Proche', km: 0.334, count: 4 } });
+    assert.equal(p.body, 'Plus aucun vélo disponible\nRepli : Proche (330 m) : 4 vélos');
+    const docks = buildPayload({ ...alert, target: 'docks' }, { count: 0 }, { departure: { name: 'Proche', km: 1, count: 1 } });
+    assert.match(docks.body, /Repli : Proche \(1,0 km\) : 1 place libre$/);
+  });
+});
+
+describe('geo', () => {
+  test('distanceKm / fmtDistance', () => {
+    assert.equal(distanceKm({ lat: 1, lon: 1 }, { lat: null, lon: 1 }), Infinity);
+    assert.equal(fmtDistance(0.004), '10 m');
+    assert.equal(fmtDistance(0.347), '350 m');
+    assert.equal(fmtDistance(1.26), '1,3 km');
   });
 });

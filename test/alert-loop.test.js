@@ -4,7 +4,7 @@ const { test, beforeEach, describe } = require('node:test');
 const assert = require('node:assert/strict');
 const webpush = require('web-push');
 const { checkAlerts } = require('../push');
-const { createUser, createAlert, updateAlert, addSubscription, setAlertsPause } = require('../db');
+const { createUser, createAlert, updateAlert, addSubscription, setAlertsPause, saveStations } = require('../db');
 
 // Mercredi 24/09/2025 à 08:30 heure de Paris (06:30 UTC)
 const WED_0830 = new Date('2025-09-24T06:30:00Z');
@@ -314,5 +314,25 @@ describe('modification d\'une alerte', () => {
     await setBikes(1);
     await checkAlerts(WED_0831);
     assert.equal(sent.length, 2);
+  });
+});
+
+describe('station de repli dans la notification', () => {
+  test('propose la station voisine qui a des vélos', async () => {
+    await saveStations([
+      { station_id: '1', name: 'Gare', lat: 49.8900, lon: 2.3000, capacity: 20 },
+      { station_id: '2', name: 'Cathédrale', lat: 49.8930, lon: 2.3000, capacity: 20 },
+    ]);
+    await createAlert(userId, alertBase);
+    await setStatus({ 1: { bikes: 0 }, 2: { bikes: 6 } });
+    await checkAlerts(WED_0830);
+    assert.equal(sent[0].payload.body, 'Plus aucun vélo disponible\nRepli : Cathédrale (330 m) : 6 vélos');
+  });
+
+  test('sans référentiel en base : notification sans repli', async () => {
+    await createAlert(userId, alertBase);
+    await setStatus({ 1: { bikes: 0 }, 2: { bikes: 6 } });
+    await checkAlerts(WED_0830);
+    assert.equal(sent[0].payload.body, 'Plus aucun vélo disponible');
   });
 });

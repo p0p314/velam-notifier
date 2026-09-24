@@ -2,10 +2,11 @@ const webpush = require('web-push');
 const {
   getConfig, setConfig,
   countActiveAlerts, getActiveAlerts, deleteExpiredAlerts, markAlertNotified, setAlertNotifiedKey,
-  getSubscriptionsByUser, removeSubscriptionById,
+  getSubscriptionsByUser, removeSubscriptionById, getStations,
 } = require('./db');
 const { getStationStatus } = require('./gbfs');
 const { nowInTz, inWindow } = require('./time');
+const { distanceKm, fmtDistance } = require('./geo');
 
 const POLL_MS = 30_000;
 const OFFICIAL_URL = 'https://velam.amiens.fr/fr/home';
@@ -89,6 +90,51 @@ function evaluateAlert(alert, statusMap) {
     key: `${count}|${arrivalDocks}`,
     count, arrivalDocks, departureHit, arrivalHit,
   };
+}
+
+// ── Station de repli ───────────────────────────────────────────────────────────
+
+// Au-delà, marcher jusqu'à la station de repli n'a plus d'intérêt.
+const FALLBACK_MAX_KM = 1;
+
+/**
+ * Station la plus proche de `stationId` (≤ FALLBACK_MAX_KM) où `measure(status)`
+ * dépasse strictement `threshold` — c.-à-d. qui ne poserait pas le même problème.
+ * Renvoie { name, km, count } ou null.
+ */
+function findFallback(stationId, stations, statusMap, measure, threshold) {
+  const origin = stations.find((s) => s.station_id === stationId);
+  if (!origin) return null;
+  let best = null;
+  for (const s of stations) {
+    if (s.station_id === stationId) continue;
+    const count = measure(statusMap[s.station_id]);
+    if (count <= threshold) continue;
+    const km = distanceKm(origin, s);
+    if (km > FALLBACK_MAX_KM) continue;
+    if (!best || km < best.km || (km === best.km && count > best.count)) best = { name: s.name, km, count };
+  }
+  return best;
+}
+
+/**
+ * Stations de repli pertinentes pour une alerte déclenchée « en creux » (au plus N) :
+ * vélos ailleurs si le départ manque de vélos, places ailleurs si l'arrivée (ou la
+ * station surveillée) manque de places. Aucune pour les alertes « au moins N ».
+ */
+function fallbacksFor(alert, ev, stations, statusMap) {
+  if (alert.comparison !== 'at_most' || !stations?.length) return {};
+  const bikes = (st) => countForType(st, alert.bike_type);
+  const out = {};
+  if (ev.departureHit) {
+    out.departure = alert.target === 'docks'
+      ? findFallback(alert.station_id, stations, statusMap, docksOf, alert.threshold)
+      : findFallback(alert.station_id, stations, statusMap, bikes, alert.threshold);
+  }
+  if (ev.arrivalHit) {
+    out.arrival = findFallback(alert.arrival_station_id, stations, statusMap, docksOf, alert.arrival_threshold);
+  }
+  return out;
 }
 
 // ── Envoi ──────────────────────────────────────────────────────────────────────
@@ -183,14 +229,45 @@ function buildMessage(alerte, ev) {
   };
 }
 
-function buildPayload(alerte, ev) {
+/** « Cathédrale (350 m) : 6 vélos » */
+function describeFallback(f, unit) {
+  return `${f.name} (${fmtDistance(f.km)}) : ${unit(f.count)}`;
+}
+
+/** Ajoute les stations de repli au corps du message. */
+function withFallbacks(message, alerte, fallbacks = {}) {
+  const bikes = (n) => bikesLabel(alerte.bike_type, n);
+  const extra = [];
+  if (alerte.arrival_station_id) {
+    if (fallbacks.departure) extra.push(`Repli départ : ${describeFallback(fallbacks.departure, bikes)}`);
+    if (fallbacks.arrival) extra.push(`Repli arrivée : ${describeFallback(fallbacks.arrival, docksLabel)}`);
+  } else if (fallbacks.departure) {
+    extra.push(`Repli : ${describeFallback(fallbacks.departure, alerte.target === 'docks' ? docksLabel : bikes)}`);
+  }
+  return extra.length ? { ...message, body: `${message.body}\n${extra.join('\n')}` } : message;
+}
+
+function buildPayload(alerte, ev, fallbacks) {
   return {
-    ...buildMessage(alerte, ev),
+    ...withFallbacks(buildMessage(alerte, ev), alerte, fallbacks),
     // Toujours une URL https:// (page /open interne) → ouvrable par le SW iOS.
     url:       buildRedirectUrl(),
     stationId: alerte.station_id,
     icon:      '/icon-192.png',
     badge:     '/badge-72.png',
+  };
+}
+
+/** Notification de test : ouvre la page Alertes de l'app au clic. */
+function buildTestPayload() {
+  const base = (process.env.APP_URL || 'https://velam-notifier.onrender.com').replace(/\/$/, '');
+  return {
+    title: 'VéloPulse — Notification de test',
+    body:  'Les notifications fonctionnent sur cet appareil 👍',
+    url:   `${base}/alertes`,
+    stationId: 'test',
+    icon:  '/icon-192.png',
+    badge: '/badge-72.png',
   };
 }
 
@@ -224,6 +301,14 @@ async function checkAlerts(date = new Date()) {
   }
   const statusMap = Object.fromEntries(statusList.map((s) => [s.station_id, s]));
 
+  // Référentiel (coordonnées) pour les stations de repli — lu en base, 1 fois par cycle.
+  let stations = [];
+  try {
+    stations = await getStations();
+  } catch (err) {
+    console.error('[push] lecture stations', err.message); // dégrade : pas de repli
+  }
+
   for (const alert of due) {
     const ev = evaluateAlert(alert, statusMap);
     const notifiedToday = alert.last_notified_date === now.date;
@@ -232,7 +317,7 @@ async function checkAlerts(date = new Date()) {
       // Première atteinte du jour, ou état changé depuis la dernière notification
       // (y compris après réarmement : last_notified_key remis à NULL).
       if (!notifiedToday || alert.last_notified_key !== ev.key) {
-        await sendToUser(alert.user_id, buildPayload(alert, ev));
+        await sendToUser(alert.user_id, buildPayload(alert, ev, fallbacksFor(alert, ev, stations, statusMap)));
         if (notifiedToday) await setAlertNotifiedKey(alert.id, ev.key);
         else await markAlertNotified(alert.id, now.date, ev.key);
       }
@@ -277,5 +362,5 @@ function stopPolling() {
 module.exports = {
   initPush, getVapidPublicKey, startPolling, stopPolling,
   // exposés pour les tests
-  checkAlerts, countForType, docksOf, evaluateAlert, buildMessage, buildPayload, sendToUser, inWindow, nowInTz,
+  checkAlerts, findFallback, fallbacksFor, buildTestPayload, countForType, docksOf, evaluateAlert, buildMessage, buildPayload, sendToUser, inWindow, nowInTz,
 };
