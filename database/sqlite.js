@@ -6,10 +6,15 @@ const fs       = require('fs');
 const { runMigrations } = require('./migrations');
 
 function createSQLiteDb() {
-  const DATA_DIR = path.join(process.cwd(), 'data');
-  if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+  // SQLITE_PATH=':memory:' → base éphémère (tests). Défaut : data/velam.db.
+  let file = process.env.SQLITE_PATH;
+  if (!file) {
+    const DATA_DIR = path.join(process.cwd(), 'data');
+    if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+    file = path.join(DATA_DIR, 'velam.db');
+  }
 
-  const sdb = new Database(path.join(DATA_DIR, 'velam.db'));
+  const sdb = new Database(file);
   sdb.pragma('journal_mode = WAL');
   sdb.pragma('foreign_keys = ON');
 
@@ -25,9 +30,10 @@ function createSQLiteDb() {
     async get(sql, params = []) {
       return sdb.prepare(sql).get(...params) ?? null;
     },
+    async close() { sdb.close(); },
     async initialize() {
       await runMigrations(api);
-      console.log('[db] SQLite prête → data/velam.db');
+      console.log(`[db] SQLite prête → ${file}`);
     },
   };
   return api;

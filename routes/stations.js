@@ -93,3 +93,4 @@ router.post('/api/stations/refresh', requireAuth, async (req, res) => {
 });
 
 module.exports = router;
+module.exports.mergeWithStatus = mergeWithStatus;

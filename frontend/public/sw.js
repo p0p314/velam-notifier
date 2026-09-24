@@ -1,10 +1,89 @@
-/* Service Worker VéloPulse — réception des push et clic sur notification. */
+/* Service Worker VéloPulse — coquille hors ligne, réception des push, clic sur notification. */
 
-// Chrome 111+ détecte les handlers "vides" (kEmptyFetchHandler) et les exclut du
-// critère d'installabilité PWA. Il faut appeler respondWith() pour compter.
-// Stratégie : pass-through réseau sans cache.
+// ── Hors ligne ─────────────────────────────────────────────────────────────────
+// But : pouvoir OUVRIR l'app sans réseau (liste des stations + favoris affichés
+// depuis le cache localStorage du front). On ne met en cache que la coquille :
+//   - navigations → réseau d'abord, repli sur la dernière index.html connue ;
+//   - /assets/* (fichiers Vite hashés, immuables) + icônes → cache d'abord.
+// Jamais l'API (/api, /open, /cron) : la fraîcheur des données est gérée par le front.
+// Incrémenter la version si un fichier non hashé (icônes, manifest, theme-init) change.
+const CACHE = "velopulse-shell-v1";
+const SHELL = "/index.html";
+const STATIC_RE = /^\/(assets\/|icon-|badge-|manifest\.json|velopulse-icon|theme-init\.js)/;
+
+self.addEventListener("install", (event) => {
+  event.waitUntil(
+    caches.open(CACHE)
+      .then((c) => c.add(new Request(SHELL, { cache: "reload" })))
+      .catch(() => { /* hors ligne à l'installation : la coquille sera mise en cache plus tard */ })
+      .then(() => self.skipWaiting())
+  );
+});
+
+self.addEventListener("activate", (event) => {
+  event.waitUntil(
+    caches.keys()
+      .then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k))))
+      .then(() => self.clients.claim())
+  );
+});
+
+/**
+ * Après chaque nouvelle index.html, supprime les assets qu'elle ne référence plus
+ * (anciens builds) : le cache reste borné à la version courante.
+ * Les chunks chargés à la demande (carte) sont re-téléchargés au besoin, en ligne.
+ */
+async function pruneAssets(cache, html) {
+  const used = new Set([...html.matchAll(/\/assets\/[^"'\s)]+/g)].map((m) => m[0]));
+  for (const req of await cache.keys()) {
+    const path = new URL(req.url).pathname;
+    if (path.startsWith("/assets/") && !used.has(path)) await cache.delete(req);
+  }
+}
+
+async function handleNavigation(request) {
+  const cache = await caches.open(CACHE);
+  try {
+    const res = await fetch(request);
+    if (res.ok && (res.headers.get("content-type") || "").includes("text/html")) {
+      const copy = res.clone();
+      copy.text().then((html) => pruneAssets(cache, html)).catch(() => {});
+      await cache.put(SHELL, res.clone());
+    }
+    return res;
+  } catch {
+    return (await cache.match(SHELL)) || Response.error();
+  }
+}
+
+async function handleStatic(request) {
+  const cache = await caches.open(CACHE);
+  const hit = await cache.match(request);
+  if (hit) return hit;
+  const res = await fetch(request);
+  if (res.ok) cache.put(request, res.clone());
+  return res;
+}
+
 self.addEventListener("fetch", (event) => {
-  event.respondWith(fetch(event.request));
+  const { request } = event;
+  const url = new URL(request.url);
+
+  // Chrome 111+ exclut les handlers « vides » du critère d'installabilité PWA :
+  // on appelle toujours respondWith() (pass-through réseau par défaut).
+  if (request.method !== "GET" || url.origin !== self.location.origin) {
+    event.respondWith(fetch(request));
+    return;
+  }
+  const isPage = request.mode === "navigate"
+    && !/^\/(api|open|cron|health)(\/|$)/.test(url.pathname);
+  if (isPage) {
+    event.respondWith(handleNavigation(request));
+  } else if (STATIC_RE.test(url.pathname)) {
+    event.respondWith(handleStatic(request));
+  } else {
+    event.respondWith(fetch(request));
+  }
 });
 
 self.addEventListener("push", (event) => {

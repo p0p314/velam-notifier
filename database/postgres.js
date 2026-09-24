@@ -11,7 +11,8 @@ function toPg(sql) {
 function createPostgresDb() {
   const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
-    ssl: { rejectUnauthorized: false }, // requis pour Supabase / Render
+    // Requis pour Supabase / Render. DATABASE_SSL=false pour un Postgres local (CI).
+    ssl: process.env.DATABASE_SSL === 'false' ? false : { rejectUnauthorized: false },
   });
 
   const api = {
@@ -35,6 +36,7 @@ function createPostgresDb() {
       const { rows } = await api.query(sql, params);
       return rows[0] ?? null;
     },
+    async close() { await pool.end(); },
     async initialize() {
       await runMigrations(api);
       console.log('[db] PostgreSQL prête');
@@ -43,4 +45,4 @@ function createPostgresDb() {
   return api;
 }
 
-module.exports = { createPostgresDb };
+module.exports = { createPostgresDb, toPg };

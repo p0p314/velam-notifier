@@ -13,6 +13,7 @@ import Stations from "./pages/Stations";
 import Favorites from "./pages/Favorites";
 import Alerts from "./pages/Alerts";
 import Redirect from "./pages/Redirect";
+import { OnlineOnly } from "./components/Offline";
 
 // Carte chargée à la demande : mapbox-gl (~1,5 Mo) reste hors du bundle principal.
 const MapPage = lazy(() => import("./pages/MapPage"));
@@ -49,7 +50,7 @@ function Layout() {
           <button className="icon-btn" aria-label="Installer l'app" onClick={openInstall}>
             <Icon name="download" />
           </button>
-          <button className="icon-btn" aria-label="Déconnexion" onClick={() => { logout(); navigate("/login", { replace: true }); }}>
+          <button className="icon-btn" aria-label="Déconnexion" onClick={async () => { await logout(); navigate("/login", { replace: true }); }}>
             <Icon name="log-out" />
           </button>
         </div>
@@ -75,9 +76,9 @@ export default function App() {
               <Route element={<Layout />}>
                 <Route path="/" element={<Landing />} />
                 <Route path="/stations" element={<Stations />} />
-                <Route path="/carte" element={<Suspense fallback={<div className="view-state">Chargement de la carte…</div>}><MapPage /></Suspense>} />
+                <Route path="/carte" element={<OnlineOnly><Suspense fallback={<div className="view-state">Chargement de la carte…</div>}><MapPage /></Suspense></OnlineOnly>} />
                 <Route path="/favoris" element={<Favorites />} />
-                <Route path="/alertes" element={<Alerts />} />
+                <Route path="/alertes" element={<OnlineOnly><Alerts /></OnlineOnly>} />
               </Route>
             </Route>
             <Route path="*" element={<Navigate to="/" replace />} />

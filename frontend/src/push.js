@@ -68,3 +68,19 @@ export async function enablePush() {
   if (permission === "granted") await syncPush();
   return permission;
 }
+
+/**
+ * Déconnexion : détache cet appareil du compte côté serveur pour qu'il ne reçoive
+ * plus ses alertes. La subscription navigateur est conservée (la permission aussi) :
+ * le prochain compte connecté la récupère via syncPush(). Best-effort, ne lève pas.
+ */
+export async function unlinkPush() {
+  if (!pushSupported() || Notification.permission !== "granted") return;
+  try {
+    const reg = await navigator.serviceWorker.getRegistration();
+    const sub = await reg?.pushManager.getSubscription();
+    if (sub) await api("/api/push/unsubscribe", { method: "POST", body: { endpoint: sub.endpoint } });
+  } catch (err) {
+    console.warn("[push] détachement échoué :", err.message);
+  }
+}

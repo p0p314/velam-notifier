@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useCallback, useEffect } from "react";
 import { api, getToken, setToken, clearToken, getStoredUser, setStoredUser, AUTH_EXPIRED_EVENT } from "./api";
-import { syncPush } from "./push";
+import { syncPush, unlinkPush } from "./push";
 
 const AuthContext = createContext(null);
 
@@ -27,7 +27,9 @@ export function AuthProvider({ children }) {
     return data.user;
   }, [persist]);
 
-  const logout = useCallback(() => {
+  // Async : détache d'abord l'appareil (tant que le jeton est encore valide).
+  const logout = useCallback(async () => {
+    await unlinkPush();
     clearToken();
     setTok(null);
     setUser(null);
@@ -44,9 +46,15 @@ export function AuthProvider({ children }) {
   // Au démarrage : renouvelle le jeton (session glissante) puis resynchronise
   // silencieusement la subscription push — sans jamais redemander la permission.
   useEffect(() => {
-    if (!getToken()) return;
+    const sent = getToken();
+    if (!sent) return;
     api("/api/auth/me")
-      .then((data) => { persist(data); syncPush(); })
+      .then((data) => {
+        // Déconnexion (ou re-login) pendant la requête : ne pas ressusciter la session.
+        if (getToken() !== sent) return;
+        persist(data);
+        syncPush();
+      })
       .catch(() => { /* 401 → géré par AUTH_EXPIRED_EVENT ; réseau → on garde la session */ });
   }, [persist]);
 

@@ -6,14 +6,17 @@ const { hashPassword, verifyPassword, signToken, requireAuth } = require('../aut
 
 const router = express.Router();
 
+// RATE_LIMIT_DISABLED=1 : uniquement pour les tests d'intégration (nombreux comptes créés).
+const skip = () => process.env.RATE_LIMIT_DISABLED === '1';
+
 const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, max: 10,
-  standardHeaders: true, legacyHeaders: false,
+  standardHeaders: true, legacyHeaders: false, skip,
   message: { ok: false, error: 'Trop de tentatives, réessayez dans 15 minutes.' },
 });
 const registerLimiter = rateLimit({
   windowMs: 60 * 60 * 1000, max: 5,
-  standardHeaders: true, legacyHeaders: false,
+  standardHeaders: true, legacyHeaders: false, skip,
   message: { ok: false, error: 'Trop de comptes créés, réessayez plus tard.' },
 });
 
@@ -33,7 +36,7 @@ router.post('/api/auth/register', registerLimiter, async (req, res) => {
       return res.status(409).json({ ok: false, error: 'Ce nom d\'utilisateur est déjà pris' });
     }
 
-    const user  = await createUser(username.trim(), hashPassword(password));
+    const user  = await createUser(username.trim(), await hashPassword(password));
     const token = signToken(user);
     res.status(201).json({ ok: true, token, user: { id: user.id, username: user.username } });
   } catch (err) {
@@ -50,7 +53,7 @@ router.post('/api/auth/login', loginLimiter, async (req, res) => {
     }
 
     const user = await getUserByUsername(username.trim());
-    if (!user || !verifyPassword(password, user.password_hash)) {
+    if (!user || !(await verifyPassword(password, user.password_hash))) {
       return res.status(401).json({ ok: false, error: 'Identifiants incorrects' });
     }
 

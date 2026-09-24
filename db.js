@@ -136,17 +136,27 @@ async function removeFavorite(userId, stationId) {
 
 // ── Push subscriptions ───────────────────────────────────────────────────────
 
-async function addSubscription(userId, subscriptionJson) {
-  const existing = await dbc.get(
-    'SELECT id FROM push_subscriptions WHERE user_id = ? AND subscription = ?',
-    [userId, subscriptionJson]
-  );
-  if (existing) return existing.id;
+/**
+ * Enregistre (ou réattribue) la subscription d'un appareil. L'endpoint est unique :
+ * si l'appareil était lié à un autre compte, il passe au compte courant, ce qui
+ * évite qu'un téléphone partagé reçoive les alertes de plusieurs utilisateurs.
+ */
+async function addSubscription(userId, subscription) {
   const { id } = await dbc.run(
-    'INSERT INTO push_subscriptions (user_id, subscription) VALUES (?, ?)',
-    [userId, subscriptionJson]
+    `INSERT INTO push_subscriptions (user_id, endpoint, subscription) VALUES (?, ?, ?)
+     ON CONFLICT(endpoint) DO UPDATE SET user_id = excluded.user_id, subscription = excluded.subscription`,
+    [userId, subscription.endpoint, JSON.stringify(subscription)]
   );
   return id;
+}
+
+/** Détache un appareil du compte (déconnexion). Renvoie true si une ligne a été supprimée. */
+async function removeSubscriptionByEndpoint(userId, endpoint) {
+  const { changes } = await dbc.run(
+    'DELETE FROM push_subscriptions WHERE user_id = ? AND endpoint = ?',
+    [userId, endpoint]
+  );
+  return changes > 0;
 }
 
 async function getSubscriptionsByUser(userId) {
@@ -247,7 +257,7 @@ module.exports = {
   // favorites
   getFavorites, addFavorite, removeFavorite,
   // push
-  addSubscription, getSubscriptionsByUser, removeSubscriptionById,
+  addSubscription, removeSubscriptionByEndpoint, getSubscriptionsByUser, removeSubscriptionById,
   // alerts
   getAlerts, getAlert, createAlert, updateAlert, deleteAlert,
   markAlertNotified, setAlertNotifiedCount, countActiveAlerts, getActiveAlerts,

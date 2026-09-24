@@ -32,7 +32,7 @@ export default function Navbar() {
           <Icon name={theme === "dark" ? "sun" : "moon"} />
         </button>
         <span className="nav-user">{user?.username}</span>
-        <button className="nav-btn" onClick={() => { logout(); navigate("/login", { replace: true }); }}>
+        <button className="nav-btn" onClick={async () => { await logout(); navigate("/login", { replace: true }); }}>
           <Icon name="log-out" /> Déconnexion
         </button>
       </div>

@@ -68,6 +68,12 @@ function validateAlertPayload(body, { partial = false } = {}) {
   return { fields, errors };
 }
 
+// Identifiant d'alerte : entier positif, sinon 404 (évite un NaN envoyé à Postgres → 500).
+function parseId(raw) {
+  const id = Number(raw);
+  return Number.isInteger(id) && id > 0 ? id : null;
+}
+
 router.get('/api/alerts', requireAuth, async (req, res) => {
   try {
     res.json({ ok: true, alerts: await getAlerts(req.user.id) });
@@ -97,7 +103,8 @@ router.patch('/api/alerts/:id', requireAuth, async (req, res) => {
     if (errors.length) {
       return res.status(400).json({ ok: false, error: `Champs invalides : ${errors.join(', ')}` });
     }
-    const alert = await updateAlert(req.user.id, Number(req.params.id), fields);
+    const id = parseId(req.params.id);
+    const alert = id && await updateAlert(req.user.id, id, fields);
     if (!alert) return res.status(404).json({ ok: false, error: 'Alerte introuvable' });
     res.json({ ok: true, alert });
   } catch (err) {
@@ -108,7 +115,8 @@ router.patch('/api/alerts/:id', requireAuth, async (req, res) => {
 
 router.delete('/api/alerts/:id', requireAuth, async (req, res) => {
   try {
-    const ok = await deleteAlert(req.user.id, Number(req.params.id));
+    const id = parseId(req.params.id);
+    const ok = id && await deleteAlert(req.user.id, id);
     if (!ok) return res.status(404).json({ ok: false, error: 'Alerte introuvable' });
     res.json({ ok: true });
   } catch (err) {
@@ -118,3 +126,4 @@ router.delete('/api/alerts/:id', requireAuth, async (req, res) => {
 });
 
 module.exports = router;
+module.exports.validateAlertPayload = validateAlertPayload;

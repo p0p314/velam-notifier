@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { api } from "./api";
+import { saveCache, loadCache } from "./lib/offlineCache";
 
 const REFRESH = 60; // secondes
 
@@ -70,20 +71,45 @@ export function useIsMobile(query = "(max-width: 768px)") {
   return mobile;
 }
 
-/** Polling des stations (via le backend) toutes les 60 s. */
+/** État de connexion réseau du navigateur (événements online / offline). */
+export function useOnline() {
+  const [online, setOnline] = useState(() => typeof navigator === "undefined" || navigator.onLine !== false);
+  useEffect(() => {
+    const on = () => setOnline(true);
+    const off = () => setOnline(false);
+    window.addEventListener("online", on);
+    window.addEventListener("offline", off);
+    return () => { window.removeEventListener("online", on); window.removeEventListener("offline", off); };
+  }, []);
+  return online;
+}
+
+/**
+ * Polling des stations (via le backend) toutes les 60 s.
+ * Hors ligne / serveur injoignable : sert la dernière liste connue (localStorage)
+ * avec `stale: true` ; `lastUpd` donne alors l'heure de cette dernière mise à jour.
+ * Rafraîchit dès que la connexion revient.
+ */
 export function useStations() {
-  const [stations, setStations] = useState([]);
-  const [loading,  setLoading]  = useState(true);
+  const [cached] = useState(() => loadCache("stations"));
+  const [stations, setStations] = useState(() => cached?.data ?? []);
+  const [loading,  setLoading]  = useState(!cached);
   const [error,    setError]    = useState(null);
-  const [lastUpd,  setLastUpd]  = useState(null);
+  const [stale,    setStale]    = useState(false);
+  const [lastUpd,  setLastUpd]  = useState(() => (cached ? new Date(cached.at) : null));
 
   const reload = useCallback(async () => {
     try {
       const data = await api("/api/stations", { auth: false });
+      const at = Date.parse(data.fetched_at) || Date.now();
       setStations(data.stations);
-      setLastUpd(new Date());
+      setLastUpd(new Date(at));
       setError(null);
+      setStale(false);
+      saveCache("stations", data.stations, at);
     } catch (e) {
+      // Des données (mémoire ou cache) existent déjà → on les garde, marquées périmées.
+      setStale(true);
       setError(e.message);
     } finally {
       setLoading(false);
@@ -93,31 +119,45 @@ export function useStations() {
   useEffect(() => {
     reload();
     const iv = setInterval(reload, REFRESH * 1000);
-    return () => clearInterval(iv);
+    window.addEventListener("online", reload);
+    return () => { clearInterval(iv); window.removeEventListener("online", reload); };
   }, [reload]);
 
-  return { stations, loading, error, lastUpd, reload };
+  // `error` n'est bloquant que s'il n'y a rien à afficher.
+  return { stations, loading, error: stations.length ? null : error, stale, lastUpd, reload };
 }
 
-/** Favoris de l'utilisateur connecté + toggle optimiste. */
+/** Favoris de l'utilisateur connecté + toggle optimiste. Dernière liste gardée hors ligne. */
 export function useFavorites() {
-  const [favorites, setFavorites] = useState([]);
-  const [loading,   setLoading]   = useState(true);
+  const [cached] = useState(() => loadCache("favorites"));
+  const [favorites, setFavorites] = useState(() => cached?.data ?? []);
+  const [loading,   setLoading]   = useState(!cached);
+  const [stale,     setStale]     = useState(false);
+
+  const apply = useCallback((list) => {
+    setFavorites(list);
+    setStale(false);
+    saveCache("favorites", list);
+  }, []);
 
   const reload = useCallback(async () => {
     try {
-      const data = await api("/api/favorites");
-      setFavorites(data.favorites);
+      apply((await api("/api/favorites")).favorites);
     } catch (e) {
       // Ne pas vider la liste sur une erreur passagère (réveil serveur, réseau) :
       // on garde l'état connu. Un 401 est géré globalement (déconnexion).
+      setStale(true);
       console.warn("[favorites]", e.message);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [apply]);
 
-  useEffect(() => { reload(); }, [reload]);
+  useEffect(() => {
+    reload();
+    window.addEventListener("online", reload);
+    return () => window.removeEventListener("online", reload);
+  }, [reload]);
 
   const favIds = new Set(favorites.map((f) => f.station_id));
 
@@ -128,11 +168,11 @@ export function useFavorites() {
       const data = isFav
         ? await api(`/api/favorites/${encodeURIComponent(id)}`, { method: "DELETE" })
         : await api("/api/favorites", { method: "POST", body: { station_id: id, station_name: station.name } });
-      setFavorites(data.favorites);
+      apply(data.favorites);
     } catch (e) {
       console.warn("[favorites]", e.message);
     }
-  }, [favorites]);
+  }, [favorites, apply]);
 
-  return { favorites, favIds, toggleFav, loading, reload };
+  return { favorites, favIds, toggleFav, loading, stale, reload };
 }
