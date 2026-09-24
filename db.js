@@ -114,24 +114,55 @@ async function getUserById(id) {
 
 // ── Favorites ────────────────────────────────────────────────────────────────
 
+/**
+ * Favoris dans l'ordre choisi par l'utilisateur (sort_order), puis alphabétique
+ * pour ceux jamais ordonnés. `label` : nom personnalisé facultatif.
+ */
 async function getFavorites(userId) {
   const { rows } = await dbc.query(
-    'SELECT station_id, station_name FROM favorites WHERE user_id = ? ORDER BY LOWER(station_name)',
+    `SELECT station_id, station_name, label, sort_order FROM favorites WHERE user_id = ?
+     ORDER BY CASE WHEN sort_order IS NULL THEN 1 ELSE 0 END, sort_order, LOWER(station_name)`,
     [userId]
   );
   return rows;
 }
 
+/** Ajoute en fin de liste ; un favori existant garde son nom et sa place. */
 async function addFavorite(userId, stationId, stationName) {
+  const row = await dbc.get('SELECT MAX(sort_order) AS m FROM favorites WHERE user_id = ?', [userId]);
+  const next = row?.m == null ? null : Number(row.m) + 1;
   await dbc.run(
-    `INSERT INTO favorites (user_id, station_id, station_name) VALUES (?, ?, ?)
+    `INSERT INTO favorites (user_id, station_id, station_name, sort_order) VALUES (?, ?, ?, ?)
      ON CONFLICT(user_id, station_id) DO UPDATE SET station_name = excluded.station_name`,
-    [userId, stationId, stationName]
+    [userId, stationId, stationName, next]
   );
 }
 
 async function removeFavorite(userId, stationId) {
   await dbc.run('DELETE FROM favorites WHERE user_id = ? AND station_id = ?', [userId, stationId]);
+}
+
+/** Renomme un favori (`label` null = nom de la station). Renvoie false si absent. */
+async function setFavoriteLabel(userId, stationId, label) {
+  const { changes } = await dbc.run(
+    'UPDATE favorites SET label = ? WHERE user_id = ? AND station_id = ?',
+    [label, userId, stationId]
+  );
+  return changes > 0;
+}
+
+/**
+ * Enregistre l'ordre : `stationIds[i]` prend la position i. Les favoris absents de
+ * la liste passent après, dans leur ordre actuel ; les identifiants inconnus sont ignorés.
+ */
+async function reorderFavorites(userId, stationIds) {
+  const current = (await getFavorites(userId)).map((f) => f.station_id);
+  const known = new Set(current);
+  const wanted = [...new Set(stationIds)].filter((id) => known.has(id));
+  const order = [...wanted, ...current.filter((id) => !wanted.includes(id))];
+  for (let i = 0; i < order.length; i++) {
+    await dbc.run('UPDATE favorites SET sort_order = ? WHERE user_id = ? AND station_id = ?', [i, userId, order[i]]);
+  }
 }
 
 // ── Push subscriptions ───────────────────────────────────────────────────────
@@ -296,7 +327,7 @@ module.exports = {
   // users
   createUser, getUserByUsername, getUserById,
   // favorites
-  getFavorites, addFavorite, removeFavorite,
+  getFavorites, addFavorite, removeFavorite, setFavoriteLabel, reorderFavorites,
   // push
   addSubscription, removeSubscriptionByEndpoint, getSubscriptionsByUser, removeSubscriptionById,
   // alerts

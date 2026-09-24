@@ -15,13 +15,14 @@ describe('favoris', () => {
     await api.post('/api/favorites', { token, body: { station_id: '1', station_name: 'Gare' } });
     const again = await api.post('/api/favorites', { token, body: { station_id: '1', station_name: 'Gare du Nord' } });
     assert.equal(again.status, 201);
-    assert.deepEqual(again.body.favorites, [
+    const brief = (list) => list.map(({ station_id, station_name }) => ({ station_id, station_name }));
+    assert.deepEqual(brief(again.body.favorites), [
       { station_id: '1', station_name: 'Gare du Nord' }, // renommé, pas dupliqué
       { station_id: '2', station_name: 'zoo' },          // tri insensible à la casse
     ]);
 
     const del = await api.delete('/api/favorites/1', { token });
-    assert.deepEqual(del.body.favorites, [{ station_id: '2', station_name: 'zoo' }]);
+    assert.deepEqual(brief(del.body.favorites), [{ station_id: '2', station_name: 'zoo' }]);
   });
 
   test('payload incomplet → 400', async () => {
@@ -177,5 +178,53 @@ describe('alertes v1.1', () => {
     const { setAlertsPause } = require('../db');
     await setAlertsPause(user.id, addDays(today(), -1));
     assert.equal((await api.get('/api/alerts', { token })).body.paused_until, null);
+  });
+});
+
+describe('favoris nommés et ordonnés', () => {
+  const ids = (res) => res.body.favorites.map((f) => f.station_id);
+  async function withFavs(names) {
+    const { token } = await registerUser(api);
+    for (const [id, name] of names) await api.post('/api/favorites', { token, body: { station_id: id, station_name: name } });
+    return token;
+  }
+
+  test('renommer puis revenir au nom de la station', async () => {
+    const token = await withFavs([['1', 'Gare']]);
+    const res = await api.patch('/api/favorites/1', { token, body: { label: '  Maison  ' } });
+    assert.equal(res.status, 200);
+    assert.equal(res.body.favorites[0].label, 'Maison');
+    const reset = await api.patch('/api/favorites/1', { token, body: { label: '' } });
+    assert.equal(reset.body.favorites[0].label, null);
+  });
+
+  test('renommer : validations', async () => {
+    const token = await withFavs([['1', 'Gare']]);
+    assert.equal((await api.patch('/api/favorites/1', { token, body: { label: 'x'.repeat(41) } })).status, 400);
+    assert.equal((await api.patch('/api/favorites/1', { token, body: { label: 12 } })).status, 400);
+    assert.equal((await api.patch('/api/favorites/9', { token, body: { label: 'Maison' } })).status, 404);
+  });
+
+  test('ordre personnalisé, conservé après ajout (nouveau en fin)', async () => {
+    const token = await withFavs([['1', 'Alpha'], ['2', 'Bravo'], ['3', 'Charlie']]);
+    const res = await api.put('/api/favorites/order', { token, body: { station_ids: ['3', '1', '2'] } });
+    assert.deepEqual(ids(res), ['3', '1', '2']);
+    const added = await api.post('/api/favorites', { token, body: { station_id: '0', station_name: 'Aaa' } });
+    assert.deepEqual(ids(added), ['3', '1', '2', '0']);
+  });
+
+  test('ordre partiel : les favoris omis suivent, les inconnus sont ignorés', async () => {
+    const token = await withFavs([['1', 'Alpha'], ['2', 'Bravo'], ['3', 'Charlie']]);
+    const res = await api.put('/api/favorites/order', { token, body: { station_ids: ['2', 'inconnu', '2'] } });
+    assert.deepEqual(ids(res), ['2', '1', '3']);
+  });
+
+  test('ordre : payload invalide → 400 ; propre à chaque compte', async () => {
+    const token = await withFavs([['1', 'Alpha'], ['2', 'Bravo']]);
+    assert.equal((await api.put('/api/favorites/order', { token, body: { station_ids: 'nope' } })).status, 400);
+    assert.equal((await api.put('/api/favorites/order', { token, body: { station_ids: [1, 2] } })).status, 400);
+    const other = await withFavs([['1', 'Alpha'], ['2', 'Bravo']]);
+    await api.put('/api/favorites/order', { token: other, body: { station_ids: ['2', '1'] } });
+    assert.deepEqual(ids(await api.get('/api/favorites', { token })), ['1', '2']);
   });
 });

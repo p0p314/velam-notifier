@@ -174,5 +174,25 @@ export function useFavorites() {
     }
   }, [favorites, apply]);
 
-  return { favorites, favIds, toggleFav, loading, stale, reload };
+  /** Nom personnalisé (vide = nom de la station). */
+  const rename = useCallback(async (stationId, label) => {
+    try {
+      apply((await api(`/api/favorites/${encodeURIComponent(stationId)}`, { method: "PATCH", body: { label } })).favorites);
+    } catch (e) {
+      console.warn("[favorites]", e.message);
+    }
+  }, [apply]);
+
+  /** Nouvel ordre (optimiste : affiché tout de suite, resynchronisé par la réponse). */
+  const reorder = useCallback(async (stationIds) => {
+    setFavorites((list) => stationIds.map((id) => list.find((f) => f.station_id === id)).filter(Boolean));
+    try {
+      apply((await api("/api/favorites/order", { method: "PUT", body: { station_ids: stationIds } })).favorites);
+    } catch (e) {
+      console.warn("[favorites]", e.message);
+      reload();
+    }
+  }, [apply, reload]);
+
+  return { favorites, favIds, toggleFav, rename, reorder, loading, stale, reload };
 }

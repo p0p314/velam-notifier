@@ -59,7 +59,8 @@ async function dropColumn(db, table, name) {
  *  - `target` (bikes|docks), `comparison` (at_most|at_least), `threshold` (remplace
  *    min_count, dont le nom était trompeur), trajet (`arrival_*`), alerte ponctuelle
  *    (`valid_on`), anti-spam générique (`last_notified_key` remplace last_notified_count) ;
- *  - pause globale des alertes par utilisateur (`users.alerts_paused_until`).
+ *  - pause globale des alertes par utilisateur (`users.alerts_paused_until`) ;
+ *  - favoris nommés et ordonnés (`favorites.label`, `favorites.sort_order`).
  * Idempotente : les données des colonnes historiques sont recopiées puis celles-ci supprimées.
  */
 async function migrateAlertsV11(db) {
@@ -72,6 +73,9 @@ async function migrateAlertsV11(db) {
   await addColumn(db, 'alerts', 'valid_on', 'TEXT DEFAULT NULL');
   const newKey = await addColumn(db, 'alerts', 'last_notified_key', 'TEXT DEFAULT NULL');
   await addColumn(db, 'users', 'alerts_paused_until', 'TEXT DEFAULT NULL');
+  // Favoris : nom personnalisé (« Maison ») et ordre choisi par l'utilisateur.
+  await addColumn(db, 'favorites', 'label', 'TEXT DEFAULT NULL');
+  await addColumn(db, 'favorites', 'sort_order', 'INTEGER DEFAULT NULL');
 
   const cols = await columnsOf(db, 'alerts');
   if (cols.has('min_count')) {
