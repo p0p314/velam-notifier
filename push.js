@@ -1,11 +1,11 @@
 const webpush = require('web-push');
 const {
   getConfig, setConfig,
-  countActiveAlerts, getActiveAlerts, markAlertNotified, setAlertNotifiedCount,
+  countActiveAlerts, getActiveAlerts, deleteExpiredAlerts, markAlertNotified, setAlertNotifiedKey,
   getSubscriptionsByUser, removeSubscriptionById,
-  getRentalAppsMap,
 } = require('./db');
 const { getStationStatus } = require('./gbfs');
+const { nowInTz, inWindow } = require('./time');
 
 const POLL_MS = 30_000;
 const OFFICIAL_URL = 'https://velam.amiens.fr/fr/home';
@@ -45,61 +45,65 @@ function getVapidPublicKey() {
   return _vapidPublic;
 }
 
-// ── Comptage selon le type de vélo ─────────────────────────────────────────────
+// ── Lecture du statut live ─────────────────────────────────────────────────────
 
-// Rappel sémantique : `min_count` est un PLAFOND. Une alerte est « due » quand le
-// nombre de vélos du type visé est <= min_count (basse disponibilité), pas >=.
+/**
+ * Vélos disponibles d'un type à une station. 'ebike' (UI/DB) ↔ 'electrical' (GBFS).
+ * Une station qui ne loue pas (is_renting=false) n'a aucun vélo utilisable ;
+ * une station absente du flux compte pour 0.
+ */
 function countForType(status, bikeType) {
-  if (!status) return 0;
+  if (!status || status.is_renting === false) return 0;
   if (bikeType === 'any') return status.num_bikes_available ?? 0;
-  // 'ebike' (DB) → 'electrical' (GBFS), 'mechanical' → 'mechanical'
   const typeId = bikeType === 'ebike' ? 'electrical' : 'mechanical';
   return (status.vehicle_types_available ?? []).find((v) => v.vehicle_type_id === typeId)?.count ?? 0;
 }
 
-// ── Fenêtre horaire ────────────────────────────────────────────────────────────
-
-// Les alertes (HH:MM, jours) sont saisies en heure locale d'Amiens. Le serveur
-// (Render) tourne en UTC → on évalue tout dans ce fuseau, pas l'heure serveur.
-const ALERT_TZ = process.env.ALERT_TZ || 'Europe/Paris';
-
-const ISO_DAY = { Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6, Sun: 7 };
-
-/**
- * Heure courante dans le fuseau des alertes : { hhmm, isoDay (1=lundi…7), date }.
- * Corrige le décalage UTC qui faisait déclencher les alertes avec +1/+2 h.
- */
-function nowInTz(date = new Date()) {
-  const parts = new Intl.DateTimeFormat('en-US', {
-    timeZone: ALERT_TZ, hour12: false,
-    weekday: 'short', year: 'numeric', month: '2-digit', day: '2-digit',
-    hour: '2-digit', minute: '2-digit',
-  }).formatToParts(date);
-  const get = (t) => parts.find((p) => p.type === t)?.value;
-  let hour = get('hour');
-  if (hour === '24') hour = '00'; // certains environnements rendent minuit en "24"
-  return {
-    hhmm:   `${hour}:${get('minute')}`,
-    isoDay: ISO_DAY[get('weekday')],
-    date:   `${get('year')}-${get('month')}-${get('day')}`,
-  };
+/** Places libres pour déposer un vélo (0 si la station ne reprend pas les vélos). */
+function docksOf(status) {
+  if (!status || status.is_returning === false) return 0;
+  return status.num_docks_available ?? 0;
 }
 
-/** Gère aussi les créneaux qui passent minuit (start > end). */
-function inWindow(now, start, end) {
-  return start <= end ? now >= start && now <= end : now >= start || now <= end;
+const compare = (count, comparison, threshold) =>
+  comparison === 'at_least' ? count >= threshold : count <= threshold;
+
+/**
+ * Évalue une alerte sur le statut live.
+ * Renvoie { triggered, key, count, arrivalDocks? } où `key` résume l'état notifié :
+ * l'anti-spam re-notifie seulement quand cette clé change.
+ */
+function evaluateAlert(alert, statusMap) {
+  const status = statusMap[alert.station_id];
+  const count = alert.target === 'docks' ? docksOf(status) : countForType(status, alert.bike_type);
+  const departureHit = compare(count, alert.comparison, alert.threshold);
+
+  if (!alert.arrival_station_id) {
+    return { triggered: departureHit, key: String(count), count, departureHit };
+  }
+  // Trajet : problème au départ (peu de vélos) OU à l'arrivée (peu de places).
+  const arrivalDocks = docksOf(statusMap[alert.arrival_station_id]);
+  const arrivalHit = arrivalDocks <= alert.arrival_threshold;
+  return {
+    triggered: departureHit || arrivalHit,
+    key: `${count}|${arrivalDocks}`,
+    count, arrivalDocks, departureHit, arrivalHit,
+  };
 }
 
 // ── Envoi ──────────────────────────────────────────────────────────────────────
 
+/** Envoie à tous les appareils du compte. Renvoie { total, sent }. */
 async function sendToUser(userId, payload) {
   const subs = await getSubscriptionsByUser(userId);
+  let sent = 0;
   await Promise.all(subs.map(async (row) => {
     try {
       await webpush.sendNotification(JSON.parse(row.subscription), JSON.stringify(payload), {
         urgency: 'high', // réveille l'appareil même en veille
         TTL: 300,        // notif valable 5 min max (au-delà, vélos périmés → abandon)
       });
+      sent++;
     } catch (err) {
       // Subscription expirée / invalide → suppression en base
       if (err.statusCode === 404 || err.statusCode === 410) {
@@ -110,49 +114,94 @@ async function sendToUser(userId, payload) {
       }
     }
   }));
+  return { total: subs.length, sent };
 }
 
-// ── Construction du payload (adapté si count = 0) ───────────────────────────────
+// ── Construction du payload ─────────────────────────────────────────────────────
 
 // Le SW iOS ne peut pas ouvrir directement une URL cross-origin via clients.openWindow().
-// On passe par /open (même domaine) qui répond avec un 302 vers velam.amiens.fr ;
-// iOS détecte la navigation cross-origin et ouvre Safari (+ universal link → app native).
-function buildRedirectUrl(_rentalApps) {
+// On passe par /open (même domaine) qui répond avec une page de redirection vers
+// l'app Vélam (deep link) puis le store, puis le site.
+function buildRedirectUrl() {
   const base = (process.env.APP_URL || 'https://velam-notifier.onrender.com').replace(/\/$/, '');
   return `${base}/open?url=${encodeURIComponent(OFFICIAL_URL)}`;
 }
 
-function buildPayload(alerte, count, rentalApps) {
-  const bikeLabel = alerte.bike_type === 'ebike'
-    ? 'vélo(s) électrique(s)'
-    : alerte.bike_type === 'mechanical'
-      ? 'vélo(s) mécanique(s)'
-      : 'vélo(s)';
+const plural = (n, word) => `${n} ${word}${n > 1 ? 's' : ''}`;
 
-  const base = {
-    // Toujours une URL https:// (page /redirect interne) → ouvrable par le SW iOS.
-    url:       buildRedirectUrl(rentalApps),
+function bikesLabel(bikeType, n) {
+  const kind = bikeType === 'ebike' ? ' électrique' : bikeType === 'mechanical' ? ' mécanique' : '';
+  return `${n} vélo${n > 1 ? 's' : ''}${kind}${kind && n > 1 ? 's' : ''}`;
+}
+
+const docksLabel = (n) => (n > 1 ? `${n} places libres` : `${n} place libre`);
+
+/** Texte « N vélos » ou « N places libres » selon ce que surveille l'alerte. */
+function describeDeparture(alerte, n) {
+  return alerte.target === 'docks' ? docksLabel(n) : bikesLabel(alerte.bike_type, n);
+}
+
+/**
+ * Titre + corps de la notification selon le type d'alerte.
+ * `ev` : résultat de evaluateAlert.
+ */
+function buildMessage(alerte, ev) {
+  const n = ev.count;
+
+  if (alerte.arrival_station_id) {
+    const parts = [
+      `Départ ${alerte.station_name} : ${bikesLabel(alerte.bike_type, n)}`,
+      `Arrivée ${alerte.arrival_station_name} : ${plural(ev.arrivalDocks, 'place')}`,
+    ];
+    const urgent = (ev.departureHit && n === 0) || (ev.arrivalHit && ev.arrivalDocks === 0);
+    return {
+      title: `${urgent ? '⚠️ ' : ''}Trajet ${alerte.station_name} → ${alerte.arrival_station_name}`,
+      body: parts.join(' · '),
+    };
+  }
+
+  const what = describeDeparture(alerte, n);
+  if (alerte.comparison === 'at_least') {
+    return {
+      title: `✅ VéloPulse — ${alerte.station_name}`,
+      body: alerte.target === 'docks' ? `${what} · C'est le moment` : `${what} disponible${n > 1 ? 's' : ''} · C'est le moment`,
+    };
+  }
+  if (n === 0) {
+    return {
+      title: `⚠️ VéloPulse — ${alerte.station_name}`,
+      body: alerte.target === 'docks'
+        ? 'Plus aucune place libre pour déposer un vélo'
+        : `Plus aucun ${bikesLabel(alerte.bike_type, 1).replace(/^1 /, '')} disponible`,
+    };
+  }
+  return {
+    title: `VéloPulse — ${alerte.station_name}`,
+    body: alerte.target === 'docks'
+      ? `Plus que ${what} · Pensez à une autre station`
+      : `${what} disponible${n > 1 ? 's' : ''} · Réservez vite`,
+  };
+}
+
+function buildPayload(alerte, ev) {
+  return {
+    ...buildMessage(alerte, ev),
+    // Toujours une URL https:// (page /open interne) → ouvrable par le SW iOS.
+    url:       buildRedirectUrl(),
     stationId: alerte.station_id,
     icon:      '/icon-192.png',
     badge:     '/badge-72.png',
   };
-
-  if (count === 0) {
-    return {
-      ...base,
-      title: `⚠️ VéloPulse — ${alerte.station_name}`,
-      body:  `Plus aucun ${bikeLabel} disponible`,
-    };
-  }
-
-  return {
-    ...base,
-    title: `VéloPulse — ${alerte.station_name}`,
-    body:  `${count} ${bikeLabel} disponible${count > 1 ? 's' : ''} · Réservez vite`,
-  };
 }
 
 // ── Boucle de vérification ──────────────────────────────────────────────────────
+
+/** L'alerte couvre-t-elle l'instant présent (créneau + jour, ou jour de l'alerte ponctuelle) ? */
+function isDue(alert, { hhmm, isoDay, date }) {
+  if (!inWindow(hhmm, alert.time_start, alert.time_end)) return false;
+  if (alert.valid_on) return alert.valid_on === date;
+  return alert.days ? alert.days.split(',').map(Number).includes(isoDay) : true;
+}
 
 /** `date` injectable pour les tests (défaut : maintenant). */
 async function checkAlerts(date = new Date()) {
@@ -160,12 +209,10 @@ async function checkAlerts(date = new Date()) {
   if (await countActiveAlerts() === 0) return;
 
   // Heure / jour / date courants dans le fuseau des alertes (pas l'UTC serveur).
-  const { hhmm: now, isoDay, date: today } = nowInTz(date);
-  const due = (await getActiveAlerts()).filter(
-    (a) =>
-      inWindow(now, a.time_start, a.time_end) &&
-      (a.days ? a.days.split(',').map(Number).includes(isoDay) : true)
-  );
+  const now = nowInTz(date);
+  await deleteExpiredAlerts(now.date); // alertes ponctuelles des jours passés
+
+  const due = (await getActiveAlerts(now.date)).filter((a) => isDue(a, now));
   if (due.length === 0) return;
 
   let statusList;
@@ -175,42 +222,23 @@ async function checkAlerts(date = new Date()) {
     console.error('[push] fetch GBFS status', err.message);
     return;
   }
-
   const statusMap = Object.fromEntries(statusList.map((s) => [s.station_id, s]));
 
-  // Deep links officiels (sync quotidienne) — chargés une fois par cycle.
-  let rentalApps = {};
-  try {
-    rentalApps = await getRentalAppsMap();
-  } catch (err) {
-    console.error('[push] lecture rental_apps', err.message); // dégrade vers web seul
-  }
-
   for (const alert of due) {
-    const count = countForType(statusMap[alert.station_id], alert.bike_type);
-    const dejaNotifieAujourdhui = alert.last_notified_date === today;
+    const ev = evaluateAlert(alert, statusMap);
+    const notifiedToday = alert.last_notified_date === now.date;
 
-    // ── Condition 1 : première atteinte du seuil aujourd'hui (count <= seuil) ───
-    if (count <= alert.min_count && !dejaNotifieAujourdhui) {
-      await sendToUser(alert.user_id, buildPayload(alert, count, rentalApps));
-      await markAlertNotified(alert.id, today, count);
-      continue;
-    }
-
-    // ── Condition 2 : déjà notifié aujourd'hui, toujours au seuil ou en dessous ─
-    // Re-notifie si le nombre a changé depuis le dernier envoi, ou après un reset
-    // (last_notified_count remis à NULL suite à une remontée puis redescente).
-    if (count <= alert.min_count && dejaNotifieAujourdhui) {
-      if (alert.last_notified_count === null || count !== alert.last_notified_count) {
-        await sendToUser(alert.user_id, buildPayload(alert, count, rentalApps));
-        await setAlertNotifiedCount(alert.id, count);
+    if (ev.triggered) {
+      // Première atteinte du jour, ou état changé depuis la dernière notification
+      // (y compris après réarmement : last_notified_key remis à NULL).
+      if (!notifiedToday || alert.last_notified_key !== ev.key) {
+        await sendToUser(alert.user_id, buildPayload(alert, ev));
+        if (notifiedToday) await setAlertNotifiedKey(alert.id, ev.key);
+        else await markAlertNotified(alert.id, now.date, ev.key);
       }
-      continue;
-    }
-
-    // ── Reset : count repassé strictement au-dessus du seuil → prochaine descente ─
-    if (count > alert.min_count && dejaNotifieAujourdhui) {
-      await setAlertNotifiedCount(alert.id, null);
+    } else if (notifiedToday && alert.last_notified_key !== null) {
+      // Condition levée → réarmée : la prochaine atteinte re-notifie.
+      await setAlertNotifiedKey(alert.id, null);
     }
   }
 }
@@ -249,5 +277,5 @@ function stopPolling() {
 module.exports = {
   initPush, getVapidPublicKey, startPolling, stopPolling,
   // exposés pour les tests
-  checkAlerts, countForType, inWindow, nowInTz, buildPayload,
+  checkAlerts, countForType, docksOf, evaluateAlert, buildMessage, buildPayload, sendToUser, inWindow, nowInTz,
 };

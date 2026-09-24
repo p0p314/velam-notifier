@@ -173,8 +173,13 @@ async function removeSubscriptionById(id) {
 
 // ── Alerts ───────────────────────────────────────────────────────────────────
 
-async function getAlerts(userId) {
-  const { rows } = await dbc.query('SELECT * FROM alerts WHERE user_id = ? ORDER BY created_at DESC', [userId]);
+/** Alertes de l'utilisateur ; si `today` est fourni, masque les ponctuelles expirées. */
+async function getAlerts(userId, today = null) {
+  const { rows } = await dbc.query(
+    `SELECT * FROM alerts WHERE user_id = ? AND (valid_on IS NULL OR valid_on >= ?)
+     ORDER BY created_at DESC, id DESC`,
+    [userId, today ?? '0000-00-00']
+  );
   return rows;
 }
 
@@ -182,38 +187,43 @@ async function getAlert(userId, id) {
   return dbc.get('SELECT * FROM alerts WHERE id = ? AND user_id = ?', [id, userId]);
 }
 
+// Champs d'alerte modifiables par l'utilisateur (whitelist SQL).
+const ALERT_FIELDS = [
+  'station_id', 'station_name', 'bike_type', 'target', 'comparison', 'threshold',
+  'arrival_station_id', 'arrival_station_name', 'arrival_threshold', 'valid_on',
+  'time_start', 'time_end', 'days', 'active',
+];
+
 async function createAlert(userId, a) {
+  const row = {
+    bike_type: 'any', target: 'bikes', comparison: 'at_most', threshold: 1,
+    arrival_station_id: null, arrival_station_name: null, arrival_threshold: null,
+    valid_on: null, days: '1,2,3,4,5,6,7', active: 1,
+    ...a,
+  };
+  row.active = row.active ? 1 : 0;
+  const cols = ALERT_FIELDS.filter((k) => row[k] !== undefined);
   const { id } = await dbc.run(
-    `INSERT INTO alerts (user_id, station_id, station_name, bike_type, min_count, time_start, time_end, active, days)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [
-      userId,
-      a.station_id,
-      a.station_name,
-      a.bike_type,
-      a.min_count ?? 1,
-      a.time_start,
-      a.time_end,
-      a.active === undefined ? 1 : (a.active ? 1 : 0),
-      a.days ?? '1,2,3,4,5,6,7',
-    ]
+    `INSERT INTO alerts (user_id, ${cols.join(', ')}) VALUES (?, ${cols.map(() => '?').join(', ')})`,
+    [userId, ...cols.map((k) => row[k])]
   );
   return getAlert(userId, id);
 }
 
 /**
  * Met à jour les champs fournis d'une alerte de l'utilisateur.
+ * Toute modification réarme l'anti-spam (last_notified_*) : une alerte éditée
+ * (nouveau seuil, nouvel horaire…) doit pouvoir notifier à nouveau le jour même.
  * Retourne l'alerte mise à jour, ou null si introuvable / non possédée.
  */
 async function updateAlert(userId, id, fields) {
   const current = await getAlert(userId, id);
   if (!current) return null;
 
-  const allowed = ['station_id', 'station_name', 'bike_type', 'min_count', 'time_start', 'time_end', 'active', 'days'];
-  const keys = Object.keys(fields).filter((k) => allowed.includes(k));
+  const keys = Object.keys(fields).filter((k) => ALERT_FIELDS.includes(k));
   if (keys.length === 0) return current;
 
-  const setClause = keys.map((k) => `${k} = ?`).join(', ');
+  const setClause = [...keys.map((k) => `${k} = ?`), 'last_notified_date = NULL', 'last_notified_key = NULL'].join(', ');
   const params = keys.map((k) => (k === 'active' ? (fields[k] ? 1 : 0) : fields[k]));
   params.push(id, userId);
 
@@ -226,12 +236,14 @@ async function deleteAlert(userId, id) {
   return changes > 0;
 }
 
-async function markAlertNotified(id, date, count) {
-  await dbc.run('UPDATE alerts SET last_notified_date = ?, last_notified_count = ? WHERE id = ?', [date, count, id]);
+/** Première notification du jour : mémorise la date et l'état notifié. */
+async function markAlertNotified(id, date, key) {
+  await dbc.run('UPDATE alerts SET last_notified_date = ?, last_notified_key = ? WHERE id = ?', [date, key, id]);
 }
 
-async function setAlertNotifiedCount(id, count) {
-  await dbc.run('UPDATE alerts SET last_notified_count = ? WHERE id = ?', [count, id]);
+/** Met à jour l'état notifié (null = réarmée : la prochaine atteinte du seuil re-notifie). */
+async function setAlertNotifiedKey(id, key) {
+  await dbc.run('UPDATE alerts SET last_notified_key = ? WHERE id = ?', [key, id]);
 }
 
 async function countActiveAlerts() {
@@ -239,9 +251,38 @@ async function countActiveAlerts() {
   return Number(row?.n ?? 0);
 }
 
-async function getActiveAlerts() {
-  const { rows } = await dbc.query('SELECT * FROM alerts WHERE active = 1');
+/**
+ * Alertes actives à évaluer le jour `today` (YYYY-MM-DD, fuseau des alertes) :
+ * exclut les comptes en pause (alerts_paused_until >= today) et les alertes
+ * ponctuelles d'un autre jour.
+ */
+async function getActiveAlerts(today) {
+  const { rows } = await dbc.query(
+    `SELECT a.* FROM alerts a JOIN users u ON u.id = a.user_id
+     WHERE a.active = 1
+       AND (u.alerts_paused_until IS NULL OR u.alerts_paused_until < ?)
+       AND (a.valid_on IS NULL OR a.valid_on = ?)`,
+    [today, today]
+  );
   return rows;
+}
+
+/** Supprime les alertes ponctuelles dont le jour est passé. Renvoie le nombre supprimé. */
+async function deleteExpiredAlerts(today) {
+  const { changes } = await dbc.run('DELETE FROM alerts WHERE valid_on IS NOT NULL AND valid_on < ?', [today]);
+  return changes;
+}
+
+// ── Pause globale des alertes ────────────────────────────────────────────────
+
+async function getAlertsPause(userId) {
+  const row = await dbc.get('SELECT alerts_paused_until FROM users WHERE id = ?', [userId]);
+  return row?.alerts_paused_until ?? null;
+}
+
+/** `until` : YYYY-MM-DD (inclus) ou null pour reprendre. */
+async function setAlertsPause(userId, until) {
+  await dbc.run('UPDATE users SET alerts_paused_until = ? WHERE id = ?', [until, userId]);
 }
 
 module.exports = {
@@ -260,5 +301,6 @@ module.exports = {
   addSubscription, removeSubscriptionByEndpoint, getSubscriptionsByUser, removeSubscriptionById,
   // alerts
   getAlerts, getAlert, createAlert, updateAlert, deleteAlert,
-  markAlertNotified, setAlertNotifiedCount, countActiveAlerts, getActiveAlerts,
+  markAlertNotified, setAlertNotifiedKey, countActiveAlerts, getActiveAlerts, deleteExpiredAlerts,
+  getAlertsPause, setAlertsPause,
 };

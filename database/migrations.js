@@ -22,6 +22,71 @@ async function migratePushEndpoint(db) {
   await db.run('CREATE UNIQUE INDEX IF NOT EXISTS push_subscriptions_endpoint_uq ON push_subscriptions(endpoint)');
 }
 
+/** Colonnes existantes d'une table, quel que soit le dialecte. */
+async function columnsOf(db, table) {
+  if (db.dialect === 'postgres') {
+    const { rows } = await db.query(
+      'SELECT column_name FROM information_schema.columns WHERE table_schema = current_schema() AND table_name = ?',
+      [table]
+    );
+    return new Set(rows.map((r) => r.column_name));
+  }
+  const { rows } = await db.query(`PRAGMA table_info(${table})`);
+  return new Set(rows.map((r) => r.name));
+}
+
+/** Ajoute une colonne si absente (ALTER idempotent, portable SQLite / Postgres). */
+async function addColumn(db, table, name, definition) {
+  if ((await columnsOf(db, table)).has(name)) return false;
+  await db.run(`ALTER TABLE ${table} ADD COLUMN ${name} ${definition}`);
+  console.log(`[db] colonne ${table}.${name} ajoutée`);
+  return true;
+}
+
+/** Supprime une colonne héritée si présente (DROP COLUMN : SQLite ≥ 3.35 / Postgres). */
+async function dropColumn(db, table, name) {
+  if (!(await columnsOf(db, table)).has(name)) return;
+  try {
+    await db.run(`ALTER TABLE ${table} DROP COLUMN ${name}`);
+    console.log(`[db] colonne ${table}.${name} supprimée`);
+  } catch (err) {
+    console.warn(`[db] suppression de ${table}.${name} ignorée :`, err.message);
+  }
+}
+
+/**
+ * v1.1 — alertes généralisées :
+ *  - `target` (bikes|docks), `comparison` (at_most|at_least), `threshold` (remplace
+ *    min_count, dont le nom était trompeur), trajet (`arrival_*`), alerte ponctuelle
+ *    (`valid_on`), anti-spam générique (`last_notified_key` remplace last_notified_count) ;
+ *  - pause globale des alertes par utilisateur (`users.alerts_paused_until`).
+ * Idempotente : les données des colonnes historiques sont recopiées puis celles-ci supprimées.
+ */
+async function migrateAlertsV11(db) {
+  await addColumn(db, 'alerts', 'target', "TEXT NOT NULL DEFAULT 'bikes'");
+  await addColumn(db, 'alerts', 'comparison', "TEXT NOT NULL DEFAULT 'at_most'");
+  const newThreshold = await addColumn(db, 'alerts', 'threshold', 'INTEGER NOT NULL DEFAULT 1');
+  await addColumn(db, 'alerts', 'arrival_station_id', 'TEXT DEFAULT NULL');
+  await addColumn(db, 'alerts', 'arrival_station_name', 'TEXT DEFAULT NULL');
+  await addColumn(db, 'alerts', 'arrival_threshold', 'INTEGER DEFAULT NULL');
+  await addColumn(db, 'alerts', 'valid_on', 'TEXT DEFAULT NULL');
+  const newKey = await addColumn(db, 'alerts', 'last_notified_key', 'TEXT DEFAULT NULL');
+  await addColumn(db, 'users', 'alerts_paused_until', 'TEXT DEFAULT NULL');
+
+  const cols = await columnsOf(db, 'alerts');
+  if (cols.has('min_count')) {
+    if (newThreshold) await db.run('UPDATE alerts SET threshold = min_count');
+    await dropColumn(db, 'alerts', 'min_count');
+  }
+  if (cols.has('last_notified_count')) {
+    if (newKey) {
+      await db.run(`UPDATE alerts SET last_notified_key = CAST(last_notified_count AS TEXT)
+                    WHERE last_notified_count IS NOT NULL`);
+    }
+    await dropColumn(db, 'alerts', 'last_notified_count');
+  }
+}
+
 async function runMigrations(db) {
   const isPostgres = !!process.env.DATABASE_URL;
 
@@ -64,19 +129,24 @@ async function runMigrations(db) {
       station_id         TEXT NOT NULL,
       station_name       TEXT NOT NULL,
       bike_type          TEXT NOT NULL CHECK(bike_type IN ('mechanical', 'ebike', 'any')),
-      min_count          INTEGER NOT NULL DEFAULT 1,
+      target             TEXT NOT NULL DEFAULT 'bikes',
+      comparison         TEXT NOT NULL DEFAULT 'at_most',
+      threshold          INTEGER NOT NULL DEFAULT 1,
+      arrival_station_id   TEXT DEFAULT NULL,
+      arrival_station_name TEXT DEFAULT NULL,
+      arrival_threshold    INTEGER DEFAULT NULL,
+      valid_on           TEXT DEFAULT NULL,
       time_start         TEXT NOT NULL,
       time_end           TEXT NOT NULL,
       days               TEXT NOT NULL DEFAULT '1,2,3,4,5,6,7',
       active              INTEGER NOT NULL DEFAULT 1,
       last_notified_date  TEXT DEFAULT NULL,
-      last_notified_count INTEGER DEFAULT NULL,
+      last_notified_key   TEXT DEFAULT NULL,
       created_at          TIMESTAMPTZ DEFAULT NOW()
     )`);
-    // Migration idempotente pour les bases existantes (Postgres supporte IF NOT EXISTS).
-    await db.run('ALTER TABLE alerts ADD COLUMN IF NOT EXISTS last_notified_count INTEGER DEFAULT NULL');
     await db.run('ALTER TABLE push_subscriptions ADD COLUMN IF NOT EXISTS endpoint TEXT');
     await migratePushEndpoint(db);
+    await migrateAlertsV11(db);
     await db.run(`CREATE TABLE IF NOT EXISTS rental_apps (
       platform      TEXT PRIMARY KEY,
       name          TEXT NOT NULL,
@@ -127,11 +197,19 @@ async function runMigrations(db) {
     station_id   TEXT NOT NULL,
     station_name TEXT NOT NULL,
     bike_type    TEXT NOT NULL CHECK(bike_type IN ('mechanical', 'ebike', 'any')),
-    min_count    INTEGER NOT NULL DEFAULT 1,
+    target       TEXT NOT NULL DEFAULT 'bikes',
+    comparison   TEXT NOT NULL DEFAULT 'at_most',
+    threshold    INTEGER NOT NULL DEFAULT 1,
+    arrival_station_id   TEXT DEFAULT NULL,
+    arrival_station_name TEXT DEFAULT NULL,
+    arrival_threshold    INTEGER DEFAULT NULL,
+    valid_on     TEXT DEFAULT NULL,
     time_start   TEXT NOT NULL,
     time_end     TEXT NOT NULL,
     active       INTEGER NOT NULL DEFAULT 1,
     days         TEXT NOT NULL DEFAULT '1,2,3,4,5,6,7',
+    last_notified_date TEXT DEFAULT NULL,
+    last_notified_key  TEXT DEFAULT NULL,
     created_at   DATETIME DEFAULT CURRENT_TIMESTAMP
   )`);
 
@@ -144,44 +222,14 @@ async function runMigrations(db) {
   )`);
 
   // Migrations incrémentales SQLite (préservent les bases de dev existantes).
-  const { rows: cols } = await db.query('PRAGMA table_info(alerts)');
-  const hasColumn = (name) => cols.some((c) => c.name === name);
-
-  if (!hasColumn('last_notified_date')) {
-    await db.run('ALTER TABLE alerts ADD COLUMN last_notified_date TEXT DEFAULT NULL');
-    console.log('[db] colonne alerts.last_notified_date ajoutée');
-  }
-  if (!hasColumn('days')) {
-    await db.run("ALTER TABLE alerts ADD COLUMN days TEXT NOT NULL DEFAULT '1,2,3,4,5,6,7'");
-    console.log('[db] colonne alerts.days ajoutée');
-  }
-  if (!hasColumn('last_notified_count')) {
-    await db.run('ALTER TABLE alerts ADD COLUMN last_notified_count INTEGER DEFAULT NULL');
-    console.log('[db] colonne alerts.last_notified_count ajoutée');
-  }
-  const { rows: subCols } = await db.query('PRAGMA table_info(push_subscriptions)');
-  if (!subCols.some((c) => c.name === 'endpoint')) {
-    await db.run('ALTER TABLE push_subscriptions ADD COLUMN endpoint TEXT');
-    console.log('[db] colonne push_subscriptions.endpoint ajoutée');
-  }
+  await addColumn(db, 'alerts', 'last_notified_date', 'TEXT DEFAULT NULL');
+  await addColumn(db, 'alerts', 'days', "TEXT NOT NULL DEFAULT '1,2,3,4,5,6,7'");
+  await dropColumn(db, 'alerts', 'notified');
+  await addColumn(db, 'push_subscriptions', 'endpoint', 'TEXT');
   await migratePushEndpoint(db);
-
-  if (hasColumn('notified')) {
-    const { rows } = await db.query('SELECT sqlite_version() AS v');
-    const [maj, min] = String(rows[0].v).split('.').map(Number);
-    if (maj > 3 || (maj === 3 && min >= 35)) {
-      try {
-        await db.run('ALTER TABLE alerts DROP COLUMN notified');
-        console.log('[db] colonne alerts.notified supprimée');
-      } catch (err) {
-        console.warn('[db] suppression de alerts.notified ignorée :', err.message);
-      }
-    } else {
-      console.warn('[db] DROP COLUMN non supporté (SQLite < 3.35) — alerts.notified conservée');
-    }
-  }
+  await migrateAlertsV11(db);
 
   console.log('[db] migrations SQLite appliquées');
 }
 
-module.exports = { runMigrations };
+module.exports = { runMigrations, columnsOf };

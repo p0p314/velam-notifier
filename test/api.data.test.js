@@ -40,14 +40,16 @@ describe('favoris', () => {
 describe('alertes', () => {
   const body = {
     station_id: '1', station_name: 'Gare', bike_type: 'mechanical',
-    min_count: 2, time_start: '07:30', time_end: '09:00', days: '1,2,3,4,5',
+    threshold: 2, time_start: '07:30', time_end: '09:00', days: '1,2,3,4,5',
   };
 
   test('création puis lecture', async () => {
     const { token } = await registerUser(api);
     const created = await api.post('/api/alerts', { token, body });
     assert.equal(created.status, 201);
-    assert.equal(created.body.alert.min_count, 2);
+    assert.equal(created.body.alert.threshold, 2);
+    assert.equal(created.body.alert.target, 'bikes');
+    assert.equal(created.body.alert.comparison, 'at_most');
     assert.equal(created.body.alert.active, 1);
     assert.equal(created.body.alert.days, '1,2,3,4,5');
 
@@ -66,10 +68,10 @@ describe('alertes', () => {
   test('mise à jour partielle et désactivation', async () => {
     const { token } = await registerUser(api);
     const { body: { alert } } = await api.post('/api/alerts', { token, body });
-    const res = await api.patch(`/api/alerts/${alert.id}`, { token, body: { active: false, min_count: 5 } });
+    const res = await api.patch(`/api/alerts/${alert.id}`, { token, body: { active: false, threshold: 5 } });
     assert.equal(res.status, 200);
     assert.equal(res.body.alert.active, 0);
-    assert.equal(res.body.alert.min_count, 5);
+    assert.equal(res.body.alert.threshold, 5);
     assert.equal(res.body.alert.time_start, '07:30'); // inchangé
   });
 
@@ -99,5 +101,81 @@ describe('alertes', () => {
     assert.equal((await api.patch(`/api/alerts/${alert.id}`, { token: b.token, body: { active: false } })).status, 404);
     assert.equal((await api.delete(`/api/alerts/${alert.id}`, { token: b.token })).status, 404);
     assert.deepEqual((await api.get('/api/alerts', { token: b.token })).body.alerts, []);
+  });
+});
+
+describe('alertes v1.1', () => {
+  const body = {
+    station_id: '1', station_name: 'Gare', bike_type: 'any',
+    threshold: 1, time_start: '07:30', time_end: '09:00',
+  };
+  const { nowInTz, addDays } = require('../time');
+  const today = () => nowInTz().date;
+
+  test('places, « au moins N » et trajet enregistrés', async () => {
+    const { token } = await registerUser(api);
+    const docks = await api.post('/api/alerts', { token, body: { ...body, target: 'docks', comparison: 'at_least', threshold: 3 } });
+    assert.equal(docks.status, 201);
+    assert.equal(docks.body.alert.target, 'docks');
+    assert.equal(docks.body.alert.comparison, 'at_least');
+
+    const trip = await api.post('/api/alerts', { token, body: { ...body, arrival_station_id: '2', arrival_station_name: 'Zoo' } });
+    assert.equal(trip.status, 201);
+    assert.equal(trip.body.alert.arrival_station_name, 'Zoo');
+    assert.equal(trip.body.alert.arrival_threshold, 1);
+  });
+
+  test('trajet incohérent → 400', async () => {
+    const { token } = await registerUser(api);
+    const res = await api.post('/api/alerts', { token, body: { ...body, target: 'docks', arrival_station_id: '2', arrival_station_name: 'Zoo' } });
+    assert.equal(res.status, 400);
+  });
+
+  test('ponctuelle : du jour acceptée, passée refusée, expirée masquée', async () => {
+    const { token, user } = await registerUser(api);
+    assert.equal((await api.post('/api/alerts', { token, body: { ...body, valid_on: today() } })).status, 201);
+    assert.equal((await api.post('/api/alerts', { token, body: { ...body, valid_on: addDays(today(), -1) } })).status, 400);
+
+    // Une ponctuelle d'hier encore en base (serveur endormi) n'apparaît plus.
+    const { dbc } = require('./helpers');
+    await dbc.run(`INSERT INTO alerts (user_id, station_id, station_name, bike_type, time_start, time_end, valid_on)
+                   VALUES (?, '9', 'Vieille', 'any', '08:00', '09:00', ?)`, [user.id, addDays(today(), -1)]);
+    const list = await api.get('/api/alerts', { token });
+    assert.deepEqual(list.body.alerts.map((a) => a.station_name), ['Gare']);
+  });
+
+  test('PATCH : un changement de mode incohérent est refusé', async () => {
+    const { token } = await registerUser(api);
+    const { body: { alert } } = await api.post('/api/alerts', { token, body: { ...body, threshold: 0 } });
+    const res = await api.patch(`/api/alerts/${alert.id}`, { token, body: { comparison: 'at_least' } });
+    assert.equal(res.status, 400);
+  });
+
+  test('pause : poser, lire, reprendre', async () => {
+    const { token } = await registerUser(api);
+    assert.equal((await api.get('/api/alerts', { token })).body.paused_until, null);
+
+    const until = addDays(today(), 7);
+    const put = await api.put('/api/alerts/pause', { token, body: { until } });
+    assert.equal(put.status, 200);
+    assert.equal((await api.get('/api/alerts', { token })).body.paused_until, until);
+
+    await api.put('/api/alerts/pause', { token, body: { until: null } });
+    assert.equal((await api.get('/api/alerts', { token })).body.paused_until, null);
+  });
+
+  test('pause : dates invalides → 400, sans compte → 401', async () => {
+    const { token } = await registerUser(api);
+    for (const until of [addDays(today(), -1), addDays(today(), 400), '2025-13-01', 'demain', 12]) {
+      assert.equal((await api.put('/api/alerts/pause', { token, body: { until } })).status, 400, String(until));
+    }
+    assert.equal((await api.put('/api/alerts/pause', { body: { until: null } })).status, 401);
+  });
+
+  test('pause échue → non renvoyée', async () => {
+    const { token, user } = await registerUser(api);
+    const { setAlertsPause } = require('../db');
+    await setAlertsPause(user.id, addDays(today(), -1));
+    assert.equal((await api.get('/api/alerts', { token })).body.paused_until, null);
   });
 });
