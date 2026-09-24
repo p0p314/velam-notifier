@@ -108,8 +108,10 @@ export function useFavorites() {
     try {
       const data = await api("/api/favorites");
       setFavorites(data.favorites);
-    } catch {
-      setFavorites([]);
+    } catch (e) {
+      // Ne pas vider la liste sur une erreur passagère (réveil serveur, réseau) :
+      // on garde l'état connu. Un 401 est géré globalement (déconnexion).
+      console.warn("[favorites]", e.message);
     } finally {
       setLoading(false);
     }

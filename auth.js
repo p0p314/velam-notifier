@@ -3,7 +3,9 @@ const jwt    = require('jsonwebtoken');
 const crypto = require('crypto');
 const { getConfig, setConfig } = require('./db');
 
-const TOKEN_TTL = '7d';
+// Session glissante : le client renouvelle son jeton à chaque ouverture de l'app
+// (GET /api/auth/me). Seule une inactivité > TOKEN_TTL impose de se reconnecter.
+const TOKEN_TTL = process.env.JWT_TTL || '30d';
 
 let _secret = null;
 

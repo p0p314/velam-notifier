@@ -1,5 +1,6 @@
-import { createContext, useContext, useState, useCallback } from "react";
-import { api, getToken, setToken, clearToken, getStoredUser, setStoredUser } from "./api";
+import { createContext, useContext, useState, useCallback, useEffect } from "react";
+import { api, getToken, setToken, clearToken, getStoredUser, setStoredUser, AUTH_EXPIRED_EVENT } from "./api";
+import { syncPush } from "./push";
 
 const AuthContext = createContext(null);
 
@@ -31,6 +32,23 @@ export function AuthProvider({ children }) {
     setTok(null);
     setUser(null);
   }, []);
+
+  // Jeton rejeté par le serveur (api() a déjà purgé le stockage) → état déconnecté,
+  // <Protected> redirige vers /login au lieu d'afficher des listes vides.
+  useEffect(() => {
+    const onExpired = () => { setTok(null); setUser(null); };
+    window.addEventListener(AUTH_EXPIRED_EVENT, onExpired);
+    return () => window.removeEventListener(AUTH_EXPIRED_EVENT, onExpired);
+  }, []);
+
+  // Au démarrage : renouvelle le jeton (session glissante) puis resynchronise
+  // silencieusement la subscription push — sans jamais redemander la permission.
+  useEffect(() => {
+    if (!getToken()) return;
+    api("/api/auth/me")
+      .then((data) => { persist(data); syncPush(); })
+      .catch(() => { /* 401 → géré par AUTH_EXPIRED_EVENT ; réseau → on garde la session */ });
+  }, [persist]);
 
   const value = { user, token, login, register, logout, isAuthenticated: !!token };
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

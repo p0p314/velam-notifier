@@ -83,7 +83,8 @@ Modules CommonJS, séparation nette des responsabilités :
 - **db.js** — **dépôt de données** (accès domaine). N'utilise **que** `dbc`, jamais un driver
   directement. Regroupe le SQL de tous les domaines : `stations`, `config`, `users`,
   `favorites`, `push_subscriptions`, `alerts`, `rental_apps`. Toutes les fonctions sont `async`.
-- **auth.js** — bcrypt + JWT (`{ id, username }`, expiration 7 j, HS256). Secret résolu une
+- **auth.js** — bcrypt + JWT (`{ id, username }`, expiration `JWT_TTL` défaut 30 j, HS256 ;
+  session glissante via `GET /api/auth/me` qui renvoie un jeton neuf au démarrage du client). Secret résolu une
   fois au boot (`JWT_SECRET` env, sinon aléatoire persisté). `requireAuth` lit
   `Authorization: Bearer`, pose `req.user`, sinon 401.
 - **push.js** — clés VAPID (env ou générées), envoi `web-push`, et la **boucle d'alerte**
@@ -159,13 +160,16 @@ est lazy-loadée** (`React.lazy`) pour garder mapbox-gl hors du bundle principal
 différenciée : mobile → `/favoris`, desktop → `/stations`.
 
 - **api.js** — client `api(path, {method, body, auth})` unique : injecte le Bearer, normalise
-  les erreurs, gère token/user en `localStorage`. Base = `VITE_API_URL`.
+  les erreurs, gère token/user en `localStorage`. Base = `VITE_API_URL`. Rejoue les GET sur
+  erreur réseau / 502-504 (réveil Render) ; un 401 authentifié purge le jeton et émet
+  `auth:expired` (écouté par `AuthProvider` → retour `/login`).
 - **auth.jsx** — `AuthContext` / `useAuth` (login/register/logout, `isAuthenticated`).
 - **useTheme.jsx** — thème clair/sombre via `data-theme` sur `<html>`, persisté.
 - **hooks.js** — `useStations` (poll 60 s), `useFavorites` (liste + toggle optimiste),
   `useGeolocation`, `useIsMobile`, helpers `distanceKm` / `fmtDistance` (tri par proximité).
-- **push.js** + **public/sw.js** — `PushManager` natif ; `registerPush()` (après login) demande
-  la permission, souscrit, POST la subscription. Le SW gère `push` + `notificationclick`.
+- **push.js** + **public/sw.js** — `PushManager` natif. `syncPush()` (démarrage + login) est
+  **silencieux** : ne fait rien sans permission accordée, resouscrit si la clé VAPID a changé.
+  `enablePush()` demande la permission, **uniquement sur clic** (bandeau de la page Alertes). Le SW gère `push` + `notificationclick`.
 - **usePwaInstallPrompt.js** + **components/PwaInstall*** — modal d'installation **réservée au
   mobile** (jamais desktop), réapparaît le lendemain si ignorée.
 - **pages/** — `Login`, `Stations` (recherche/tri/filtre + détail), `Favorites` (swipe-to-delete),

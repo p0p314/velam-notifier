@@ -1,8 +1,8 @@
 // Routes d'authentification (inscription / connexion) + rate limiting anti-bruteforce.
 const express   = require('express');
 const rateLimit = require('express-rate-limit');
-const { createUser, getUserByUsername } = require('../db');
-const { hashPassword, verifyPassword, signToken } = require('../auth');
+const { createUser, getUserByUsername, getUserById } = require('../db');
+const { hashPassword, verifyPassword, signToken, requireAuth } = require('../auth');
 
 const router = express.Router();
 
@@ -58,6 +58,22 @@ router.post('/api/auth/login', loginLimiter, async (req, res) => {
     res.json({ ok: true, token, user: { id: user.id, username: user.username } });
   } catch (err) {
     console.error('[POST /api/auth/login]', err.message);
+    res.status(500).json({ ok: false, error: 'Erreur serveur' });
+  }
+});
+
+/**
+ * GET /api/auth/me — valide la session et renvoie un jeton neuf (session glissante).
+ * Appelé au démarrage de l'app : tant que l'utilisateur ouvre l'app au moins une
+ * fois par TOKEN_TTL, il n'a jamais à se reconnecter. 401 si le compte n'existe plus.
+ */
+router.get('/api/auth/me', requireAuth, async (req, res) => {
+  try {
+    const user = await getUserById(req.user.id);
+    if (!user) return res.status(401).json({ ok: false, error: 'Compte introuvable' });
+    res.json({ ok: true, token: signToken(user), user: { id: user.id, username: user.username } });
+  } catch (err) {
+    console.error('[GET /api/auth/me]', err.message);
     res.status(500).json({ ok: false, error: 'Erreur serveur' });
   }
 });
