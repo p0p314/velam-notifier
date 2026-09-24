@@ -5,6 +5,11 @@ import { isOnboardingDone } from "./lib/onboarding";
 const KEY = "pwa-modal-dismissed";
 const todayStr = () => new Date().toISOString().slice(0, 10);
 
+/** Considère la modale comme ignorée aujourd'hui (réapparaît demain). */
+export function markPwaDismissedToday() {
+  try { localStorage.setItem(KEY, todayStr()); } catch { /* facultatif */ }
+}
+
 /**
  * Pilote l'affichage du modal d'installation PWA.
  * - réservé au mobile : sur desktop, aucun trigger (auto ni manuel) ne l'ouvre,

@@ -8,6 +8,7 @@ import { usePwaInstall } from "./PwaInstallContext";
 import { useFavorites } from "../hooks";
 import { pushPermission, enablePush } from "../push";
 import { isOnboardingDone, markOnboardingDone, onboardingSteps } from "../lib/onboarding";
+import { markPwaDismissedToday } from "../usePwaInstallPrompt";
 
 const TITLES = {
   install: "Installez l'app",
@@ -43,7 +44,13 @@ function OnboardingFlow() {
 
   if (!steps?.length || isOnboardingDone()) return null;
 
-  const finish = () => { markOnboardingDone(); setSteps([]); };
+  const finish = () => {
+    markOnboardingDone();
+    // Les instructions d'installation viennent d'être montrées : pas de modale
+    // d'installation au prochain chargement aujourd'hui (elle revient demain).
+    if (steps.includes("install")) markPwaDismissedToday();
+    setSteps([]);
+  };
   const next = () => (index + 1 < steps.length ? setIndex(index + 1) : finish());
   const step = steps[index];
   const last = index === steps.length - 1;
@@ -55,7 +62,7 @@ function OnboardingFlow() {
   const browse = () => { finish(); navigate("/stations"); };
 
   return (
-    <BottomSheet open onClose={finish} heightVh={75} labelledBy="onboarding-title">
+    <BottomSheet open onClose={finish} heightVh={62} labelledBy="onboarding-title">
       <div className="onboarding">
         <div className="onboarding-head">
           <span className="brand-logo"><Logo /></span>

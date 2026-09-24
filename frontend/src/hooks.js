@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { api } from "./api";
 import { saveCache, loadCache } from "./lib/offlineCache";
 
@@ -127,12 +127,19 @@ export function useStations() {
   return { stations, loading, error: stations.length ? null : error, stale, lastUpd, reload };
 }
 
-/** Favoris de l'utilisateur connecté + toggle optimiste. Dernière liste gardée hors ligne. */
+/**
+ * Favoris de l'utilisateur connecté + actions (ajout/retrait, renommage, ordre).
+ * Dernière liste gardée hors ligne. Les modifications sont envoyées une par une
+ * (file) et seule la réponse de la dernière est appliquée : deux actions rapides
+ * (renommer puis déplacer) ne peuvent pas laisser l'affichage sur un état périmé.
+ */
 export function useFavorites() {
   const [cached] = useState(() => loadCache("favorites"));
   const [favorites, setFavorites] = useState(() => cached?.data ?? []);
   const [loading,   setLoading]   = useState(!cached);
   const [stale,     setStale]     = useState(false);
+  const queue   = useRef(Promise.resolve());
+  const pending = useRef(0);
 
   const apply = useCallback((list) => {
     setFavorites(list);
@@ -159,40 +166,47 @@ export function useFavorites() {
     return () => window.removeEventListener("online", reload);
   }, [reload]);
 
+  /** Met en file une modification ; `request` renvoie la liste à jour du serveur. */
+  const mutate = useCallback((request) => {
+    pending.current++;
+    const run = async () => {
+      try {
+        const list = await request();
+        if (pending.current === 1) apply(list); // une plus récente suit : on l'attend
+      } catch (e) {
+        console.warn("[favorites]", e.message);
+        if (pending.current === 1) reload();
+      } finally {
+        pending.current--;
+      }
+    };
+    queue.current = queue.current.then(run);
+    return queue.current;
+  }, [apply, reload]);
+
   const favIds = new Set(favorites.map((f) => f.station_id));
 
-  const toggleFav = useCallback(async (station) => {
+  const toggleFav = useCallback((station) => {
     const id = station.station_id;
     const isFav = favorites.some((f) => f.station_id === id);
-    try {
-      const data = isFav
-        ? await api(`/api/favorites/${encodeURIComponent(id)}`, { method: "DELETE" })
-        : await api("/api/favorites", { method: "POST", body: { station_id: id, station_name: station.name } });
-      apply(data.favorites);
-    } catch (e) {
-      console.warn("[favorites]", e.message);
-    }
-  }, [favorites, apply]);
+    return mutate(async () => (isFav
+      ? await api(`/api/favorites/${encodeURIComponent(id)}`, { method: "DELETE" })
+      : await api("/api/favorites", { method: "POST", body: { station_id: id, station_name: station.name } })
+    ).favorites);
+  }, [favorites, mutate]);
 
   /** Nom personnalisé (vide = nom de la station). */
-  const rename = useCallback(async (stationId, label) => {
-    try {
-      apply((await api(`/api/favorites/${encodeURIComponent(stationId)}`, { method: "PATCH", body: { label } })).favorites);
-    } catch (e) {
-      console.warn("[favorites]", e.message);
-    }
-  }, [apply]);
+  const rename = useCallback((stationId, label) => mutate(async () =>
+    (await api(`/api/favorites/${encodeURIComponent(stationId)}`, { method: "PATCH", body: { label } })).favorites
+  ), [mutate]);
 
-  /** Nouvel ordre (optimiste : affiché tout de suite, resynchronisé par la réponse). */
-  const reorder = useCallback(async (stationIds) => {
+  /** Nouvel ordre (optimiste : affiché tout de suite, confirmé par le serveur). */
+  const reorder = useCallback((stationIds) => {
     setFavorites((list) => stationIds.map((id) => list.find((f) => f.station_id === id)).filter(Boolean));
-    try {
-      apply((await api("/api/favorites/order", { method: "PUT", body: { station_ids: stationIds } })).favorites);
-    } catch (e) {
-      console.warn("[favorites]", e.message);
-      reload();
-    }
-  }, [apply, reload]);
+    return mutate(async () =>
+      (await api("/api/favorites/order", { method: "PUT", body: { station_ids: stationIds } })).favorites
+    );
+  }, [mutate]);
 
   return { favorites, favIds, toggleFav, rename, reorder, loading, stale, reload };
 }

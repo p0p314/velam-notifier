@@ -75,11 +75,12 @@ describe("<Onboarding />", () => {
     expect(isOnboardingDone()).toBe(true);
   });
 
-  test("« Passer » clôt définitivement", async () => {
+  test("« Passer » clôt définitivement, et reporte la modale d'installation à demain", async () => {
     renderIt();
     fireEvent.click(await screen.findByRole("button", { name: "Passer" }));
     expect(screen.queryByText("Installez l'app")).toBeNull();
     expect(isOnboardingDone()).toBe(true);
+    expect(localStorage.getItem("pwa-modal-dismissed")).toBe(new Date().toISOString().slice(0, 10));
   });
 
   test("utilisateur déjà équipé : rien ne s'affiche, et c'est mémorisé", async () => {

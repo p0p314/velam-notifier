@@ -146,7 +146,11 @@ async function getFavorites(userId) {
   return rows;
 }
 
-/** Ajoute en fin de liste ; un favori existant garde son nom et sa place. */
+/**
+ * Ajoute un favori. Tant que l'utilisateur n'a jamais ordonné ses favoris, tous
+ * restent sans position (ordre alphabétique) ; ensuite, un nouveau favori va en
+ * fin de liste. Un favori existant garde son nom personnalisé et sa place.
+ */
 async function addFavorite(userId, stationId, stationName) {
   const row = await dbc.get('SELECT MAX(sort_order) AS m FROM favorites WHERE user_id = ?', [userId]);
   const next = row?.m == null ? null : Number(row.m) + 1;
