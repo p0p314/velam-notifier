@@ -27,6 +27,7 @@ npm install
 npm start          # node server.js — écoute sur PORT (défaut 3001)
 npm run dev        # node --watch server.js — redémarrage auto
 npm run build      # installe deps racine + frontend, puis build Vite → frontend/dist
+npm test           # tests backend (node:test) — SQLite en mémoire par défaut
 ```
 
 Frontend (`frontend/` — projet npm séparé, ESM/Vite, distinct du backend CommonJS) :
@@ -37,11 +38,27 @@ npm install
 npm run dev        # Vite → http://localhost:5173
 npm run build      # build de prod → frontend/dist
 npm run preview    # prévisualise le build
+npm test           # tests frontend (Vitest + jsdom + Testing Library)
 ```
 
 En dev, lancer les deux : backend sur 3001, frontend sur 5173 (proxy via `VITE_API_URL`).
 En prod, un seul process : Express sert `frontend/dist` en statique **après** les routes `/api`
-(fallback SPA vers `index.html`). **Aucun test ni linter** n'est configuré à ce jour.
+(fallback SPA vers `index.html`). Aucun linter configuré.
+
+## Tests & CI
+
+- **Backend** (`test/*.test.js`, `node:test`, zéro dépendance) : `test/helpers.js` doit être
+  importé **en premier** (fixe l'env avant le chargement des modules). Base SQLite `:memory:`
+  par défaut ; avec `DATABASE_URL` (+ `DATABASE_SSL=false` en local) la même suite tourne sur
+  un vrai PostgreSQL, vidé par `resetDb()`. Le flux GBFS est simulé en interceptant `fetch`
+  (objet `gbfs` des helpers) et `web-push.sendNotification` est remplacé dans
+  `alert-loop.test.js`. L'app est importée depuis `app.js` (sans boot ni polling).
+- **Frontend** (`frontend/src/__tests__/`, Vitest) : `setup.js` réinitialise `localStorage`,
+  `navigator.onLine` (`setOnline()`) et un `fetch` mocké à chaque test.
+- **CI** : `.github/workflows/tests.yml` sur chaque PR vers `develop`/`main` — 3 jobs :
+  backend SQLite, backend PostgreSQL 16 (service), frontend (tests + build). Le blocage du
+  merge se configure dans la protection de branche GitHub (status checks requis).
+- Toute nouvelle route / règle métier doit venir avec son test.
 
 ## Variables d'environnement
 
@@ -56,6 +73,10 @@ Backend (voir `render.yaml`) :
 - `APP_URL` — base `https://` des liens de notification (page `/redirect`).
 - `CORS_ORIGIN` — origines autorisées en dev (CSV) ; `FRONTEND_URL` en prod.
 - `ALERT_TZ` — fuseau d'évaluation des alertes (défaut `Europe/Paris`).
+- `JWT_TTL` — durée de vie du jeton (défaut `30d`).
+- `DATABASE_SSL=false` — désactive SSL vers Postgres (Postgres local / CI uniquement).
+- `SQLITE_PATH` — fichier SQLite (défaut `data/velam.db` ; `:memory:` pour les tests).
+- `RATE_LIMIT_DISABLED=1` — **tests uniquement** : coupe le rate-limit login/register.
 
 Frontend (préfixe `VITE_`, injectées au build) :
 
@@ -83,7 +104,8 @@ Modules CommonJS, séparation nette des responsabilités :
 - **db.js** — **dépôt de données** (accès domaine). N'utilise **que** `dbc`, jamais un driver
   directement. Regroupe le SQL de tous les domaines : `stations`, `config`, `users`,
   `favorites`, `push_subscriptions`, `alerts`, `rental_apps`. Toutes les fonctions sont `async`.
-- **auth.js** — bcrypt + JWT (`{ id, username }`, expiration 7 j, HS256). Secret résolu une
+- **auth.js** — bcrypt + JWT (`{ id, username }`, expiration `JWT_TTL` défaut 30 j, HS256 ;
+  session glissante via `GET /api/auth/me` qui renvoie un jeton neuf au démarrage du client). Secret résolu une
   fois au boot (`JWT_SECRET` env, sinon aléatoire persisté). `requireAuth` lit
   `Authorization: Bearer`, pose `req.user`, sinon 401.
 - **push.js** — clés VAPID (env ou générées), envoi `web-push`, et la **boucle d'alerte**
@@ -91,10 +113,12 @@ Modules CommonJS, séparation nette des responsabilités :
   Construit l'URL de notification via la page `/redirect` (deep link + stores).
 - **rentalApps.js** — synchronise les `rental_apps` (deep links officiels Vélam) depuis
   `system_information`. Données quasi statiques → **sync quotidienne**, jamais par requête.
-- **server.js** — assemble le tout : middlewares de sécurité, **toutes** les routes,
-  validation des payloads (`validateAlertPayload`, regex `HHMM`), fusion
-  (`mergeWithStatus`, `extractCount`), et service du build SPA en prod. Boot séquentiel :
-  `initialize()` → `initAuth()` → `initPush()` → `startPolling()` → `listen`.
+- **app.js** — construit l'app Express sans la démarrer (importable par les tests) :
+  middlewares de sécurité, montage des routers `routes/` (un par domaine : validation
+  `validateAlertPayload` dans `routes/alerts.js`, fusion `mergeWithStatus` dans
+  `routes/stations.js`…), service du build SPA en prod.
+- **server.js** — boot séquentiel : `initialize()` → `initAuth()` → `initPush()` →
+  `startPolling()` → `listen`.
 
 ### Invariant clé du flux de données
 
@@ -106,12 +130,13 @@ seulement pour le référentiel lent des stations.
 - `GET /api/stations` — auto-peuple la base au premier appel si vide, puis fusionne l'info en
   cache avec un fetch statut live. Le détail par type vient de `vehicle_types_available`
   (`mechanical` / `electrical`).
-- `POST /api/stations/refresh` — force le rechargement du référentiel statique.
+- `POST /api/stations/refresh` — force le rechargement du référentiel statique (**protégée**).
 - `GET /api/health` — nb de stations, uptime, version Node. `GET /health` — sonde anti-veille.
 
 Erreurs upstream/proxy → **HTTP 502** `{ ok:false, error }`. Toutes les réponses portent une
 enveloppe `ok` ; le client `api()` lève sur `!res.ok || data.ok === false`. Routes protégées
-(`/api/favorites`, `/api/alerts`, `/api/push/subscribe`) : Bearer requis. Publiques : auth,
+(`/api/favorites`, `/api/alerts`, `/api/push/subscribe|unsubscribe`, `/api/auth/me`,
+`POST /api/stations/refresh`) : Bearer requis. Publiques : login/register,
 `GET /api/stations`, `GET /api/rental-apps`, `GET /api/push/vapid-public-key`.
 
 ### Invariant de la boucle d'alerte
@@ -128,6 +153,10 @@ Anti-spam par jour : notifie une fois quand le seuil est atteint (`last_notified
 uniquement si le compte **change** (`last_notified_count`), et se réarme quand le compte
 repasse strictement au-dessus du seuil. Envoi à **toutes** les subscriptions de l'utilisateur ;
 les réponses 404/410 suppriment la subscription morte.
+
+Subscriptions : **une ligne par appareil** (`endpoint` unique). Un `subscribe` d'un appareil
+déjà connu le **réattribue** au compte courant (téléphone partagé) ; la déconnexion appelle
+`POST /api/push/unsubscribe` pour détacher l'appareil du compte.
 
 > ⚠️ Dette de nommage : `min_count` désigne en réalité un **plafond** (« notifier si au plus N
 > vélos »). Le nom est trompeur — à considérer lors d'une refonte.
@@ -159,19 +188,29 @@ est lazy-loadée** (`React.lazy`) pour garder mapbox-gl hors du bundle principal
 différenciée : mobile → `/favoris`, desktop → `/stations`.
 
 - **api.js** — client `api(path, {method, body, auth})` unique : injecte le Bearer, normalise
-  les erreurs, gère token/user en `localStorage`. Base = `VITE_API_URL`.
-- **auth.jsx** — `AuthContext` / `useAuth` (login/register/logout, `isAuthenticated`).
+  les erreurs, gère token/user en `localStorage`. Base = `VITE_API_URL`. Rejoue les GET sur
+  erreur réseau / 502-504 (réveil Render) ; un 401 authentifié purge le jeton et émet
+  `auth:expired` (écouté par `AuthProvider` → retour `/login`).
+- **auth.jsx** — `AuthContext` / `useAuth` (login/register/logout async, `isAuthenticated`).
+  Au démarrage : `/api/auth/me` (ignoré si la session a changé entre-temps) puis `syncPush()`.
 - **useTheme.jsx** — thème clair/sombre via `data-theme` sur `<html>`, persisté.
 - **hooks.js** — `useStations` (poll 60 s), `useFavorites` (liste + toggle optimiste),
-  `useGeolocation`, `useIsMobile`, helpers `distanceKm` / `fmtDistance` (tri par proximité).
-- **push.js** + **public/sw.js** — `PushManager` natif ; `registerPush()` (après login) demande
-  la permission, souscrit, POST la subscription. Le SW gère `push` + `notificationclick`.
+  `useOnline`, `useGeolocation`, `useIsMobile`, helpers `distanceKm` / `fmtDistance`.
+- **Hors ligne** — `lib/offlineCache.js` garde en `localStorage` la dernière liste des stations
+  et des favoris (horodatée ; favoris purgés à la déconnexion). Les hooks exposent `stale` +
+  `lastUpd` ; `components/Offline.jsx` fournit `OfflineBanner` (« Hors ligne — données de HH:MM »)
+  et `OnlineOnly` (Carte et Alertes indisponibles hors ligne). `public/sw.js` met en cache la
+  coquille (index.html réseau-d'abord, `/assets/*` cache-d'abord, purge des anciens builds),
+  **jamais** l'API. Incrémenter `CACHE` dans `sw.js` si un fichier public non hashé change.
+- **push.js** + **public/sw.js** — `PushManager` natif. `syncPush()` (démarrage + login) est
+  **silencieux** : ne fait rien sans permission accordée, resouscrit si la clé VAPID a changé.
+  `enablePush()` demande la permission, **uniquement sur clic** (bandeau de la page Alertes). Le SW gère `push` + `notificationclick`.
 - **usePwaInstallPrompt.js** + **components/PwaInstall*** — modal d'installation **réservée au
   mobile** (jamais desktop), réapparaît le lendemain si ignorée.
 - **pages/** — `Login`, `Stations` (recherche/tri/filtre + détail), `Favorites` (swipe-to-delete),
   `MapPage` (carte + filtres), `Alerts` (CRUD depuis les favoris), `Redirect` (cible push).
 - **components/** — `StationCard` (desktop), `StationListItem` (mobile), `StationDetailSheet`,
-  `BottomSheet`, `BottomNav` / `Navbar`, `Icon` (SVG inline style Lucide), `Logo`,
+  `BottomSheet`, `BottomNav` / `Navbar`, `Icon` (SVG inline style Lucide), `Logo`, `Offline`,
   `map/StationMap` (markers diffés, pas de recréation), `map/MapFilters`.
 - **lib/mapConfig.js** — config Mapbox + logique de disponibilité (couleur des markers).
 - **theme.js** — alias palette (variables CSS), `fmtTime`, `bikeColor`. Styles inline + `styles.css`
@@ -186,7 +225,7 @@ se fait dans `push.js` (`countForType`) et `server.js` (`extractCount`). Bien co
 
 Tables (créées/migrées par `database/migrations.js`, dialecte selon `DATABASE_URL`) :
 `stations` (référentiel statique), `config` (clé/valeur : secret JWT, clés VAPID),
-`users`, `favorites` (unique `user_id+station_id`), `push_subscriptions`, `alerts`
+`users`, `favorites` (unique `user_id+station_id`), `push_subscriptions` (unique `endpoint`), `alerts`
 (fenêtre horaire + `days` + suivi de notification), `rental_apps` (deep links par plateforme).
 
 ## Conventions & bonnes pratiques
@@ -201,7 +240,8 @@ Tables (créées/migrées par `database/migrations.js`, dialecte selon `DATABASE
   minimiser les appels GBFS upstream (mutualiser, mettre en cache court) ; préférer les
   markers diffés et le lazy-loading ; borner les tailles de payload.
 - **Sécurité** : secrets uniquement via env/`config`, jamais commités ; garder le CSP à jour
-  si de nouvelles origines externes sont ajoutées.
+  si de nouvelles origines externes sont ajoutées. Pas de `<script>` inline dans `index.html`
+  (bloqué par `script-src 'self'`) → fichier dans `public/` (cf. `theme-init.js`).
 
 ## Déploiement
 

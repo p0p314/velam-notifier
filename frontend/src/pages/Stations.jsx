@@ -4,6 +4,7 @@ import StationListItem from "../components/StationListItem";
 import StationDetailSheet from "../components/StationDetailSheet";
 import BottomSheet from "../components/BottomSheet";
 import Icon from "../components/Icon";
+import { OfflineBanner } from "../components/Offline";
 import { useStations, useFavorites, useGeolocation, distanceKm } from "../hooks";
 
 const FILTERS = [
@@ -30,7 +31,7 @@ function SearchBox({ value, onChange }) {
 }
 
 export default function Stations() {
-  const { stations, loading, error, reload } = useStations();
+  const { stations, loading, error, stale, lastUpd, reload } = useStations();
   const { favIds, toggleFav } = useFavorites();
   const { coords } = useGeolocation();
 
@@ -127,6 +128,7 @@ export default function Stations() {
             <Icon name="sliders" size={18} />
           </button>
         </div>
+        <OfflineBanner stale={stale} lastUpd={lastUpd} />
         {loading ? (
           <div className="view-state">Connexion au serveur…</div>
         ) : error ? ErrorBox
@@ -168,6 +170,7 @@ export default function Stations() {
           </div>
         </div>
 
+        <OfflineBanner stale={stale} lastUpd={lastUpd} />
         {loading ? (
           <div className="view-state">Connexion au serveur…</div>
         ) : error ? ErrorBox

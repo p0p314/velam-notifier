@@ -69,12 +69,12 @@ const ISO_DAY = { Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6, Sun: 7 };
  * Heure courante dans le fuseau des alertes : { hhmm, isoDay (1=lundi…7), date }.
  * Corrige le décalage UTC qui faisait déclencher les alertes avec +1/+2 h.
  */
-function nowInTz() {
+function nowInTz(date = new Date()) {
   const parts = new Intl.DateTimeFormat('en-US', {
     timeZone: ALERT_TZ, hour12: false,
     weekday: 'short', year: 'numeric', month: '2-digit', day: '2-digit',
     hour: '2-digit', minute: '2-digit',
-  }).formatToParts(new Date());
+  }).formatToParts(date);
   const get = (t) => parts.find((p) => p.type === t)?.value;
   let hour = get('hour');
   if (hour === '24') hour = '00'; // certains environnements rendent minuit en "24"
@@ -154,12 +154,13 @@ function buildPayload(alerte, count, rentalApps) {
 
 // ── Boucle de vérification ──────────────────────────────────────────────────────
 
-async function checkAlerts() {
+/** `date` injectable pour les tests (défaut : maintenant). */
+async function checkAlerts(date = new Date()) {
   // Ne rien faire si aucune alerte active n'existe en base
   if (await countActiveAlerts() === 0) return;
 
   // Heure / jour / date courants dans le fuseau des alertes (pas l'UTC serveur).
-  const { hhmm: now, isoDay, date: today } = nowInTz();
+  const { hhmm: now, isoDay, date: today } = nowInTz(date);
   const due = (await getActiveAlerts()).filter(
     (a) =>
       inWindow(now, a.time_start, a.time_end) &&
@@ -245,4 +246,8 @@ function stopPolling() {
   }
 }
 
-module.exports = { initPush, getVapidPublicKey, startPolling, stopPolling };
+module.exports = {
+  initPush, getVapidPublicKey, startPolling, stopPolling,
+  // exposés pour les tests
+  checkAlerts, countForType, inWindow, nowInTz, buildPayload,
+};

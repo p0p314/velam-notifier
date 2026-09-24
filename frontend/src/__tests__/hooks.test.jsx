@@ -1,0 +1,133 @@
+import { describe, test, expect, vi } from "vitest";
+import { renderHook, waitFor, act } from "@testing-library/react";
+import { useStations, useFavorites, useOnline, distanceKm, fmtDistance } from "../hooks";
+import { saveCache, loadCache } from "../lib/offlineCache";
+import { setToken } from "../api";
+import { jsonResponse, setOnline } from "./setup";
+
+const STATIONS = [{ station_id: "1", name: "Gare", electrical: 2, mechanical: 1 }];
+
+describe("useOnline", () => {
+  test("suit les événements online / offline", () => {
+    const { result } = renderHook(() => useOnline());
+    expect(result.current).toBe(true);
+    act(() => setOnline(false));
+    expect(result.current).toBe(false);
+    act(() => setOnline(true));
+    expect(result.current).toBe(true);
+  });
+});
+
+describe("useStations", () => {
+  test("succès : données live + mise en cache horodatée", async () => {
+    fetch.mockResolvedValue(jsonResponse({ ok: true, stations: STATIONS, fetched_at: "2025-09-24T12:30:00.000Z" }));
+    const { result } = renderHook(() => useStations());
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.stations).toEqual(STATIONS);
+    expect(result.current.stale).toBe(false);
+    expect(result.current.lastUpd.toISOString()).toBe("2025-09-24T12:30:00.000Z");
+    expect(loadCache("stations")).toEqual({ at: Date.parse("2025-09-24T12:30:00.000Z"), data: STATIONS });
+  });
+
+  test("hors ligne avec cache : liste affichée, marquée périmée, heure du cache", async () => {
+    setOnline(false, { emit: false });
+    saveCache("stations", STATIONS, Date.parse("2025-09-24T08:00:00Z"));
+    fetch.mockRejectedValue(new TypeError("Failed to fetch"));
+    const { result } = renderHook(() => useStations());
+    // Affichage immédiat depuis le cache, sans écran de chargement
+    expect(result.current.loading).toBe(false);
+    expect(result.current.stations).toEqual(STATIONS);
+    await waitFor(() => expect(result.current.stale).toBe(true));
+    expect(result.current.error).toBeNull(); // pas d'écran d'erreur : il y a des données
+    expect(result.current.lastUpd.toISOString()).toBe("2025-09-24T08:00:00.000Z");
+  });
+
+  test("hors ligne sans cache : erreur", async () => {
+    setOnline(false, { emit: false });
+    fetch.mockRejectedValue(new TypeError("Failed to fetch"));
+    const { result } = renderHook(() => useStations());
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.error).toMatch(/injoignable/);
+    expect(result.current.stations).toEqual([]);
+  });
+
+  test("retour du réseau → rechargement automatique", async () => {
+    setOnline(false, { emit: false });
+    saveCache("stations", STATIONS, 1000);
+    fetch.mockRejectedValueOnce(new TypeError("Failed to fetch"));
+    const { result } = renderHook(() => useStations());
+    await waitFor(() => expect(result.current.stale).toBe(true));
+
+    const fresh = [{ ...STATIONS[0], electrical: 9 }];
+    fetch.mockResolvedValue(jsonResponse({ ok: true, stations: fresh, fetched_at: new Date().toISOString() }));
+    act(() => setOnline(true));
+    await waitFor(() => expect(result.current.stale).toBe(false));
+    expect(result.current.stations[0].electrical).toBe(9);
+  });
+
+  test("échec après un succès : garde les données en mémoire", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    fetch.mockResolvedValueOnce(jsonResponse({ ok: true, stations: STATIONS, fetched_at: new Date().toISOString() }));
+    const { result } = renderHook(() => useStations());
+    await waitFor(() => expect(result.current.stations).toEqual(STATIONS));
+    setOnline(false, { emit: false });
+    fetch.mockRejectedValue(new TypeError("Failed to fetch"));
+    await act(() => vi.advanceTimersByTimeAsync(61_000)); // poll 60 s
+    expect(result.current.stale).toBe(true);
+    expect(result.current.stations).toEqual(STATIONS);
+  });
+});
+
+describe("useFavorites", () => {
+  const FAVS = [{ station_id: "1", station_name: "Gare" }];
+
+  test("charge, met en cache, toggle", async () => {
+    setToken("t");
+    fetch.mockResolvedValueOnce(jsonResponse({ ok: true, favorites: FAVS }));
+    const { result } = renderHook(() => useFavorites());
+    await waitFor(() => expect(result.current.favorites).toEqual(FAVS));
+    expect(result.current.favIds.has("1")).toBe(true);
+    expect(loadCache("favorites").data).toEqual(FAVS);
+
+    fetch.mockResolvedValueOnce(jsonResponse({ ok: true, favorites: [] }));
+    await act(() => result.current.toggleFav({ station_id: "1", name: "Gare" }));
+    expect(fetch.mock.calls.at(-1)[1].method).toBe("DELETE");
+    expect(result.current.favorites).toEqual([]);
+  });
+
+  test("ajout d'un favori → POST", async () => {
+    fetch.mockResolvedValueOnce(jsonResponse({ ok: true, favorites: [] }));
+    const { result } = renderHook(() => useFavorites());
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    fetch.mockResolvedValueOnce(jsonResponse({ ok: true, favorites: FAVS }));
+    await act(() => result.current.toggleFav({ station_id: "1", name: "Gare" }));
+    const [, init] = fetch.mock.calls.at(-1);
+    expect(init.method).toBe("POST");
+    expect(JSON.parse(init.body)).toEqual({ station_id: "1", station_name: "Gare" });
+  });
+
+  test("erreur passagère : la liste n'est PAS vidée (régression)", async () => {
+    saveCache("favorites", FAVS);
+    setOnline(false, { emit: false });
+    fetch.mockRejectedValue(new TypeError("Failed to fetch"));
+    const { result } = renderHook(() => useFavorites());
+    await waitFor(() => expect(result.current.stale).toBe(true));
+    expect(result.current.favorites).toEqual(FAVS);
+  });
+});
+
+describe("distances", () => {
+  test("distanceKm Amiens gare → cathédrale ≈ 0,9 km", () => {
+    const d = distanceKm({ lat: 49.8906, lon: 2.3078 }, { lat: 49.8947, lon: 2.3022 });
+    expect(d).toBeGreaterThan(0.5);
+    expect(d).toBeLessThan(1);
+  });
+  test("coordonnées manquantes → Infinity", () => {
+    expect(distanceKm(null, { lat: 1, lon: 1 })).toBe(Infinity);
+  });
+  test("fmtDistance", () => {
+    expect(fmtDistance(0.85)).toBe("850 m");
+    expect(fmtDistance(1.234)).toBe("1,2 km");
+    expect(fmtDistance(Infinity)).toBeNull();
+  });
+});

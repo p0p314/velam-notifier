@@ -2,6 +2,26 @@
 // incrémentales), PostgreSQL en prod (SERIAL / TIMESTAMPTZ).
 // Le choix du dialecte suit la présence de DATABASE_URL.
 
+/**
+ * push_subscriptions.endpoint : identifiant unique d'un appareil/navigateur.
+ * Rétro-remplit la colonne depuis le JSON, supprime les doublons (garde le plus
+ * récent) puis pose l'index unique — sans quoi un même téléphone pouvait être
+ * rattaché à plusieurs comptes et recevoir les alertes de chacun.
+ */
+async function migratePushEndpoint(db) {
+  const { rows } = await db.query('SELECT id, subscription FROM push_subscriptions WHERE endpoint IS NULL');
+  for (const r of rows) {
+    let endpoint = null;
+    try { endpoint = JSON.parse(r.subscription).endpoint ?? null; } catch { /* JSON corrompu */ }
+    if (endpoint) await db.run('UPDATE push_subscriptions SET endpoint = ? WHERE id = ?', [endpoint, r.id]);
+    else          await db.run('DELETE FROM push_subscriptions WHERE id = ?', [r.id]);
+  }
+  await db.run(`DELETE FROM push_subscriptions WHERE id NOT IN (
+    SELECT MAX(id) FROM push_subscriptions GROUP BY endpoint
+  )`);
+  await db.run('CREATE UNIQUE INDEX IF NOT EXISTS push_subscriptions_endpoint_uq ON push_subscriptions(endpoint)');
+}
+
 async function runMigrations(db) {
   const isPostgres = !!process.env.DATABASE_URL;
 
@@ -55,6 +75,8 @@ async function runMigrations(db) {
     )`);
     // Migration idempotente pour les bases existantes (Postgres supporte IF NOT EXISTS).
     await db.run('ALTER TABLE alerts ADD COLUMN IF NOT EXISTS last_notified_count INTEGER DEFAULT NULL');
+    await db.run('ALTER TABLE push_subscriptions ADD COLUMN IF NOT EXISTS endpoint TEXT');
+    await migratePushEndpoint(db);
     await db.run(`CREATE TABLE IF NOT EXISTS rental_apps (
       platform      TEXT PRIMARY KEY,
       name          TEXT NOT NULL,
@@ -137,6 +159,13 @@ async function runMigrations(db) {
     await db.run('ALTER TABLE alerts ADD COLUMN last_notified_count INTEGER DEFAULT NULL');
     console.log('[db] colonne alerts.last_notified_count ajoutée');
   }
+  const { rows: subCols } = await db.query('PRAGMA table_info(push_subscriptions)');
+  if (!subCols.some((c) => c.name === 'endpoint')) {
+    await db.run('ALTER TABLE push_subscriptions ADD COLUMN endpoint TEXT');
+    console.log('[db] colonne push_subscriptions.endpoint ajoutée');
+  }
+  await migratePushEndpoint(db);
+
   if (hasColumn('notified')) {
     const { rows } = await db.query('SELECT sqlite_version() AS v');
     const [maj, min] = String(rows[0].v).split('.').map(Number);

@@ -2,6 +2,7 @@
 const express = require('express');
 const { countStations, getStations, saveStations } = require('../db');
 const { fetchStationInfo, getStationStatus } = require('../gbfs');
+const { requireAuth } = require('../auth');
 
 const router = express.Router();
 
@@ -74,8 +75,9 @@ router.get('/api/stations', async (req, res) => {
 /**
  * POST /api/stations/refresh
  * Force le rechargement des infos stations depuis l'API GBFS.
+ * Protégée : sinon n'importe qui peut déclencher des fetchs GBFS + écritures DB en boucle.
  */
-router.post('/api/stations/refresh', async (req, res) => {
+router.post('/api/stations/refresh', requireAuth, async (req, res) => {
   try {
     const info = await fetchStationInfo();
     await saveStations(info);
@@ -91,3 +93,4 @@ router.post('/api/stations/refresh', async (req, res) => {
 });
 
 module.exports = router;
+module.exports.mergeWithStatus = mergeWithStatus;

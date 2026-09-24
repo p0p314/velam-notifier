@@ -1,8 +1,9 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../auth";
-import { registerPush } from "../push";
+import { syncPush } from "../push";
 import Logo from "../components/Logo";
+import { APP_VERSION } from "../theme";
 
 export default function Login() {
   const { login, register } = useAuth();
@@ -21,7 +22,7 @@ export default function Login() {
     try {
       if (mode === "login") await login(username.trim(), password);
       else                  await register(username.trim(), password);
-      registerPush();
+      syncPush(); // silencieux : la permission se demande depuis la page Alertes
       navigate("/", { replace: true });
     } catch (err) {
       setError(err.message);
@@ -65,6 +66,7 @@ export default function Login() {
         <button type="submit" className="submit-btn" disabled={busy} style={{ marginTop: 4, opacity: busy ? 0.6 : 1 }}>
           {busy ? "…" : mode === "login" ? "Se connecter" : "Créer un compte"}
         </button>
+        <div className="app-version">v{APP_VERSION}</div>
       </form>
     </div>
   );

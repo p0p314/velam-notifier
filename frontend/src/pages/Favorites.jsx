@@ -2,6 +2,7 @@ import { useState, useRef } from "react";
 import StationListItem from "../components/StationListItem";
 import StationDetailSheet from "../components/StationDetailSheet";
 import Icon from "../components/Icon";
+import { OfflineBanner } from "../components/Offline";
 import { useStations, useFavorites, useGeolocation, distanceKm } from "../hooks";
 
 const REVEAL = 84;
@@ -67,8 +68,8 @@ function FavoriteItem({ s, onOpen, onDelete, dist }) {
 }
 
 export default function Favorites() {
-  const { stations, loading } = useStations();
-  const { favorites, favIds, toggleFav, loading: favLoading } = useFavorites();
+  const { stations, loading, stale, lastUpd } = useStations();
+  const { favorites, favIds, toggleFav, loading: favLoading, stale: favStale } = useFavorites();
   const { coords } = useGeolocation();
   const [selId, setSelId] = useState(null);
 
@@ -89,6 +90,8 @@ export default function Favorites() {
         <h2 className="page-title">Mes favoris</h2>
         {favStations.length > 0 && <span className="page-count">{favStations.length} station{favStations.length !== 1 ? "s" : ""}</span>}
       </div>
+
+      <OfflineBanner stale={stale || favStale} lastUpd={lastUpd} />
 
       {(loading || favLoading) ? (
         <div className="view-state">Chargement…</div>

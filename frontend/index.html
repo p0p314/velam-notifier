@@ -14,18 +14,8 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
     <title>VéloPulse</title>
-    <script>
-      // Applique le thème avant le rendu (évite le flash de couleur).
-      (function () {
-        try {
-          var t = localStorage.getItem("velopulse-theme");
-          if (t !== "light" && t !== "dark") {
-            t = matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
-          }
-          document.documentElement.dataset.theme = t;
-        } catch (e) { document.documentElement.dataset.theme = "light"; }
-      })();
-    </script>
+    <!-- Script externe (et non inline) : la CSP de prod (script-src 'self') bloque l'inline. -->
+    <script src="/theme-init.js"></script>
   </head>
   <body>
     <div id="root"></div>

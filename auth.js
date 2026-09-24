@@ -3,7 +3,9 @@ const jwt    = require('jsonwebtoken');
 const crypto = require('crypto');
 const { getConfig, setConfig } = require('./db');
 
-const TOKEN_TTL = '7d';
+// Session glissante : le client renouvelle son jeton à chaque ouverture de l'app
+// (GET /api/auth/me). Seule une inactivité > TOKEN_TTL impose de se reconnecter.
+const TOKEN_TTL = process.env.JWT_TTL || '30d';
 
 let _secret = null;
 
@@ -29,12 +31,14 @@ function getSecret() {
   return _secret;
 }
 
+// Versions async : bcrypt est volontairement lent (~70 ms) ; la variante sync
+// bloquerait la boucle d'événements (toutes les requêtes + la boucle d'alerte).
 function hashPassword(password) {
-  return bcrypt.hashSync(password, 10);
+  return bcrypt.hash(password, 10);
 }
 
 function verifyPassword(password, hash) {
-  return bcrypt.compareSync(password, hash);
+  return bcrypt.compare(password, hash);
 }
 
 function signToken(user) {

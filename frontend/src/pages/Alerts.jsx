@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { api } from "../api";
 import { useFavorites } from "../hooks";
+import { pushPermission, enablePush } from "../push";
 import BottomSheet from "../components/BottomSheet";
 import Icon from "../components/Icon";
 
@@ -33,6 +34,38 @@ function DayPicker({ value, onChange, disabled }) {
           {label}
         </button>
       ))}
+    </div>
+  );
+}
+
+/**
+ * Bandeau d'activation des notifications : la permission n'est demandée que sur
+ * clic explicite (exigé par iOS), jamais automatiquement au démarrage/login.
+ */
+function PushBanner() {
+  const [perm, setPerm] = useState(pushPermission);
+  const [busy, setBusy] = useState(false);
+  if (perm === "granted" || perm === "unsupported") return null;
+
+  if (perm === "denied") {
+    return (
+      <div className="push-banner">
+        <Icon name="bell" size={18} />
+        <span>Notifications bloquées : autorisez-les dans les réglages de l'appareil pour recevoir vos alertes.</span>
+      </div>
+    );
+  }
+  const activate = async () => {
+    setBusy(true);
+    try { setPerm(await enablePush()); } finally { setBusy(false); }
+  };
+  return (
+    <div className="push-banner">
+      <Icon name="bell" size={18} />
+      <span>Activez les notifications pour être prévenu de vos alertes.</span>
+      <button type="button" className="push-banner-btn" disabled={busy} onClick={activate}>
+        {busy ? "…" : "Activer"}
+      </button>
     </div>
   );
 }
@@ -261,6 +294,8 @@ export default function Alerts() {
             <h2 className="page-title">Mes alertes</h2>
             {alerts.length > 0 && <span className="page-count">{activeCount} active{activeCount !== 1 ? "s" : ""}</span>}
           </div>
+
+          <PushBanner />
 
           {alerts.length === 0 ? (
             <div className="empty-state">

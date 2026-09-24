@@ -12,34 +12,75 @@ export function pushSupported() {
   return "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
 }
 
+/** État de la permission : "unsupported" | "default" | "granted" | "denied". */
+export function pushPermission() {
+  return pushSupported() ? Notification.permission : "unsupported";
+}
+
+/** Vrai si la subscription existante a été créée avec la clé VAPID courante. */
+function sameKey(sub, key) {
+  const cur = sub.options?.applicationServerKey;
+  if (!cur) return true; // navigateur qui n'expose pas la clé : on ne peut pas comparer
+  const a = new Uint8Array(cur);
+  return a.length === key.length && a.every((b, i) => b === key[i]);
+}
+
 /**
- * Demande la permission, souscrit au PushManager et envoie la subscription
- * au backend. Best-effort : ne lève pas (log seulement) pour ne pas bloquer
- * le flux de login.
+ * Resynchronise silencieusement la subscription avec le backend, SANS jamais
+ * afficher la demande de permission (ne fait rien si elle n'est pas accordée).
+ * Appelé au démarrage et après login : garantit que l'appareil reste rattaché
+ * au compte connecté, et resouscrit si les clés VAPID ont changé côté serveur.
  */
-export async function registerPush() {
-  if (!pushSupported()) return false;
+export async function syncPush() {
+  if (pushPermission() !== "granted") return false;
 
   try {
-    const permission = await Notification.requestPermission();
-    if (permission !== "granted") return false;
-
     const reg = await navigator.serviceWorker.ready;
     const { publicKey } = await api("/api/push/vapid-public-key", { auth: false });
     if (!publicKey) return false;
+    const key = urlBase64ToUint8Array(publicKey);
 
     let sub = await reg.pushManager.getSubscription();
+    if (sub && !sameKey(sub, key)) {
+      await sub.unsubscribe(); // ancienne clé → les envois échoueraient en silence
+      sub = null;
+    }
     if (!sub) {
-      sub = await reg.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(publicKey),
-      });
+      sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: key });
     }
 
     await api("/api/push/subscribe", { method: "POST", body: { subscription: sub } });
     return true;
   } catch (err) {
-    console.warn("[push] activation échouée :", err.message);
+    console.warn("[push] synchronisation échouée :", err.message);
     return false;
+  }
+}
+
+/**
+ * Demande explicite de la permission puis souscription. À appeler UNIQUEMENT
+ * depuis un geste utilisateur (clic) : iOS l'exige, et cela évite de
+ * redemander à chaque connexion. Renvoie l'état final de la permission.
+ */
+export async function enablePush() {
+  if (!pushSupported()) return "unsupported";
+  const permission = await Notification.requestPermission();
+  if (permission === "granted") await syncPush();
+  return permission;
+}
+
+/**
+ * Déconnexion : détache cet appareil du compte côté serveur pour qu'il ne reçoive
+ * plus ses alertes. La subscription navigateur est conservée (la permission aussi) :
+ * le prochain compte connecté la récupère via syncPush(). Best-effort, ne lève pas.
+ */
+export async function unlinkPush() {
+  if (!pushSupported() || Notification.permission !== "granted") return;
+  try {
+    const reg = await navigator.serviceWorker.getRegistration();
+    const sub = await reg?.pushManager.getSubscription();
+    if (sub) await api("/api/push/unsubscribe", { method: "POST", body: { endpoint: sub.endpoint } });
+  } catch (err) {
+    console.warn("[push] détachement échoué :", err.message);
   }
 }
