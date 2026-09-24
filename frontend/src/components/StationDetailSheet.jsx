@@ -1,3 +1,4 @@
+import { useNavigate } from "react-router-dom";
 import BottomSheet from "./BottomSheet";
 import Icon from "./Icon";
 import { fmtTime } from "../theme";
@@ -13,6 +14,7 @@ function Row({ icon, kind, label, value }) {
 }
 
 export default function StationDetailSheet({ station, open, onClose, isFav, onToggleFav }) {
+  const navigate = useNavigate();
   const s = station;
   if (!s) return <BottomSheet open={open} onClose={onClose} heightVh={70} />;
 
@@ -39,6 +41,12 @@ export default function StationDetailSheet({ station, open, onClose, isFav, onTo
       <button className={"detail-cta" + (isFav ? " on" : "")} onClick={() => onToggleFav(s)}>
         <Icon name="star" size={18} style={isFav ? { fill: "currentColor" } : null} />
         {isFav ? "Retirer des favoris" : "Ajouter aux favoris"}
+      </button>
+      {/* Création d'alerte en un clic : formulaire pré-rempli sur cette station. */}
+      <button className="detail-cta secondary"
+        onClick={() => navigate("/alertes", { state: { alertStation: { station_id: s.station_id, name: s.name } } })}>
+        <Icon name="bell-plus" size={18} />
+        Créer une alerte
       </button>
     </BottomSheet>
   );

@@ -1,16 +1,28 @@
 import { useState, useEffect, useCallback } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { api } from "../api";
-import { useFavorites } from "../hooks";
+import { useFavorites, useIsMobile } from "../hooks";
 import { pushPermission, enablePush } from "../push";
+import {
+  ALL_DAYS, defaultForm, formFromAlert, validateForm, payloadFromForm, describeAlert,
+  tripAllowed, localYmd, addDaysYmd, fmtDay,
+} from "../lib/alerts";
 import BottomSheet from "../components/BottomSheet";
 import Icon from "../components/Icon";
 
-const BIKE_LABEL = { mechanical: "Mécanique", ebike: "Électrique", any: "Tous types" };
-const BIKE_ICON  = { mechanical: "bike", ebike: "bolt", any: "bike" };
+const BIKE_ICON = { mechanical: "bike", ebike: "bolt", any: "bike" };
 const BIKE_OPTIONS = [
   { value: "mechanical", label: "Mécanique" },
   { value: "ebike",      label: "Électrique" },
   { value: "any",        label: "Les deux" },
+];
+const TARGET_OPTIONS = [
+  { value: "bikes", label: "Vélos" },
+  { value: "docks", label: "Places libres" },
+];
+const COMPARISON_OPTIONS = [
+  { value: "at_most",  label: "Il en reste peu" },
+  { value: "at_least", label: "Il y en a de nouveau" },
 ];
 
 const DAYS = [
@@ -38,20 +50,57 @@ function DayPicker({ value, onChange, disabled }) {
   );
 }
 
+function Seg({ options, value, onChange, label }) {
+  return (
+    <div className="seg" role="group" aria-label={label}>
+      {options.map((o) => (
+        <button key={o.value} type="button" aria-pressed={value === o.value}
+          className={value === o.value ? "active" : ""} onClick={() => onChange(o.value)}>
+          {o.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 /**
- * Bandeau d'activation des notifications : la permission n'est demandée que sur
- * clic explicite (exigé par iOS), jamais automatiquement au démarrage/login.
+ * Notifications : activation sur clic (exigé par iOS, jamais automatique) ;
+ * une fois accordées, bouton d'envoi d'une notification de test.
  */
 function PushBanner() {
   const [perm, setPerm] = useState(pushPermission);
   const [busy, setBusy] = useState(false);
-  if (perm === "granted" || perm === "unsupported") return null;
+  const [testMsg, setTestMsg] = useState(null);
+  if (perm === "unsupported") return null;
 
   if (perm === "denied") {
     return (
       <div className="push-banner">
         <Icon name="bell" size={18} />
         <span>Notifications bloquées : autorisez-les dans les réglages de l'appareil pour recevoir vos alertes.</span>
+      </div>
+    );
+  }
+  if (perm === "granted") {
+    const test = async () => {
+      setBusy(true);
+      setTestMsg(null);
+      try {
+        const { sent } = await api("/api/push/test", { method: "POST" });
+        setTestMsg(`Notification envoyée à ${sent} appareil${sent > 1 ? "s" : ""}.`);
+      } catch (e) {
+        setTestMsg(e.message);
+      } finally {
+        setBusy(false);
+      }
+    };
+    return (
+      <div className="push-banner">
+        <Icon name="bell" size={18} />
+        <span>{testMsg ?? "Notifications activées sur cet appareil."}</span>
+        <button type="button" className="push-banner-btn ghost" disabled={busy} onClick={test}>
+          {busy ? "…" : "Tester"}
+        </button>
       </div>
     );
   }
@@ -70,19 +119,68 @@ function PushBanner() {
   );
 }
 
-function AlertCard({ a, onToggle, onDelete, onEdit }) {
-  const dayVals = a.days ? a.days.split(",").map(Number) : [1, 2, 3, 4, 5, 6, 7];
+/** Pause globale : suspend toutes les alertes jusqu'à une date (incluse). */
+function PauseControl({ pausedUntil, onChange }) {
+  const today = localYmd();
+  const [open, setOpen]   = useState(false);
+  const [until, setUntil] = useState(() => addDaysYmd(today, 6));
+  const [error, setError] = useState(null);
+
+  const save = async (value) => {
+    setError(null);
+    try {
+      const { paused_until } = await api("/api/alerts/pause", { method: "PUT", body: { until: value } });
+      onChange(paused_until);
+      setOpen(false);
+    } catch (e) { setError(e.message); }
+  };
+
+  if (pausedUntil) {
+    return (
+      <div className="pause-banner" role="status">
+        <Icon name="pause" size={18} />
+        <span>Alertes en pause jusqu'au {fmtDay(pausedUntil)} inclus.</span>
+        <button type="button" className="push-banner-btn" onClick={() => save(null)}>Reprendre</button>
+      </div>
+    );
+  }
+  if (!open) {
+    return (
+      <button type="button" className="pause-link" onClick={() => setOpen(true)}>
+        <Icon name="pause" size={15} /> Mettre toutes les alertes en pause
+      </button>
+    );
+  }
   return (
-    <div className={"alert-card" + (a.active ? "" : " off")}>
+    <div className="pause-banner">
+      <label className="pause-form">
+        <span>Suspendre jusqu'au</span>
+        <input type="date" className="field mono" value={until} min={today}
+          max={addDaysYmd(today, 365)} onChange={(e) => setUntil(e.target.value)} />
+      </label>
+      <button type="button" className="push-banner-btn" disabled={!until} onClick={() => save(until)}>Suspendre</button>
+      <button type="button" className="pause-cancel" aria-label="Annuler" onClick={() => setOpen(false)}>
+        <Icon name="x" size={16} />
+      </button>
+      {error && <div className="form-error">{error}</div>}
+    </div>
+  );
+}
+
+function AlertCard({ a, onToggle, onDelete, onEdit, paused }) {
+  const { title, detail } = describeAlert(a);
+  const icon = a.arrival_station_id ? "route" : a.target === "docks" ? "parking" : BIKE_ICON[a.bike_type];
+  return (
+    <div className={"alert-card" + (a.active && !paused ? "" : " off")}>
       <div className="alert-card-head">
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div className="alert-card-name">{a.station_name}</div>
+          <div className="alert-card-name">{title}</div>
           <div className="alert-card-sub">
-            <Icon name={BIKE_ICON[a.bike_type]} size={14} />
-            {BIKE_LABEL[a.bike_type]} · ≤ {a.min_count} vélos · {a.time_start}–{a.time_end}
+            <Icon name={icon} size={14} />
+            <span>{detail}</span>
           </div>
         </div>
-        <button role="switch" aria-checked={a.active} aria-label={a.active ? "Désactiver" : "Activer"}
+        <button role="switch" aria-checked={!!a.active} aria-label={a.active ? "Désactiver" : "Activer"}
           className={"switch" + (a.active ? " on" : "")} onClick={() => onToggle(a)}>
           <span className="switch-knob" />
         </button>
@@ -94,83 +192,122 @@ function AlertCard({ a, onToggle, onDelete, onEdit }) {
         </button>
       </div>
       <div style={{ marginTop: 12 }}>
-        <DayPicker value={dayVals} onChange={() => {}} disabled />
+        {a.valid_on
+          ? <span className="alert-once"><Icon name="calendar" size={14} /> Uniquement le {fmtDay(a.valid_on)}</span>
+          : <DayPicker value={a.days ? a.days.split(",").map(Number) : ALL_DAYS} onChange={() => {}} disabled />}
       </div>
     </div>
   );
 }
 
-function AlertForm({ favorites, form, error, onSubmit, onCancel, editingAlert }) {
-  const { stationId, setStationId, bikeType, setBikeType, minCount, setMinCount,
-          timeStart, setTimeStart, timeEnd, setTimeEnd, days, setDays } = form;
-
-  // Inclure la station de l'alerte si elle n'est plus dans les favoris
-  const stationOptions = editingAlert && !favorites.find((f) => f.station_id === editingAlert.station_id)
-    ? [{ station_id: editingAlert.station_id, station_name: editingAlert.station_name }, ...favorites]
-    : favorites;
-
-  if (stationOptions.length === 0) {
+function AlertForm({ stations, form, setField, error, onSubmit, onCancel, editing }) {
+  if (stations.length === 0) {
     return <div style={{ fontSize: 14, color: "var(--text-3)" }}>Ajoutez d'abord des stations en favoris.</div>;
   }
+  const unit = form.target === "docks" ? "places libres" : "vélos disponibles";
+  const arrivals = stations.filter((s) => s.station_id !== form.stationId);
 
   return (
-    <form onSubmit={onSubmit} style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-      <div className="form-title">{editingAlert ? "Modifier l'alerte" : "Nouvelle alerte"}</div>
+    <form onSubmit={onSubmit} style={{ display: "flex", flexDirection: "column", gap: 16 }} aria-label="Formulaire d'alerte">
+      <div className="form-title">{editing ? "Modifier l'alerte" : "Nouvelle alerte"}</div>
 
       <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-        <span className="form-label">Station</span>
+        <span className="form-label">{form.trip && tripAllowed(form) ? "Station de départ" : "Station"}</span>
         <div className="select-wrap select-inset">
-          <select value={stationId} onChange={(e) => setStationId(e.target.value)} required>
-            {stationOptions.map((f) => <option key={f.station_id} value={f.station_id}>{f.station_name}</option>)}
+          <select value={form.stationId} onChange={(e) => setField("stationId", e.target.value)} required aria-label="Station">
+            {stations.map((f) => <option key={f.station_id} value={f.station_id}>{f.station_name}</option>)}
           </select>
           <Icon name="chevron-down" size={15} />
         </div>
       </label>
 
       <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-        <span className="form-label">Type de vélo</span>
-        <div className="seg">
-          {BIKE_OPTIONS.map((o) => (
-            <button key={o.value} type="button" className={bikeType === o.value ? "active" : ""} onClick={() => setBikeType(o.value)}>
-              {o.label}
-            </button>
-          ))}
+        <span className="form-label">Surveiller</span>
+        <Seg label="Surveiller" options={TARGET_OPTIONS} value={form.target} onChange={(v) => setField("target", v)} />
+      </div>
+
+      {form.target === "bikes" && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          <span className="form-label">Type de vélo</span>
+          <Seg label="Type de vélo" options={BIKE_OPTIONS} value={form.bikeType} onChange={(v) => setField("bikeType", v)} />
         </div>
+      )}
+
+      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+        <span className="form-label">Me prévenir quand</span>
+        <Seg label="Me prévenir quand" options={COMPARISON_OPTIONS} value={form.comparison} onChange={(v) => setField("comparison", v)} />
       </div>
 
       <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-        <span className="form-label">Notifier si au plus</span>
+        <span className="form-label">{form.comparison === "at_least" ? "Au moins" : "Au plus"}</span>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <input type="number" inputMode="numeric" min="1" max="50" value={minCount}
-            onChange={(e) => setMinCount(e.target.value)} className="field mono" style={{ width: 80 }} />
-          <span style={{ fontSize: 13, color: "var(--text-3)" }}>vélos disponibles</span>
+          <input type="number" inputMode="numeric" min={form.comparison === "at_least" ? 1 : 0} max="50"
+            value={form.threshold} aria-label="Seuil"
+            onChange={(e) => setField("threshold", e.target.value)} className="field mono" style={{ width: 80 }} />
+          <span style={{ fontSize: 13, color: "var(--text-3)" }}>{unit}</span>
         </div>
       </label>
+
+      {tripAllowed(form) && (
+        <div className="trip-box">
+          <label className="check-row">
+            <input type="checkbox" checked={form.trip} onChange={(e) => setField("trip", e.target.checked)} />
+            <span>Trajet : vérifier aussi les places à l'arrivée</span>
+          </label>
+          {form.trip && (
+            <>
+              {arrivals.length === 0 ? (
+                <div className="form-hint">Ajoutez une deuxième station en favori pour définir l'arrivée.</div>
+              ) : (
+                <div className="select-wrap select-inset">
+                  <select value={form.arrivalId} onChange={(e) => setField("arrivalId", e.target.value)} aria-label="Station d'arrivée">
+                    <option value="">Station d'arrivée…</option>
+                    {arrivals.map((f) => <option key={f.station_id} value={f.station_id}>{f.station_name}</option>)}
+                  </select>
+                  <Icon name="chevron-down" size={15} />
+                </div>
+              )}
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <span style={{ fontSize: 13, color: "var(--text-3)" }}>si au plus</span>
+                <input type="number" inputMode="numeric" min="0" max="50" value={form.arrivalThreshold}
+                  aria-label="Seuil d'arrivée" onChange={(e) => setField("arrivalThreshold", e.target.value)}
+                  className="field mono" style={{ width: 80 }} />
+                <span style={{ fontSize: 13, color: "var(--text-3)" }}>places libres</span>
+              </div>
+            </>
+          )}
+        </div>
+      )}
 
       <div style={{ display: "flex", gap: 12 }}>
         <label style={{ flex: 1, display: "flex", flexDirection: "column", gap: 6 }}>
           <span className="form-label">Début</span>
-          <input type="time" value={timeStart} onChange={(e) => setTimeStart(e.target.value)} className="field mono" />
+          <input type="time" value={form.timeStart} onChange={(e) => setField("timeStart", e.target.value)} className="field mono" aria-label="Début" />
         </label>
         <label style={{ flex: 1, display: "flex", flexDirection: "column", gap: 6 }}>
           <span className="form-label">Fin</span>
-          <input type="time" value={timeEnd} onChange={(e) => setTimeEnd(e.target.value)} className="field mono" />
+          <input type="time" value={form.timeEnd} onChange={(e) => setField("timeEnd", e.target.value)} className="field mono" aria-label="Fin" />
         </label>
       </div>
 
-      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-        <span className="form-label">Jours</span>
-        <DayPicker value={days} onChange={setDays} />
-      </div>
+      <label className="check-row">
+        <input type="checkbox" checked={form.oneShot} onChange={(e) => setField("oneShot", e.target.checked)} />
+        <span>{form.validOn ? `Uniquement le ${fmtDay(form.validOn)}` : "Aujourd'hui seulement"} (supprimée ensuite)</span>
+      </label>
 
-      {error && <div style={{ color: "var(--danger)", fontSize: 13 }}>{error}</div>}
+      {!form.oneShot && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          <span className="form-label">Jours</span>
+          <DayPicker value={form.days} onChange={(d) => setField("days", d)} />
+        </div>
+      )}
+
+      {error && <div className="form-error" role="alert">{error}</div>}
 
       <div className="form-submit-row">
-        {editingAlert && (
-          <button type="button" className="cancel-btn" onClick={onCancel}>Annuler</button>
-        )}
+        {editing && <button type="button" className="cancel-btn" onClick={onCancel}>Annuler</button>}
         <button type="submit" data-autofocus className="submit-btn">
-          {editingAlert ? "Enregistrer" : "Créer l'alerte"}
+          {editing ? "Enregistrer" : "Créer l'alerte"}
         </button>
       </div>
     </form>
@@ -179,51 +316,69 @@ function AlertForm({ favorites, form, error, onSubmit, onCancel, editingAlert })
 
 export default function Alerts() {
   const { favorites } = useFavorites();
+  const isMobile = useIsMobile();
+  const location = useLocation();
+  const navigate = useNavigate();
   const [alerts, setAlerts] = useState([]);
-  const [error,  setError]  = useState(null);
+  const [pausedUntil, setPausedUntil] = useState(null);
+  const [error, setError] = useState(null);
   const [sheetOpen, setSheetOpen] = useState(false);
-  const [editingAlert, setEditingAlert] = useState(null);
+  const [editing, setEditing] = useState(null);
+  // Station transmise par « Créer une alerte » (fiche station) : formulaire pré-rempli.
+  const [preset] = useState(() => location.state?.alertStation ?? null);
+  const [form, setForm] = useState(() => defaultForm(preset));
 
-  const [stationId, setStationId] = useState("");
-  const [bikeType,  setBikeType]  = useState("any");
-  const [minCount,  setMinCount]  = useState(1);
-  const [timeStart, setTimeStart] = useState("08:00");
-  const [timeEnd,   setTimeEnd]   = useState("10:00");
-  const [days,      setDays]      = useState([1, 2, 3, 4, 5, 6, 7]);
+  const setField = useCallback((k, v) => setForm((f) => ({ ...f, [k]: v })), []);
+
+  // Stations proposées : favoris + station pré-remplie + stations de l'alerte éditée.
+  const stations = [...favorites];
+  const addOption = (id, name) => {
+    if (id && !stations.some((s) => s.station_id === id)) stations.unshift({ station_id: id, station_name: name });
+  };
+  if (preset) addOption(preset.station_id, preset.name);
+  if (editing) {
+    addOption(editing.arrival_station_id, editing.arrival_station_name);
+    addOption(editing.station_id, editing.station_name);
+  }
+  const names = Object.fromEntries(stations.map((s) => [s.station_id, s.station_name]));
 
   const reload = useCallback(async () => {
-    try { setAlerts((await api("/api/alerts")).alerts); }
-    catch (e) { setError(e.message); }
+    try {
+      const data = await api("/api/alerts");
+      setAlerts(data.alerts);
+      setPausedUntil(data.paused_until ?? null);
+    } catch (e) { setError(e.message); }
   }, []);
 
   useEffect(() => { reload(); }, [reload]);
+
+  // Préremplissage consommé : on nettoie l'historique (un retour arrière ne le rejoue pas)
+  // et, sur mobile, on ouvre directement le formulaire.
   useEffect(() => {
-    if (!editingAlert) setStationId((prev) => prev || favorites[0]?.station_id || "");
-  }, [favorites, editingAlert]);
+    if (!preset) return;
+    navigate(location.pathname, { replace: true, state: null });
+    if (isMobile) setSheetOpen(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Station par défaut = premier favori, dès qu'ils sont chargés.
+  useEffect(() => {
+    if (!editing) setForm((f) => (f.stationId ? f : { ...f, stationId: favorites[0]?.station_id ?? "" }));
+  }, [favorites, editing]);
 
   const resetForm = useCallback(() => {
-    setStationId(favorites[0]?.station_id || "");
-    setBikeType("any");
-    setMinCount(1);
-    setTimeStart("08:00");
-    setTimeEnd("10:00");
-    setDays([1, 2, 3, 4, 5, 6, 7]);
+    setForm({ ...defaultForm(), stationId: favorites[0]?.station_id ?? "" });
   }, [favorites]);
 
   const startEdit = (a) => {
-    setEditingAlert(a);
-    setStationId(a.station_id);
-    setBikeType(a.bike_type);
-    setMinCount(a.min_count);
-    setTimeStart(a.time_start);
-    setTimeEnd(a.time_end);
-    setDays(a.days ? a.days.split(",").map(Number) : [1, 2, 3, 4, 5, 6, 7]);
+    setEditing(a);
+    setForm(formFromAlert(a));
     setError(null);
-    if (window.innerWidth < 769) setSheetOpen(true);
+    if (isMobile) setSheetOpen(true);
   };
 
   const cancelEdit = useCallback(() => {
-    setEditingAlert(null);
+    setEditing(null);
     resetForm();
     setSheetOpen(false);
     setError(null);
@@ -232,38 +387,17 @@ export default function Alerts() {
   const save = async (e) => {
     e.preventDefault();
     setError(null);
-    if (!timeStart || !timeEnd || timeEnd <= timeStart) {
-      setError("L'heure de fin doit être postérieure à l'heure de début");
-      return;
-    }
-
-    if (editingAlert) {
-      const selectedFav = favorites.find((f) => f.station_id === stationId);
-      const stationName = selectedFav?.station_name ?? editingAlert.station_name;
-      try {
-        await api(`/api/alerts/${editingAlert.id}`, { method: "PATCH", body: {
-          station_id: stationId, station_name: stationName,
-          bike_type: bikeType, min_count: Number(minCount),
-          time_start: timeStart, time_end: timeEnd, days: days.join(","),
-        }});
-        setSheetOpen(false);
-        setEditingAlert(null);
-        resetForm();
-        reload();
-      } catch (err) { setError(err.message); }
-    } else {
-      const fav = favorites.find((f) => f.station_id === stationId);
-      if (!fav) { setError("Choisissez une station favorite"); return; }
-      try {
-        await api("/api/alerts", { method: "POST", body: {
-          station_id: fav.station_id, station_name: fav.station_name,
-          bike_type: bikeType, min_count: Number(minCount),
-          time_start: timeStart, time_end: timeEnd, days: days.join(","),
-        }});
-        setSheetOpen(false);
-        reload();
-      } catch (err) { setError(err.message); }
-    }
+    const invalid = validateForm(form);
+    if (invalid) { setError(invalid); return; }
+    const body = payloadFromForm(form, names);
+    try {
+      if (editing) await api(`/api/alerts/${editing.id}`, { method: "PATCH", body });
+      else await api("/api/alerts", { method: "POST", body });
+      setSheetOpen(false);
+      setEditing(null);
+      resetForm();
+      reload();
+    } catch (err) { setError(err.message); }
   };
 
   const toggle = async (a) => {
@@ -276,15 +410,7 @@ export default function Alerts() {
   };
 
   const activeCount = alerts.filter((a) => a.active).length;
-  const formProps = {
-    favorites,
-    form: { stationId, setStationId, bikeType, setBikeType, minCount, setMinCount,
-            timeStart, setTimeStart, timeEnd, setTimeEnd, days, setDays },
-    error,
-    onSubmit: save,
-    onCancel: cancelEdit,
-    editingAlert,
-  };
+  const formProps = { stations, form, setField, error, onSubmit: save, onCancel: cancelEdit, editing };
 
   return (
     <>
@@ -296,6 +422,7 @@ export default function Alerts() {
           </div>
 
           <PushBanner />
+          {alerts.length > 0 && <PauseControl pausedUntil={pausedUntil} onChange={setPausedUntil} />}
 
           {alerts.length === 0 ? (
             <div className="empty-state">
@@ -305,11 +432,11 @@ export default function Alerts() {
             </div>
           ) : (
             alerts.map((a) => (
-              <AlertCard key={a.id} a={a} onToggle={toggle} onDelete={remove} onEdit={startEdit} />
+              <AlertCard key={a.id} a={a} paused={!!pausedUntil} onToggle={toggle} onDelete={remove} onEdit={startEdit} />
             ))
           )}
 
-          {error && !sheetOpen && <div style={{ color: "var(--danger)", fontSize: 13 }}>{error}</div>}
+          {error && !sheetOpen && <div className="form-error">{error}</div>}
         </div>
 
         <div className="alert-form-panel">

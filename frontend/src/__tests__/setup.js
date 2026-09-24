@@ -13,8 +13,17 @@ export function jsonResponse(body, status = 200) {
   return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
 }
 
+/** Force le résultat de matchMedia (jsdom ne l'implémente pas) : true = viewport mobile. */
+export function setMobileViewport(mobile) {
+  window.matchMedia = (query) => ({
+    matches: mobile, media: query,
+    addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {},
+  });
+}
+
 beforeEach(() => {
   localStorage.clear();
+  setMobileViewport(false);
   setOnline(true, { emit: false });
   globalThis.fetch = vi.fn(async () => { throw new Error("fetch non simulé dans ce test"); });
 });
