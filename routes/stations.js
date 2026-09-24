@@ -1,6 +1,6 @@
 // Routes stations : référentiel en cache + disponibilité live fusionnée à la volée.
 const express = require('express');
-const { countStations, getStations, saveStations } = require('../db');
+const { countStations, getStations, saveStations, replaceStations } = require('../db');
 const { fetchStationInfo, getStationStatus } = require('../gbfs');
 const { requireAuth } = require('../auth');
 
@@ -10,8 +10,18 @@ function extractCount(vehicleTypes, typeId) {
   return vehicleTypes?.find((v) => v.vehicle_type_id === typeId)?.count ?? 0;
 }
 
-/** Fusionne l'info statique (base) avec le statut live GBFS (jamais mis en base). */
-function mergeWithStatus(stations, statusList) {
+/** Minutes écoulées depuis le dernier signal de la borne (null si inconnu). */
+function reportAgeMin(lastReported, nowMs) {
+  if (!Number.isFinite(lastReported) || lastReported < 1e9) return null;
+  return Math.max(0, Math.floor((nowMs / 1000 - lastReported) / 60));
+}
+
+/**
+ * Fusionne l'info statique (base) avec le statut live GBFS (jamais mis en base).
+ * `report_age_min` est calculé au moment du fetch : il reste juste même servi
+ * plus tard depuis le cache hors ligne du client.
+ */
+function mergeWithStatus(stations, statusList, nowMs = Date.now()) {
   const statusMap = Object.fromEntries(statusList.map((s) => [s.station_id, s]));
 
   return stations.map((s) => {
@@ -33,6 +43,7 @@ function mergeWithStatus(stations, statusList) {
       is_renting:      live.is_renting             ?? false,
       is_returning:    live.is_returning            ?? false,
       last_reported:   live.last_reported           ?? null,
+      report_age_min:  reportAgeMin(live.last_reported, nowMs),
     };
   });
 }
@@ -73,18 +84,27 @@ router.get('/api/stations', async (req, res) => {
 });
 
 /**
+ * Recharge le référentiel depuis GBFS : ajoute/met à jour les stations et retire
+ * celles qui ont disparu du flux. Utilisé par le cron quotidien et la route de refresh.
+ */
+async function refreshStationCatalog() {
+  const info = await fetchStationInfo();
+  return replaceStations(info);
+}
+
+/**
  * POST /api/stations/refresh
  * Force le rechargement des infos stations depuis l'API GBFS.
  * Protégée : sinon n'importe qui peut déclencher des fetchs GBFS + écritures DB en boucle.
  */
 router.post('/api/stations/refresh', requireAuth, async (req, res) => {
   try {
-    const info = await fetchStationInfo();
-    await saveStations(info);
+    const { count, removed } = await refreshStationCatalog();
     res.json({
       ok:      true,
-      message: `${info.length} stations rechargées depuis l'API`,
-      count:   info.length,
+      message: `${count} stations rechargées depuis l'API`,
+      count,
+      removed,
     });
   } catch (err) {
     console.error('[POST /api/stations/refresh]', err.message);
@@ -93,4 +113,5 @@ router.post('/api/stations/refresh', requireAuth, async (req, res) => {
 });
 
 module.exports = router;
+module.exports.refreshStationCatalog = refreshStationCatalog;
 module.exports.mergeWithStatus = mergeWithStatus;

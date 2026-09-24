@@ -38,8 +38,9 @@ function popupHTML(s) {
  * et `filterType` (couleur des markers). Markers diffés (créés une fois, mis à
  * jour en place) → pas de recréation à chaque rafraîchissement API.
  */
-export default function StationMap({ stations, filterType = "all" }) {
+export default function StationMap({ stations, filterType = "all", focus = null }) {
   const containerRef = useRef(null);
+  const userMarkerRef = useRef(null);
   const mapRef = useRef(null);
   const markersRef = useRef(new Map()); // station_id → { marker, el, station }
   const popupRef = useRef(null);
@@ -119,6 +120,28 @@ export default function StationMap({ stations, filterType = "all" }) {
       if (!seen.has(id)) { entry.marker.remove(); markersRef.current.delete(id); }
     }
   }, [stations, filterType]);
+
+  // ── « Autour de moi » : position + stations proches dans le cadre ─────────
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !focus?.coords) return;
+    const { coords, stations: near } = focus;
+    if (!userMarkerRef.current) {
+      const el = document.createElement("div");
+      el.className = "map-user-dot";
+      el.setAttribute("aria-label", "Ma position");
+      userMarkerRef.current = new mapboxgl.Marker({ element: el }).setLngLat([coords.lon, coords.lat]).addTo(map);
+    } else {
+      userMarkerRef.current.setLngLat([coords.lon, coords.lat]);
+    }
+    if (!near?.length) {
+      map.flyTo({ center: [coords.lon, coords.lat], zoom: 15, speed: 0.8 });
+      return;
+    }
+    const bounds = new mapboxgl.LngLatBounds([coords.lon, coords.lat], [coords.lon, coords.lat]);
+    near.forEach((s) => bounds.extend([s.lon, s.lat]));
+    map.fitBounds(bounds, { padding: 80, maxZoom: 16, duration: 800 });
+  }, [focus]);
 
   if (!MAPBOX_TOKEN) {
     return (

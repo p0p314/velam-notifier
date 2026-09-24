@@ -31,5 +31,46 @@
       "type": "image/png",
       "purpose": "maskable"
     }
+  ],
+  "shortcuts": [
+    {
+      "name": "Mes favoris",
+      "short_name": "Favoris",
+      "description": "Disponibilités de vos stations favorites",
+      "url": "/favoris",
+      "icons": [
+        {
+          "src": "/icon-192.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
+    },
+    {
+      "name": "Carte des stations",
+      "short_name": "Carte",
+      "description": "Stations autour de vous",
+      "url": "/carte",
+      "icons": [
+        {
+          "src": "/icon-192.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
+    },
+    {
+      "name": "Mes alertes",
+      "short_name": "Alertes",
+      "description": "Gérer vos alertes de disponibilité",
+      "url": "/alertes",
+      "icons": [
+        {
+          "src": "/icon-192.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
+    }
   ]
 }

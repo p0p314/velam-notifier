@@ -16,7 +16,7 @@ describe("lib/favorites", () => {
 
   test("displayStation : nom personnalisé en titre, nom réel en sous-titre", () => {
     const st = { station_id: "1", name: "Gare du Nord", address: "Place" };
-    expect(displayStation(st, { label: "Maison" })).toMatchObject({ name: "Maison", address: "Gare du Nord" });
+    expect(displayStation(st, { label: "Maison" })).toMatchObject({ name: "Maison", subtitle: "Gare du Nord", address: "Place" });
     expect(displayStation(st, { label: null })).toBe(st);
   });
 

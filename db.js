@@ -49,6 +49,25 @@ async function saveStations(stations) {
   console.log(`[db] ${unique.length} stations enregistrées`);
 }
 
+/**
+ * Synchronise le référentiel : upsert de `stations` puis suppression de celles
+ * absentes du flux. Garde-fou : si le flux renvoie moins de la moitié des stations
+ * connues (flux partiel / incident), on n'en supprime aucune.
+ * Renvoie { count, removed }.
+ */
+async function replaceStations(stations) {
+  await saveStations(stations);
+  const ids = [...new Set(stations.map((s) => s.station_id))];
+  const known = await countStations();
+  if (ids.length === 0 || ids.length < known / 2) return { count: ids.length, removed: 0 };
+  const { changes } = await dbc.run(
+    `DELETE FROM stations WHERE station_id NOT IN (${ids.map(() => '?').join(', ')})`,
+    ids
+  );
+  if (changes) console.log(`[db] ${changes} station(s) retirée(s) du référentiel`);
+  return { count: ids.length, removed: changes };
+}
+
 // ── Rental apps (deep links officiels, sync GBFS quotidienne) ────────────────
 
 /**
@@ -319,7 +338,7 @@ async function setAlertsPause(userId, until) {
 module.exports = {
   initialize,
   // stations
-  countStations, getStations, saveStations,
+  countStations, getStations, saveStations, replaceStations,
   // rental apps
   upsertRentalApp, getRentalApps, getRentalAppsMap,
   // config

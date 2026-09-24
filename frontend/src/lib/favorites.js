@@ -25,11 +25,11 @@ export function moveItem(list, index, delta) {
 
 /**
  * Station affichée pour un favori : le nom personnalisé passe en titre et le nom
- * réel de la station en sous-titre (à la place de l'adresse).
+ * réel de la station en sous-titre (`subtitle`, toujours visible).
  */
 export function displayStation(station, fav) {
   if (!fav?.label) return station;
-  return { ...station, name: fav.label, address: station.name };
+  return { ...station, name: fav.label, subtitle: station.name };
 }
 
 /**

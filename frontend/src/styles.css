@@ -712,3 +712,20 @@ select option { background: var(--surface); color: var(--text); }
 .organize-fields .field { width: 100%; }
 .organize-sub { font-size: 12px; color: var(--text-3); padding-left: 2px; }
 .organize-item .icon-btn:disabled { opacity: .3; cursor: default; }
+
+/* Données de borne périmées / vélos indisponibles */
+.station-item-sub { font-size: 12px; color: var(--text-3); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.stale-note { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--warn); margin-top: 4px; }
+.detail-stale { display: flex; margin: 10px 0 4px; }
+.sc-notes { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 12px; color: var(--text-3); margin-top: 8px; }
+.sc-notes .stale-note { margin-top: 0; }
+
+/* Carte : « Autour de moi » */
+.map-around { position: absolute; right: 28px; bottom: 28px; z-index: 5; display: flex; flex-direction: column; align-items: flex-end; gap: 8px; max-width: calc(100% - 56px); }
+.map-around-btn { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; padding: 0 16px; border: none; border-radius: var(--r-pill); background: var(--accent); color: var(--on-accent); font-size: 14px; font-weight: 600; box-shadow: var(--shadow-fab); cursor: pointer; }
+.map-around-btn:disabled { opacity: .7; cursor: default; }
+.map-around-panel { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-md); padding: 10px 12px; box-shadow: var(--shadow-pop); font-size: 13px; color: var(--text-2); min-width: 220px; }
+.map-around-panel ol { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; }
+.map-around-name { display: block; font-weight: 600; color: var(--text); }
+.map-around-meta { font-family: var(--font-mono); font-size: 12px; color: var(--text-3); }
+.map-user-dot { width: 16px; height: 16px; border-radius: 50%; background: var(--accent); border: 3px solid var(--surface); box-shadow: var(--focus-ring); }

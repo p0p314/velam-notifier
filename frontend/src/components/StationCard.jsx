@@ -1,7 +1,7 @@
 import Icon from "./Icon";
 import { fmtTime } from "../theme";
 import { fmtDistance } from "../hooks";
-import { stationStatus, LOW_BIKES } from "../lib/station";
+import { stationStatus, staleNote, disabledNote, LOW_BIKES } from "../lib/station";
 
 function MiniStat({ kind, label, value, max, offline }) {
   const pct = max > 0 ? Math.min(100, (value / max) * 100) : 0;
@@ -34,6 +34,7 @@ export default function StationCard({ s, onClick, isFav, onToggleFav, dist }) {
       <div className="sc-head">
         <div style={{ minWidth: 0 }}>
           <div className="sc-name">{s.name}</div>
+          {s.subtitle && <div className="station-item-sub">{s.subtitle}</div>}
           {s.address?.trim() && <div className="sc-addr">{s.address.trim()}</div>}
           {distLabel && <div className="sc-dist"><Icon name="map-pin" size={12} /> {distLabel}</div>}
         </div>
@@ -55,6 +56,13 @@ export default function StationCard({ s, onClick, isFav, onToggleFav, dist }) {
         <MiniStat kind="elec" label="ÉLEC." value={s.electrical ?? 0} max={s.capacity} offline={offline} />
         <MiniStat kind="meca" label="MÉCA." value={s.mechanical ?? 0} max={s.capacity} offline={offline} />
       </div>
+
+      {(staleNote(s) || (!offline && disabledNote(s))) && (
+        <div className="sc-notes">
+          {staleNote(s) && <span className="stale-note"><Icon name="clock" size={12} /> {staleNote(s)}</span>}
+          {!offline && disabledNote(s) && <span>{disabledNote(s)}</span>}
+        </div>
+      )}
 
       <div className="sc-foot">
         <span>{offline ? "Indisponible" : `${docks} place${docks !== 1 ? "s" : ""} libre${docks !== 1 ? "s" : ""}`}</span>
