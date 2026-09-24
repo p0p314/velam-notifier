@@ -31,11 +31,19 @@ function sameKey(sub, key) {
  * Appelé au démarrage et après login : garantit que l'appareil reste rattaché
  * au compte connecté, et resouscrit si les clés VAPID ont changé côté serveur.
  */
+// Garde-fou : si le service worker ne devient jamais prêt (échec d'enregistrement),
+// on abandonne au lieu de bloquer l'appelant (bouton « Activer » figé).
+const SW_READY_TIMEOUT_MS = 10_000;
+const swReady = () => Promise.race([
+  navigator.serviceWorker.ready,
+  new Promise((_, reject) => setTimeout(() => reject(new Error("service worker indisponible")), SW_READY_TIMEOUT_MS)),
+]);
+
 export async function syncPush() {
   if (pushPermission() !== "granted") return false;
 
   try {
-    const reg = await navigator.serviceWorker.ready;
+    const reg = await swReady();
     const { publicKey } = await api("/api/push/vapid-public-key", { auth: false });
     if (!publicKey) return false;
     const key = urlBase64ToUint8Array(publicKey);

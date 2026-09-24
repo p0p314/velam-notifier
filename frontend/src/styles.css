@@ -729,3 +729,16 @@ select option { background: var(--surface); color: var(--text); }
 .map-around-name { display: block; font-weight: 600; color: var(--text); }
 .map-around-meta { font-family: var(--font-mono); font-size: 12px; color: var(--text-3); }
 .map-user-dot { width: 16px; height: 16px; border-radius: 50%; background: var(--accent); border: 3px solid var(--surface); box-shadow: var(--focus-ring); }
+
+/* Accueil (premier lancement) */
+.onboarding { display: flex; flex-direction: column; gap: 14px; }
+.onboarding-head { display: flex; align-items: center; justify-content: space-between; }
+.onboarding-count { font-family: var(--font-mono); font-size: 12px; color: var(--text-3); }
+.onboarding-text { margin: 0; font-size: 14px; line-height: 1.5; color: var(--text-2); }
+.onboarding-ok { display: inline-flex; align-items: center; gap: 8px; color: var(--ok); font-weight: 600; font-size: 14px; }
+.onboarding-nav { display: flex; align-items: center; gap: 10px; margin-top: 6px; }
+.onboarding-nav .cancel-btn { width: auto; margin-left: auto; padding: 0 16px; }
+.onboarding-next { min-height: 44px; padding: 0 20px; border: none; border-radius: var(--r-sm); background: var(--accent); color: var(--on-accent); font-size: 14px; font-weight: 600; cursor: pointer; }
+.onboarding-dots { display: flex; gap: 6px; }
+.onboarding-dots span { width: 7px; height: 7px; border-radius: 50%; background: var(--border-strong); }
+.onboarding-dots span.on { background: var(--accent); }

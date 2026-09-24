@@ -14,6 +14,7 @@ import Favorites from "./pages/Favorites";
 import Alerts from "./pages/Alerts";
 import Redirect from "./pages/Redirect";
 import { OnlineOnly } from "./components/Offline";
+import Onboarding from "./components/Onboarding";
 
 // Carte chargée à la demande : mapbox-gl (~1,5 Mo) reste hors du bundle principal.
 const MapPage = lazy(() => import("./pages/MapPage"));
@@ -59,6 +60,7 @@ function Layout() {
       <Navbar />
       <main className="app-content"><Outlet /></main>
       <BottomNav />
+      <Onboarding />
     </div>
   );
 }
