@@ -20,6 +20,9 @@ export const C = {
 // Couleur d'un compteur selon la disponibilité (0 → vide, faible → warn, sinon ok).
 export const bikeColor = (n) => (n === 0 ? "var(--text-3)" : n <= 2 ? "var(--warn)" : "var(--ok)");
 
+/** Version de l'app (injectée par Vite depuis package.json). */
+export const APP_VERSION = __APP_VERSION__;
+
 export function fmtTime(ts) {
   if (!ts || ts < 1_000_000_000) return null;
   return new Date(ts * 1000).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });

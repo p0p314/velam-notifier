@@ -1,0 +1,61 @@
+name: Release
+
+# Au merge sur main : si la version de package.json n'a pas encore de tag,
+# crée le tag vX.Y.Z et la release GitHub avec la section correspondante du
+# CHANGELOG. Sans nouvelle version, ne fait rien (idempotent).
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # tags inclus
+
+      - name: Lecture de la version
+        id: version
+        run: |
+          set -euo pipefail
+          back=$(node -p "require('./package.json').version")
+          front=$(node -p "require('./frontend/package.json').version")
+          if [ "$back" != "$front" ]; then
+            echo "::error::Versions différentes : package.json=$back, frontend/package.json=$front"
+            exit 1
+          fi
+          echo "tag=v$back" >> "$GITHUB_OUTPUT"
+          echo "version=$back" >> "$GITHUB_OUTPUT"
+
+      - name: Création du tag et de la release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.version.outputs.tag }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          if git rev-parse -q --verify "refs/tags/$TAG" >/dev/null; then
+            echo "Le tag $TAG existe déjà — rien à publier."
+            exit 0
+          fi
+
+          # Section « ## [X.Y.Z] » du CHANGELOG, jusqu'à la section suivante.
+          awk -v v="$VERSION" '
+            $0 ~ "^## \\[" v "\\]" { on = 1; next }
+            on && /^## \[/ { exit }
+            on && /^\[[^]]+\]: / { next }
+            on { print }
+          ' CHANGELOG.md > notes.md
+
+          if [ ! -s notes.md ]; then
+            echo "::error::Aucune section « ## [$VERSION] » dans CHANGELOG.md"
+            exit 1
+          fi
+
+          gh release create "$TAG" --target "$GITHUB_SHA" --title "VéloPulse $TAG" --notes-file notes.md
+          echo "Release $TAG publiée."

@@ -1,6 +1,7 @@
 // Sondes de santé : /health (anti-veille Render, public) + /api/health (diagnostic).
 const express = require('express');
 const { countStations } = require('../db');
+const { version } = require('../package.json');
 
 const router = express.Router();
 
@@ -12,6 +13,7 @@ router.get('/health', (req, res) => {
 router.get('/api/health', async (req, res) => {
   res.json({
     ok:              true,
+    version,
     stations_in_db:  await countStations(),
     uptime_seconds:  Math.round(process.uptime()),
     node_version:    process.version,

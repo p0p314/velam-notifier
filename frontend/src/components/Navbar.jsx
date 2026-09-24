@@ -4,6 +4,7 @@ import { useTheme } from "../useTheme";
 import { usePwaInstall } from "./PwaInstallContext";
 import Icon from "./Icon";
 import Logo from "./Logo";
+import { APP_VERSION } from "../theme";
 
 // Top navbar — affichée uniquement en desktop (> 768px) via CSS.
 export default function Navbar() {
@@ -18,6 +19,7 @@ export default function Navbar() {
       <div className="brand">
         <span className="brand-logo"><Logo /></span>
         <span className="brand-name">VéloPulse</span>
+        <span className="app-version">v{APP_VERSION}</span>
       </div>
       <nav className="nav-links">
         <NavLink to="/stations" className={cls}>Stations</NavLink>
