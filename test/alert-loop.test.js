@@ -3,7 +3,7 @@ const { resetDb, gbfs, resetGbfs, expireCache, dbc, fakeSubscription } = require
 const { test, beforeEach, describe } = require('node:test');
 const assert = require('node:assert/strict');
 const webpush = require('web-push');
-const { checkAlerts } = require('../push');
+const { checkAlerts, runPollCycle, getAlertLoopHealth, startPolling, stopPolling } = require('../push');
 const { createUser, createAlert, updateAlert, addSubscription, setAlertsPause, saveStations } = require('../db');
 
 // Mercredi 24/09/2025 à 08:30 heure de Paris (06:30 UTC)
@@ -354,5 +354,58 @@ describe('flux Vélam défaillant : pas d\'alerte sur des données périmées', 
     gbfs.fail = true;
     await checkAlerts(WED_0831);
     assert.equal(sent.length, 0);
+  });
+});
+
+describe('santé de la boucle d\'alerte (/api/health)', () => {
+  test('cycle réussi : démarrée, saine, dernier résultat enregistré', async (t) => {
+    startPolling();
+    t.after(stopPolling);
+    await createAlert(userId, alertBase);
+    await setBikes(0);
+    await runPollCycle(WED_0830);
+    const h = getAlertLoopHealth();
+    assert.equal(h.started, true);
+    assert.equal(h.healthy, true);
+    assert.equal(h.last_outcome, 'verifiees');
+    assert.ok(h.last_run_at);
+    assert.equal(sent.length, 1);
+  });
+
+  test('résultats explicites : aucune alerte, aucune due, données périmées', async (t) => {
+    startPolling();
+    t.after(stopPolling);
+    await runPollCycle(WED_0830);
+    assert.equal(getAlertLoopHealth().last_outcome, 'aucune_alerte');
+    await createAlert(userId, { ...alertBase, time_start: '17:00', time_end: '18:00' });
+    await runPollCycle(WED_0830);
+    assert.equal(getAlertLoopHealth().last_outcome, 'aucune_due');
+    await createAlert(userId, alertBase);
+    await setBikes(0);
+    gbfs.lastUpdated = Math.floor(Date.now() / 1000) - 10 * 60;
+    await runPollCycle(WED_0830);
+    assert.equal(getAlertLoopHealth().last_outcome, 'donnees_perimees');
+  });
+
+  test('erreur pendant un cycle : enregistrée, boucle signalée malsaine', async (t) => {
+    startPolling();
+    t.after(stopPolling);
+    const original = dbc.get;
+    dbc.get = async () => { throw new Error('base indisponible'); };
+    t.after(() => { dbc.get = original; });
+    await runPollCycle(WED_0830);
+    const h = getAlertLoopHealth();
+    assert.equal(h.last_outcome, 'erreur');
+    assert.equal(h.last_error.message, 'base indisponible');
+    assert.equal(h.healthy, false);
+  });
+
+  test('boucle arrêtée ou bloquée depuis 3 intervalles → malsaine', async (t) => {
+    startPolling();
+    t.after(stopPolling);
+    await runPollCycle(WED_0830);
+    assert.equal(getAlertLoopHealth(Date.now() + 10 * 60_000).healthy, false);
+    stopPolling();
+    assert.equal(getAlertLoopHealth().healthy, false);
   });
 });
