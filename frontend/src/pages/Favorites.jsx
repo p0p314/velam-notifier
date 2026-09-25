@@ -3,6 +3,7 @@ import StationListItem from "../components/StationListItem";
 import StationDetailSheet from "../components/StationDetailSheet";
 import Icon from "../components/Icon";
 import { OfflineBanner } from "../components/Offline";
+import LocateHint from "../components/LocateHint";
 import { useStations, useFavorites, useGeolocation, distanceKm } from "../hooks";
 import { SORTS, loadSortPref, saveSortPref, moveItem, displayStation, sortFavorites } from "../lib/favorites";
 
@@ -92,11 +93,15 @@ function OrganizeItem({ fav, index, count, onMove, onRename }) {
 export default function Favorites() {
   const { stations, loading, stale, staleReason, lastUpd } = useStations();
   const { favorites, favIds, toggleFav, rename, reorder, loading: favLoading, stale: favStale } = useFavorites();
-  const { coords } = useGeolocation();
+  const { coords, status: geoStatus, locate } = useGeolocation();
   const [selId, setSelId] = useState(null);
   const [sort, setSort] = useState(loadSortPref);
   const [organizing, setOrganizing] = useState(false);
-  const changeSort = (v) => { setSort(v); saveSortPref(v); };
+  const changeSort = (v) => {
+    setSort(v);
+    saveSortPref(v);
+    if (v === SORTS.distance && !coords) locate(); // clic = consentement explicite
+  };
 
   // Données live de chaque favori (repli sur le nom enregistré si la station manque),
   // nom personnalisé en titre, puis tri : proximité (si position) ou ordre choisi.
@@ -134,6 +139,10 @@ export default function Favorites() {
           <button type="button" aria-pressed={sort === SORTS.custom} className={sort === SORTS.custom ? "active" : ""}
             onClick={() => changeSort(SORTS.custom)}>Mon ordre</button>
         </div>
+      )}
+
+      {favorites.length > 1 && !organizing && sort === SORTS.distance && !coords && (
+        <LocateHint status={geoStatus} onLocate={locate} />
       )}
 
       <OfflineBanner stale={stale || favStale} staleReason={staleReason ?? (favStale ? "server" : null)} lastUpd={lastUpd} />

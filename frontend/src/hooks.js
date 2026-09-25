@@ -21,29 +21,71 @@ export function fmtDistance(km) {
   return `${km.toFixed(1).replace(".", ",")} km`;
 }
 
+const hasGeo = () => typeof navigator !== "undefined" && "geolocation" in navigator;
+
+// Dernière position obtenue, partagée par toutes les pages : une seule mesure GPS
+// pour Favoris, Stations et Carte au lieu d'une par page affichée.
+const GEO_REUSE_MS = 2 * 60_000;
+let lastPos = null; // { coords, at }
+
+/** Tests : oublie la position partagée. */
+export function resetGeoCache() { lastPos = null; }
+
 /**
- * Position de l'utilisateur via la géolocalisation navigateur (une seule requête).
- * status : 'prompt' (en cours) | 'granted' | 'denied' | 'unavailable'.
+ * Demande la position (peut afficher l'invite du navigateur : à n'appeler que sur
+ * action de l'utilisateur, ou si l'autorisation est déjà accordée).
+ * Réutilise une position de moins de 2 min.
+ */
+export function requestPosition() {
+  return new Promise((resolve, reject) => {
+    if (!hasGeo()) return reject(new Error("Géolocalisation indisponible"));
+    if (lastPos && Date.now() - lastPos.at < GEO_REUSE_MS) return resolve(lastPos.coords);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const coords = { lat: pos.coords.latitude, lon: pos.coords.longitude };
+        lastPos = { coords, at: Date.now() };
+        resolve(coords);
+      },
+      reject,
+      { enableHighAccuracy: true, timeout: 10_000, maximumAge: 30_000 }
+    );
+  });
+}
+
+/** true seulement si l'autorisation est déjà accordée — l'interroger n'affiche aucune invite. */
+async function geoAlreadyGranted() {
+  try { return (await navigator.permissions?.query({ name: "geolocation" }))?.state === "granted"; }
+  catch { return false; }
+}
+
+/**
+ * Position de l'utilisateur, **sans jamais demander l'autorisation au lancement** :
+ * localisation automatique uniquement si elle est déjà accordée, sinon `locate()`
+ * (à brancher sur un clic) déclenche l'invite.
+ * status : 'idle' | 'locating' | 'granted' | 'denied' | 'unavailable'.
  * Le tri par distance retombe sur l'ordre alphabétique tant que coords est null.
  */
 export function useGeolocation() {
-  const [coords, setCoords] = useState(null);
-  const [status, setStatus] = useState("prompt");
+  const [coords, setCoords] = useState(() => lastPos?.coords ?? null);
+  const [status, setStatus] = useState(() => (!hasGeo() ? "unavailable" : lastPos ? "granted" : "idle"));
+  const alive = useRef(true);
 
-  useEffect(() => {
-    if (typeof navigator === "undefined" || !("geolocation" in navigator)) {
-      setStatus("unavailable");
-      return;
-    }
-    navigator.geolocation.getCurrentPosition(
-      (pos) => { setCoords({ lat: pos.coords.latitude, lon: pos.coords.longitude }); setStatus("granted"); },
-      () => setStatus("denied"),
-      // GPS si dispo + position fraîche (pas de cache grossier) → tri proximité fiable.
-      { enableHighAccuracy: true, timeout: 10_000, maximumAge: 0 }
+  const locate = useCallback(() => {
+    if (!hasGeo()) { setStatus("unavailable"); return; }
+    setStatus("locating");
+    requestPosition().then(
+      (c) => { if (alive.current) { setCoords(c); setStatus("granted"); } },
+      () => { if (alive.current) setStatus("denied"); }
     );
   }, []);
 
-  return { coords, status };
+  useEffect(() => {
+    alive.current = true;
+    if (hasGeo()) geoAlreadyGranted().then((ok) => { if (ok && alive.current) locate(); });
+    return () => { alive.current = false; };
+  }, [locate]);
+
+  return { coords, status, locate };
 }
 
 /**

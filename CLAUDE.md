@@ -230,6 +230,10 @@ différenciée : mobile → `/favoris`, desktop → `/stations`.
   `upstream` = verdict serveur, `server` = serveur injoignable), `useFavorites` (liste, toggle, `rename`, `reorder`
   optimiste ; modifications **mises en file**, seule la réponse de la dernière est appliquée),
   `useOnline`, `useGeolocation`, `useIsMobile`, helpers `distanceKm` / `fmtDistance`.
+  **Géolocalisation** : jamais demandée au lancement — `useGeolocation` ne localise tout seul
+  que si l'autorisation est déjà accordée (Permissions API), sinon `locate()` sur clic
+  (`components/LocateHint`, choix du tri proximité). Position partagée entre pages
+  (`requestPosition`, réutilisée 2 min) ; iOS oublie l'autorisation des web-apps.
 - **lib/** — logique pure testable : `alerts.js` (formulaire ↔ API, résumés), `favorites.js`
   (tri, déplacement, nom personnalisé), `station.js` (statut, `bannerText`, `disabledNote`),
   `mapConfig.js` (couleurs, `nearestWithBikes`), `onboarding.js` (étapes utiles), `offlineCache.js`.

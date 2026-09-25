@@ -8,6 +8,8 @@ import { nearestWithBikes, mapStyleFor } from "../lib/mapConfig";
 import { ThemeProvider } from "../useTheme";
 import StationListItem from "../components/StationListItem";
 import StationDetailSheet from "../components/StationDetailSheet";
+import LocateHint from "../components/LocateHint";
+import { useGeolocation, requestPosition } from "../hooks";
 import { jsonResponse } from "./setup";
 
 // La carte Mapbox (WebGL) n'est pas testable en jsdom : on la remplace par un
@@ -104,6 +106,69 @@ describe("autour de moi", () => {
     render(<MemoryRouter><MapPage /></MemoryRouter>);
     fireEvent.click(await screen.findByRole("button", { name: /Autour de moi/ }));
     expect((await screen.findByRole("status")).textContent).toMatch(/autorisez la géolocalisation/);
+  });
+});
+
+describe("géolocalisation : jamais d'invite au lancement", () => {
+  const here = { lat: 49.89, lon: 2.30 };
+  const mockGeo = ({ permission, fail = false } = {}) => {
+    const getCurrentPosition = vi.fn((ok, ko) => (fail ? ko(new Error("refus")) : ok({ coords: { latitude: here.lat, longitude: here.lon } })));
+    Object.defineProperty(navigator, "geolocation", { configurable: true, value: { getCurrentPosition } });
+    Object.defineProperty(navigator, "permissions", {
+      configurable: true,
+      value: permission ? { query: async () => ({ state: permission }) } : undefined,
+    });
+    return getCurrentPosition;
+  };
+  function Probe() {
+    const { coords, status, locate } = useGeolocation();
+    return (<>
+      <span data-testid="coords">{coords ? `${coords.lat},${coords.lon}` : ""}</span>
+      <LocateHint status={status} onLocate={locate} />
+    </>);
+  }
+
+  test("autorisation pas encore donnée → aucune demande, bouton « Trier par proximité »", async () => {
+    const gcp = mockGeo({ permission: "prompt" });
+    render(<Probe />);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(gcp).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: /Trier par proximité/ }));
+    expect(gcp).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(screen.getByTestId("coords").textContent).toBe("49.89,2.3"));
+    expect(screen.queryByRole("status")).toBeNull();
+  });
+
+  test("sans Permissions API (anciens navigateurs) → aucune demande automatique", async () => {
+    const gcp = mockGeo({ permission: null });
+    render(<Probe />);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(gcp).not.toHaveBeenCalled();
+    expect(screen.getByText("Stations triées par nom.")).toBeTruthy();
+  });
+
+  test("autorisation déjà accordée → localisation automatique", async () => {
+    const gcp = mockGeo({ permission: "granted" });
+    render(<Probe />);
+    await waitFor(() => expect(screen.getByTestId("coords").textContent).toBe("49.89,2.3"));
+    expect(gcp).toHaveBeenCalledTimes(1);
+  });
+
+  test("refus → message, sans redemander", async () => {
+    const gcp = mockGeo({ permission: "prompt", fail: true });
+    render(<Probe />);
+    fireEvent.click(await screen.findByRole("button", { name: /Trier par proximité/ }));
+    expect((await screen.findByRole("status")).textContent).toMatch(/Position non autorisée/);
+    expect(gcp).toHaveBeenCalledTimes(1);
+  });
+
+  test("position partagée entre les pages : une seule mesure", async () => {
+    const gcp = mockGeo({ permission: "prompt" });
+    expect(await requestPosition()).toEqual(here);
+    expect(await requestPosition()).toEqual(here);
+    expect(gcp).toHaveBeenCalledTimes(1);
+    render(<Probe />); // une page affichée ensuite a directement la position
+    expect(screen.getByTestId("coords").textContent).toBe("49.89,2.3");
   });
 });
 

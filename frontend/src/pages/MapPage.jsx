@@ -3,7 +3,7 @@ import StationMap from "../components/map/StationMap";
 import MapFilters from "../components/map/MapFilters";
 import Icon from "../components/Icon";
 import { OfflineBanner } from "../components/Offline";
-import { useStations, fmtDistance } from "../hooks";
+import { useStations, fmtDistance, requestPosition } from "../hooks";
 import { useTheme } from "../useTheme";
 import { bikeCountForType, nearestWithBikes } from "../lib/mapConfig";
 
@@ -28,14 +28,12 @@ export default function MapPage() {
       return;
     }
     setGeo({ busy: true, error: null });
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        const coords = { lat: pos.coords.latitude, lon: pos.coords.longitude };
+    requestPosition().then(
+      (coords) => {
         setFocus({ coords, stations: nearestWithBikes(filtered, coords, type, 3) });
         setGeo({ busy: false, error: null });
       },
-      () => setGeo({ busy: false, error: "Position indisponible : autorisez la géolocalisation." }),
-      { enableHighAccuracy: true, timeout: 10_000, maximumAge: 30_000 }
+      () => setGeo({ busy: false, error: "Position indisponible : autorisez la géolocalisation." })
     );
   };
 
