@@ -527,6 +527,7 @@ select option { background: var(--surface); color: var(--text); }
 
 /* ── Carte Mapbox ─────────────────────────────────────────────────────────── */
 .map-page { position: relative; padding: 12px 16px; }
+.map-stage { position: relative; }
 .map-container {
   width: 100%; height: calc(100dvh - 200px); min-height: 380px;
   border: 1px solid var(--border); border-radius: var(--r-lg); overflow: hidden;
@@ -538,14 +539,14 @@ select option { background: var(--surface); color: var(--text); }
 }
 .map-missing-token code { font-family: var(--font-mono); font-size: 12px; color: var(--accent); }
 .map-loading {
-  position: absolute; left: 50%; top: 24px; transform: translateX(-50%); z-index: 6;
+  position: absolute; left: 50%; top: 12px; transform: translateX(-50%); z-index: 6;
   background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-pill);
   padding: 6px 14px; font-size: 12px; color: var(--text-3); box-shadow: var(--shadow-card);
 }
 
 /* Filtres superposés */
 .map-filters {
-  position: absolute; top: 22px; left: 26px; z-index: 5;
+  position: absolute; top: 10px; left: 10px; z-index: 5;
   display: flex; flex-direction: column; gap: 10px; width: 200px;
   background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-md);
   padding: 12px; box-shadow: var(--shadow-pop);
@@ -686,7 +687,7 @@ select option { background: var(--surface); color: var(--text); }
 
   .map-page { padding: 16px 0; }
   .map-container { height: calc(100dvh - 110px); }
-  .map-filters { left: 16px; top: 28px; }
+  .map-filters { left: 12px; top: 12px; }
 
   .alertes-layout { display: grid; grid-template-columns: 1fr 360px; gap: 24px; align-items: start; padding: 20px 0 24px; }
   .alert-form-panel {
@@ -713,15 +714,12 @@ select option { background: var(--surface); color: var(--text); }
 .organize-sub { font-size: 12px; color: var(--text-3); padding-left: 2px; }
 .organize-item .icon-btn:disabled { opacity: .3; cursor: default; }
 
-/* Données de borne périmées / vélos indisponibles */
+/* Sous-titre de favori renommé / vélos indisponibles */
 .station-item-sub { font-size: 12px; color: var(--text-3); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.stale-note { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--warn); margin-top: 4px; }
-.detail-stale { display: flex; margin: 10px 0 4px; }
-.sc-notes { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 12px; color: var(--text-3); margin-top: 8px; }
-.sc-notes .stale-note { margin-top: 0; }
+.sc-notes { font-size: 12px; color: var(--text-3); margin-top: 8px; }
 
 /* Carte : « Autour de moi » */
-.map-around { position: absolute; right: 28px; bottom: 28px; z-index: 5; display: flex; flex-direction: column; align-items: flex-end; gap: 8px; max-width: calc(100% - 56px); }
+.map-around { position: absolute; right: 12px; bottom: 12px; z-index: 5; display: flex; flex-direction: column; align-items: flex-end; gap: 8px; max-width: calc(100% - 24px); }
 .map-around-btn { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; padding: 0 16px; border: none; border-radius: var(--r-pill); background: var(--accent); color: var(--on-accent); font-size: 14px; font-weight: 600; box-shadow: var(--shadow-fab); cursor: pointer; }
 .map-around-btn:disabled { opacity: .7; cursor: default; }
 .map-around-panel { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-md); padding: 10px 12px; box-shadow: var(--shadow-pop); font-size: 13px; color: var(--text-2); min-width: 220px; }

@@ -2,7 +2,7 @@ import { useNavigate } from "react-router-dom";
 import BottomSheet from "./BottomSheet";
 import Icon from "./Icon";
 import { fmtTime } from "../theme";
-import { stationStatus, staleNote } from "../lib/station";
+import { stationStatus } from "../lib/station";
 
 function Row({ icon, kind, label, value }) {
   return (
@@ -28,7 +28,6 @@ export default function StationDetailSheet({ station, open, onClose, isFav, onTo
       {s.address?.trim() && <div className="detail-addr">{s.address.trim()}</div>}
 
       <span className={"detail-badge " + st.cls}><span className="dot" />{st.labelLong}</span>
-      {staleNote(s) && <div className="stale-note detail-stale"><Icon name="clock" size={14} /> {staleNote(s)} : disponibilités peut-être inexactes</div>}
 
       <Row icon="bolt" kind="elec" label="Vélos électriques" value={offline ? "—" : (s.electrical ?? 0)} />
       <Row icon="bike" kind="meca" label="Vélos mécaniques" value={offline ? "—" : (s.mechanical ?? 0)} />

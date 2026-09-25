@@ -4,7 +4,7 @@ const {
   countActiveAlerts, getActiveAlerts, deleteExpiredAlerts, markAlertNotified, setAlertNotifiedKey,
   getSubscriptionsByUser, removeSubscriptionById, getStations,
 } = require('./db');
-const { getStationStatus } = require('./gbfs');
+const { getStationStatus, isFresh } = require('./gbfs');
 const { nowInTz, inWindow } = require('./time');
 const { distanceKm, fmtDistance } = require('./geo');
 
@@ -292,14 +292,20 @@ async function checkAlerts(date = new Date()) {
   const due = (await getActiveAlerts(now.date)).filter((a) => isDue(a, now));
   if (due.length === 0) return;
 
-  let statusList;
+  let status;
   try {
-    statusList = await getStationStatus();
+    status = await getStationStatus();
   } catch (err) {
     console.error('[push] fetch GBFS status', err.message);
     return;
   }
-  const statusMap = Object.fromEntries(statusList.map((s) => [s.station_id, s]));
+  // Flux Vélam en panne ou données figées : on n'alerte pas sur des chiffres périmés.
+  if (!isFresh(status)) {
+    console.warn('[push] disponibilités périmées — cycle d\'alerte ignoré');
+    return;
+  }
+
+  const statusMap = Object.fromEntries(status.stations.map((s) => [s.station_id, s]));
 
   // Référentiel (coordonnées) pour les stations de repli — lu en base, 1 fois par cycle.
   let stations = [];

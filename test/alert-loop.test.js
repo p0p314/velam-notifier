@@ -336,3 +336,23 @@ describe('station de repli dans la notification', () => {
     assert.equal(sent[0].payload.body, 'Plus aucun vélo disponible');
   });
 });
+
+describe('flux Vélam défaillant : pas d\'alerte sur des données périmées', () => {
+  test('flux figé depuis 5 min → aucune notification', async () => {
+    await createAlert(userId, alertBase);
+    await setBikes(0);
+    gbfs.lastUpdated = Math.floor(Date.now() / 1000) - 6 * 60;
+    await checkAlerts(WED_0830);
+    assert.equal(sent.length, 0);
+  });
+
+  test('flux en erreur après un succès (données servies en secours) → aucune notification', async () => {
+    await createAlert(userId, alertBase);
+    await setBikes(5);
+    await checkAlerts(WED_0830); // succès, pas de notif (5 vélos)
+    await setBikes(0);
+    gbfs.fail = true;
+    await checkAlerts(WED_0831);
+    assert.equal(sent.length, 0);
+  });
+});

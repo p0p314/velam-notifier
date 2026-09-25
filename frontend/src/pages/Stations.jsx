@@ -31,7 +31,7 @@ function SearchBox({ value, onChange }) {
 }
 
 export default function Stations() {
-  const { stations, loading, error, stale, lastUpd, reload } = useStations();
+  const { stations, loading, error, stale, staleReason, lastUpd, reload } = useStations();
   const { favIds, toggleFav } = useFavorites();
   const { coords } = useGeolocation();
 
@@ -128,7 +128,7 @@ export default function Stations() {
             <Icon name="sliders" size={18} />
           </button>
         </div>
-        <OfflineBanner stale={stale} lastUpd={lastUpd} />
+        <OfflineBanner stale={stale} staleReason={staleReason} lastUpd={lastUpd} />
         {loading ? (
           <div className="view-state">Connexion au serveur…</div>
         ) : error ? ErrorBox
@@ -170,7 +170,7 @@ export default function Stations() {
           </div>
         </div>
 
-        <OfflineBanner stale={stale} lastUpd={lastUpd} />
+        <OfflineBanner stale={stale} staleReason={staleReason} lastUpd={lastUpd} />
         {loading ? (
           <div className="view-state">Connexion au serveur…</div>
         ) : error ? ErrorBox

@@ -136,8 +136,14 @@ seulement pour le référentiel lent des stations.
 - `POST /api/stations/refresh` (**protégée**) et `POST /cron/refresh-stations` (cron quotidien) —
   rechargent le référentiel (`replaceStations` : upsert + retrait des stations disparues, sauf
   si le flux renvoie moins de la moitié des stations connues).
-- Chaque station porte `report_age_min` (minutes depuis le dernier signal de la borne,
-  calculé au fetch) : l'UI affiche « Dernière info il y a… » à partir de 5 min (`STALE_AFTER_MIN`).
+- **Fraîcheur (globale, pas par station)** : `getStationStatus()` (gbfs.js) renvoie un instantané
+  `{ stations, updatedAt, upstreamOk }`. Appel Vélam borné à 8 s (`GBFS_TIMEOUT_MS`) ; si le flux
+  ne répond plus / répond mal (HTTP, délai, JSON), la **dernière réponse valide** est servie avec
+  `upstreamOk: false` (502 seulement si aucune donnée n'a jamais été reçue). `updatedAt` = champ
+  racine `last_updated` du flux. La route renvoie `data_updated_at`, `data_age_s`, `upstream_ok`
+  et `stale` (`!isFresh` : flux en échec ou données ≥ 5 min) ; le client affiche alors le bandeau
+  (`OfflineBanner`, textes dans `lib/station.js` → `bannerText`). La boucle d'alerte **n'envoie
+  rien** sur des données non fraîches.
 - `GET /api/health` — nb de stations, uptime, version Node. `GET /health` — sonde anti-veille.
 
 Erreurs upstream/proxy → **HTTP 502** `{ ok:false, error }`. Toutes les réponses portent une
@@ -214,11 +220,12 @@ différenciée : mobile → `/favoris`, desktop → `/stations`.
 - **auth.jsx** — `AuthContext` / `useAuth` (login/register/logout async, `isAuthenticated`).
   Au démarrage : `/api/auth/me` (ignoré si la session a changé entre-temps) puis `syncPush()`.
 - **useTheme.jsx** — thème clair/sombre via `data-theme` sur `<html>`, persisté.
-- **hooks.js** — `useStations` (poll 60 s), `useFavorites` (liste, toggle, `rename`, `reorder`
+- **hooks.js** — `useStations` (poll 60 s + au retour au premier plan ; `stale` / `staleReason` :
+  `upstream` = verdict serveur, `server` = serveur injoignable), `useFavorites` (liste, toggle, `rename`, `reorder`
   optimiste ; modifications **mises en file**, seule la réponse de la dernière est appliquée),
   `useOnline`, `useGeolocation`, `useIsMobile`, helpers `distanceKm` / `fmtDistance`.
 - **lib/** — logique pure testable : `alerts.js` (formulaire ↔ API, résumés), `favorites.js`
-  (tri, déplacement, nom personnalisé), `station.js` (statut, `staleNote`, `disabledNote`),
+  (tri, déplacement, nom personnalisé), `station.js` (statut, `bannerText`, `disabledNote`),
   `mapConfig.js` (couleurs, `nearestWithBikes`), `onboarding.js` (étapes utiles), `offlineCache.js`.
 - **Hors ligne** — `lib/offlineCache.js` garde en `localStorage` la dernière liste des stations
   et des favoris (horodatée ; favoris purgés à la déconnexion). Les hooks exposent `stale` +

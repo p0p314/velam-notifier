@@ -85,31 +85,39 @@ export function useOnline() {
 }
 
 /**
- * Polling des stations (via le backend) toutes les 60 s.
- * Hors ligne / serveur injoignable : sert la dernière liste connue (localStorage)
- * avec `stale: true` ; `lastUpd` donne alors l'heure de cette dernière mise à jour.
- * Rafraîchit dès que la connexion revient.
+ * Polling des stations (via le backend) toutes les 60 s, et au retour au premier plan.
+ *
+ * Fraîcheur des disponibilités (`stale` + `staleReason`) :
+ *  - "upstream" : le serveur répond mais le flux Vélam ne lui répond plus, répond mal,
+ *    ou ses données ont ≥ 5 min (verdict `stale` calculé par le serveur) ;
+ *  - "server"   : le serveur VéloPulse lui-même est injoignable (ou l'appareil hors ligne).
+ * `lastUpd` = date des données Vélam affichées. Les dernières données connues
+ * (mémoire ou cache hors ligne) restent affichées dans tous les cas.
  */
 export function useStations() {
   const [cached] = useState(() => loadCache("stations"));
   const [stations, setStations] = useState(() => cached?.data ?? []);
   const [loading,  setLoading]  = useState(!cached);
   const [error,    setError]    = useState(null);
-  const [stale,    setStale]    = useState(false);
+  const [staleReason, setStaleReason] = useState(null);
   const [lastUpd,  setLastUpd]  = useState(() => (cached ? new Date(cached.at) : null));
 
   const reload = useCallback(async () => {
     try {
       const data = await api("/api/stations", { auth: false });
-      const at = Date.parse(data.fetched_at) || Date.now();
+      // Réponse illisible ou incomplète (proxy, corps tronqué…) : traitée comme un échec
+      // plutôt que d'écraser la liste affichée par `undefined`.
+      if (!Array.isArray(data?.stations)) throw new Error("Réponse du serveur invalide");
+      // Âge fourni par le serveur : insensible à un décalage d'horloge de l'appareil.
+      const at = Date.now() - (Number(data.data_age_s) || 0) * 1000;
       setStations(data.stations);
       setLastUpd(new Date(at));
       setError(null);
-      setStale(false);
+      setStaleReason(data.stale ? "upstream" : null);
       saveCache("stations", data.stations, at);
     } catch (e) {
       // Des données (mémoire ou cache) existent déjà → on les garde, marquées périmées.
-      setStale(true);
+      setStaleReason("server");
       setError(e.message);
     } finally {
       setLoading(false);
@@ -119,12 +127,22 @@ export function useStations() {
   useEffect(() => {
     reload();
     const iv = setInterval(reload, REFRESH * 1000);
+    // Au retour au premier plan (app mise en veille), on rafraîchit tout de suite.
+    const onVisible = () => { if (document.visibilityState === "visible") reload(); };
     window.addEventListener("online", reload);
-    return () => { clearInterval(iv); window.removeEventListener("online", reload); };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      clearInterval(iv);
+      window.removeEventListener("online", reload);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
   }, [reload]);
 
   // `error` n'est bloquant que s'il n'y a rien à afficher.
-  return { stations, loading, error: stations.length ? null : error, stale, lastUpd, reload };
+  return {
+    stations, loading, error: stations.length ? null : error,
+    stale: staleReason !== null, staleReason, lastUpd, reload,
+  };
 }
 
 /**

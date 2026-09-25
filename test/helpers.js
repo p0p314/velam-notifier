@@ -9,6 +9,7 @@ process.env.NODE_ENV = 'test';
 process.env.JWT_SECRET = process.env.JWT_SECRET || 'secret-de-test';
 process.env.RATE_LIMIT_DISABLED = '1';
 process.env.STATUS_CACHE_TTL_MS = '1'; // cache GBFS quasi nul : chaque test voit ses données
+process.env.GBFS_TIMEOUT_MS = '200';    // délai max d'appel au flux (simulation « ne répond plus »)
 if (!process.env.DATABASE_URL) process.env.SQLITE_PATH = ':memory:';
 delete process.env.VAPID_PUBLIC_KEY;
 delete process.env.VAPID_PRIVATE_KEY;
@@ -72,6 +73,9 @@ const gbfs = {
   status: [],
   system: { name: 'Vélam', rental_apps: {} },
   fail:   false, // true → le flux répond HTTP 503
+  hang:   false, // true → le flux ne répond jamais (coupé par le délai max)
+  malformed: false, // true → HTTP 200 mais JSON inexploitable
+  lastUpdated: undefined, // `last_updated` (s POSIX) renvoyé par station_status
   calls:  { info: 0, status: 0, system: 0 },
 };
 
@@ -81,16 +85,25 @@ global.fetch = async (input, init) => {
   const kind = url.includes('station_information') ? 'info'
     : url.includes('station_status') ? 'status' : 'system';
   gbfs.calls[kind]++;
+  if (gbfs.hang) {
+    return new Promise((_, reject) => init?.signal?.addEventListener('abort', () => reject(init.signal.reason)));
+  }
   if (gbfs.fail) return new Response('indisponible', { status: 503 });
+  if (gbfs.malformed) return new Response('{"oups":', { status: 200, headers: { 'Content-Type': 'application/json' } });
   const data = kind === 'system' ? gbfs.system : { stations: gbfs[kind] };
-  return new Response(JSON.stringify({ data }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+  const body = kind === 'status' && gbfs.lastUpdated !== undefined ? { last_updated: gbfs.lastUpdated, data } : { data };
+  return new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } });
 };
 
 function resetGbfs() {
+  require('../gbfs').resetStatusCache(); // oublie aussi la « dernière réponse valide »
   gbfs.info = [];
   gbfs.status = [];
   gbfs.system = { name: 'Vélam', rental_apps: {} };
   gbfs.fail = false;
+  gbfs.hang = false;
+  gbfs.malformed = false;
+  gbfs.lastUpdated = undefined;
   gbfs.calls = { info: 0, status: 0, system: 0 };
 }
 
