@@ -1,7 +1,7 @@
 // Routes stations : référentiel en cache + disponibilité live fusionnée à la volée.
 const express = require('express');
 const { countStations, getStations, saveStations, replaceStations } = require('../db');
-const { fetchStationInfo, getStationStatus } = require('../gbfs');
+const { fetchStationInfo, getStationStatus, isFresh } = require('../gbfs');
 const { requireAuth } = require('../auth');
 
 const router = express.Router();
@@ -10,18 +10,8 @@ function extractCount(vehicleTypes, typeId) {
   return vehicleTypes?.find((v) => v.vehicle_type_id === typeId)?.count ?? 0;
 }
 
-/** Minutes écoulées depuis le dernier signal de la borne (null si inconnu). */
-function reportAgeMin(lastReported, nowMs) {
-  if (!Number.isFinite(lastReported) || lastReported < 1e9) return null;
-  return Math.max(0, Math.floor((nowMs / 1000 - lastReported) / 60));
-}
-
-/**
- * Fusionne l'info statique (base) avec le statut live GBFS (jamais mis en base).
- * `report_age_min` est calculé au moment du fetch : il reste juste même servi
- * plus tard depuis le cache hors ligne du client.
- */
-function mergeWithStatus(stations, statusList, nowMs = Date.now()) {
+/** Fusionne l'info statique (base) avec le statut live GBFS (jamais mis en base). */
+function mergeWithStatus(stations, statusList) {
   const statusMap = Object.fromEntries(statusList.map((s) => [s.station_id, s]));
 
   return stations.map((s) => {
@@ -43,7 +33,6 @@ function mergeWithStatus(stations, statusList, nowMs = Date.now()) {
       is_renting:      live.is_renting             ?? false,
       is_returning:    live.is_returning            ?? false,
       last_reported:   live.last_reported           ?? null,
-      report_age_min:  reportAgeMin(live.last_reported, nowMs),
     };
   });
 }
@@ -62,20 +51,25 @@ router.get('/api/stations', async (req, res) => {
       await saveStations(info);
     }
 
-    const [stations, statusList] = await Promise.all([
+    const [stations, status] = await Promise.all([
       getStations(),
       getStationStatus(),
     ]);
 
-    const merged = mergeWithStatus(stations, statusList);
+    const merged = mergeWithStatus(stations, status.stations);
+    const now = Date.now();
 
     res.json({
-      ok:             true,
-      count:          merged.length,
-      stations_cache: true,
-      status_live:    true,
-      fetched_at:     new Date().toISOString(),
-      stations:       merged,
+      ok:              true,
+      count:           merged.length,
+      // Fraîcheur des disponibilités : date des données Vélam (last_updated du flux),
+      // leur âge (calculé ici, insensible à l'horloge du client) et un verdict
+      // `stale` (flux en échec ou données ≥ 5 min) qui déclenche le bandeau.
+      data_updated_at: new Date(status.updatedAt).toISOString(),
+      data_age_s:      Math.max(0, Math.round((now - status.updatedAt) / 1000)),
+      upstream_ok:     status.upstreamOk,
+      stale:           !isFresh(status, now),
+      stations:        merged,
     });
   } catch (err) {
     console.error('[GET /api/stations]', err.message);

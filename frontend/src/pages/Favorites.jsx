@@ -90,7 +90,7 @@ function OrganizeItem({ fav, index, count, onMove, onRename }) {
 }
 
 export default function Favorites() {
-  const { stations, loading, stale, lastUpd } = useStations();
+  const { stations, loading, stale, staleReason, lastUpd } = useStations();
   const { favorites, favIds, toggleFav, rename, reorder, loading: favLoading, stale: favStale } = useFavorites();
   const { coords } = useGeolocation();
   const [selId, setSelId] = useState(null);
@@ -136,7 +136,7 @@ export default function Favorites() {
         </div>
       )}
 
-      <OfflineBanner stale={stale || favStale} lastUpd={lastUpd} />
+      <OfflineBanner stale={stale || favStale} staleReason={staleReason ?? (favStale ? "server" : null)} lastUpd={lastUpd} />
 
       {(loading || favLoading) ? (
         <div className="view-state">Chargement…</div>

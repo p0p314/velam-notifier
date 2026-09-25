@@ -9,6 +9,17 @@ Toutes les évolutions notables de VéloPulse. Format inspiré de
 section `## [x.y.z] - AAAA-MM-JJ` ci-dessous, puis merger sur `main` : le workflow
 `release.yml` crée le tag `vx.y.z` et la release GitHub à partir de cette section.
 
+## [1.1.2] - 2026-09-25
+
+### Corrections
+- Le message de fraîcheur n'est plus affiché station par station (il se fiait au
+  signal de chaque borne, souvent trompeur). Il est remplacé par un **bandeau
+  global** quand le flux Vélam ne répond plus ou répond mal au serveur VéloPulse,
+  ou que ses données ont 5 minutes ou plus : « Disponibilités non mises à jour
+  depuis 7 min — données de 14:33 ». Les dernières données connues restent affichées.
+- Aucune alerte n'est envoyée tant que les disponibilités ne sont pas à jour.
+- Rafraîchissement immédiat quand l'app revient au premier plan.
+
 ## [1.1.1] - 2026-09-25
 
 ### Corrections
@@ -82,6 +93,7 @@ Première version stable de VéloPulse, l'application de suivi des stations Vél
 - Tests automatisés : backend (SQLite et PostgreSQL) et frontend, exécutés sur chaque PR.
 - Déploiement automatique sur Render à chaque merge sur `main`.
 
+[1.1.2]: https://github.com/p0p314/velam-notifier/releases/tag/v1.1.2
 [1.1.1]: https://github.com/p0p314/velam-notifier/releases/tag/v1.1.1
 [1.1.0]: https://github.com/p0p314/velam-notifier/releases/tag/v1.1.0
 [1.0.0]: https://github.com/p0p314/velam-notifier/releases/tag/v1.0.0

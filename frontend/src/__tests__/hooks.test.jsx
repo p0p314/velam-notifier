@@ -19,14 +19,36 @@ describe("useOnline", () => {
 });
 
 describe("useStations", () => {
-  test("succès : données live + mise en cache horodatée", async () => {
-    fetch.mockResolvedValue(jsonResponse({ ok: true, stations: STATIONS, fetched_at: "2025-09-24T12:30:00.000Z" }));
+  test("succès : données fraîches, datées par l'âge fourni par le serveur", async () => {
+    fetch.mockResolvedValue(jsonResponse({ ok: true, stations: STATIONS, stale: false, upstream_ok: true, data_age_s: 30 }));
+    const before = Date.now();
     const { result } = renderHook(() => useStations());
     await waitFor(() => expect(result.current.loading).toBe(false));
     expect(result.current.stations).toEqual(STATIONS);
     expect(result.current.stale).toBe(false);
-    expect(result.current.lastUpd.toISOString()).toBe("2025-09-24T12:30:00.000Z");
-    expect(loadCache("stations")).toEqual({ at: Date.parse("2025-09-24T12:30:00.000Z"), data: STATIONS });
+    expect(result.current.staleReason).toBeNull();
+    const age = before - result.current.lastUpd.getTime();
+    expect(age).toBeGreaterThanOrEqual(29_000);
+    expect(age).toBeLessThan(32_000);
+    expect(loadCache("stations").data).toEqual(STATIONS);
+  });
+
+  test("flux Vélam en panne ou figé (verdict serveur) → stale « upstream »", async () => {
+    fetch.mockResolvedValue(jsonResponse({ ok: true, stations: STATIONS, stale: true, upstream_ok: false, data_age_s: 420 }));
+    const { result } = renderHook(() => useStations());
+    await waitFor(() => expect(result.current.stale).toBe(true));
+    expect(result.current.staleReason).toBe("upstream");
+    expect(result.current.error).toBeNull();
+    expect(result.current.stations).toEqual(STATIONS); // dernières données connues affichées
+  });
+
+  test("retour au premier plan → rafraîchissement immédiat", async () => {
+    fetch.mockResolvedValue(jsonResponse({ ok: true, stations: STATIONS, stale: false, data_age_s: 0 }));
+    renderHook(() => useStations());
+    await waitFor(() => expect(fetch).toHaveBeenCalledTimes(1));
+    Object.defineProperty(document, "visibilityState", { configurable: true, get: () => "visible" });
+    act(() => document.dispatchEvent(new Event("visibilitychange")));
+    await waitFor(() => expect(fetch).toHaveBeenCalledTimes(2));
   });
 
   test("hors ligne avec cache : liste affichée, marquée périmée, heure du cache", async () => {
@@ -38,6 +60,7 @@ describe("useStations", () => {
     expect(result.current.loading).toBe(false);
     expect(result.current.stations).toEqual(STATIONS);
     await waitFor(() => expect(result.current.stale).toBe(true));
+    expect(result.current.staleReason).toBe("server");
     expect(result.current.error).toBeNull(); // pas d'écran d'erreur : il y a des données
     expect(result.current.lastUpd.toISOString()).toBe("2025-09-24T08:00:00.000Z");
   });
@@ -59,7 +82,7 @@ describe("useStations", () => {
     await waitFor(() => expect(result.current.stale).toBe(true));
 
     const fresh = [{ ...STATIONS[0], electrical: 9 }];
-    fetch.mockResolvedValue(jsonResponse({ ok: true, stations: fresh, fetched_at: new Date().toISOString() }));
+    fetch.mockResolvedValue(jsonResponse({ ok: true, stations: fresh, stale: false, data_age_s: 0 }));
     act(() => setOnline(true));
     await waitFor(() => expect(result.current.stale).toBe(false));
     expect(result.current.stations[0].electrical).toBe(9);
@@ -67,7 +90,7 @@ describe("useStations", () => {
 
   test("échec après un succès : garde les données en mémoire", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
-    fetch.mockResolvedValueOnce(jsonResponse({ ok: true, stations: STATIONS, fetched_at: new Date().toISOString() }));
+    fetch.mockResolvedValueOnce(jsonResponse({ ok: true, stations: STATIONS, stale: false, data_age_s: 0 }));
     const { result } = renderHook(() => useStations());
     await waitFor(() => expect(result.current.stations).toEqual(STATIONS));
     setOnline(false, { emit: false });

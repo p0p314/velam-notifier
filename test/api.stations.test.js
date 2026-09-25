@@ -26,7 +26,8 @@ describe('GET /api/stations', () => {
     assert.equal(s.address, '1 rue');
     assert.equal(s.electrical, 3);
     assert.equal(s.mechanical, 1);
-    assert.ok(res.body.fetched_at);
+    assert.equal(res.body.upstream_ok, true);
+    assert.equal(res.body.stale, false);
     assert.equal(gbfs.calls.info, 1);
   });
 
@@ -152,19 +153,6 @@ describe('sécurité HTTP', () => {
 });
 
 describe('référentiel et fraîcheur des données (v1.1)', () => {
-  test('report_age_min : minutes depuis le dernier signal de la borne', async () => {
-    const now = Math.floor(Date.now() / 1000);
-    gbfs.info = [info('1', 'Gare'), info('2', 'Zoo'), info('3', 'Cirque')];
-    gbfs.status = [
-      { station_id: '1', last_reported: now - 30 },
-      { station_id: '2', last_reported: now - 2 * 3600 },
-      { station_id: '3' },
-    ];
-    const { body } = await api.get('/api/stations');
-    const age = Object.fromEntries(body.stations.map((s) => [s.station_id, s.report_age_min]));
-    assert.deepEqual(age, { 1: 0, 2: 120, 3: null });
-  });
-
   test('cron refresh-stations : ajoute, met à jour et retire les stations disparues', async () => {
     process.env.CRON_SECRET = 'cron-secret';
     const auth = { headers: { Authorization: 'Bearer cron-secret' } };
@@ -195,5 +183,87 @@ describe('référentiel et fraîcheur des données (v1.1)', () => {
     assert.equal((await api.post('/cron/refresh-stations')).status, 401);
     gbfs.fail = true;
     assert.equal((await api.post('/cron/refresh-stations', { headers: { Authorization: 'Bearer cron-secret' } })).status, 502);
+  });
+});
+
+describe('fraîcheur des disponibilités (flux Vélam → serveur)', () => {
+  const nowS = () => Math.floor(Date.now() / 1000);
+  const seed = async () => {
+    gbfs.info = [info('1', 'Gare')];
+    gbfs.status = [{ station_id: '1', num_bikes_available: 4 }];
+  };
+
+  test('flux normal : données fraîches datées par last_updated', async () => {
+    await seed();
+    gbfs.lastUpdated = nowS() - 30;
+    const { body } = await api.get('/api/stations');
+    assert.equal(body.upstream_ok, true);
+    assert.equal(body.stale, false);
+    assert.ok(body.data_age_s >= 29 && body.data_age_s <= 32, String(body.data_age_s));
+    assert.equal(Date.parse(body.data_updated_at), gbfs.lastUpdated * 1000);
+  });
+
+  test('flux qui répond mais figé depuis 5 min → stale', async () => {
+    await seed();
+    gbfs.lastUpdated = nowS() - 5 * 60;
+    const { body } = await api.get('/api/stations');
+    assert.equal(body.upstream_ok, true);
+    assert.equal(body.stale, true);
+    assert.ok(body.data_age_s >= 300);
+  });
+
+  test('last_updated dans le futur (horloge Vélam) → ramené à maintenant', async () => {
+    await seed();
+    gbfs.lastUpdated = nowS() + 30;
+    const { body } = await api.get('/api/stations');
+    assert.equal(body.stale, false);
+    assert.equal(body.data_age_s, 0);
+  });
+
+  for (const [panne, casse] of [
+    ['erreur HTTP', () => { gbfs.fail = true; }],
+    ['ne répond plus (délai dépassé)', () => { gbfs.hang = true; }],
+    ['réponse mal formée', () => { gbfs.malformed = true; }],
+  ]) {
+    test(`flux en panne (${panne}) après un succès : dernières données servies, stale`, async () => {
+      await seed();
+      gbfs.lastUpdated = nowS() - 60;
+      const first = await api.get('/api/stations');
+      assert.equal(first.body.stale, false);
+
+      await expireCache();
+      casse();
+      const t0 = Date.now();
+      const res = await api.get('/api/stations');
+      assert.ok(Date.now() - t0 < 2000, 'la requête ne doit pas rester pendue');
+      assert.equal(res.status, 200);
+      assert.equal(res.body.upstream_ok, false);
+      assert.equal(res.body.stale, true);
+      assert.equal(res.body.stations[0].total_bikes, 4); // dernières données connues
+      assert.equal(res.body.data_updated_at, first.body.data_updated_at);
+    });
+  }
+
+  test('retour du flux → de nouveau frais', async () => {
+    await seed();
+    await api.get('/api/stations');
+    await expireCache();
+    gbfs.fail = true;
+    assert.equal((await api.get('/api/stations')).body.stale, true);
+    await expireCache();
+    gbfs.fail = false;
+    const { body } = await api.get('/api/stations');
+    assert.equal(body.upstream_ok, true);
+    assert.equal(body.stale, false);
+  });
+
+  test('flux ne répond plus et aucune donnée connue → 502', async () => {
+    gbfs.info = [info('1', 'Gare')];
+    gbfs.hang = true;
+    // le référentiel (station_information) doit exister : on le pose directement
+    const { saveStations } = require('../db');
+    await saveStations([info('1', 'Gare')]);
+    const res = await api.get('/api/stations');
+    assert.equal(res.status, 502);
   });
 });

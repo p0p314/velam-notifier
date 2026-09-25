@@ -2,11 +2,12 @@ import { useMemo, useState } from "react";
 import StationMap from "../components/map/StationMap";
 import MapFilters from "../components/map/MapFilters";
 import Icon from "../components/Icon";
+import { OfflineBanner } from "../components/Offline";
 import { useStations, fmtDistance } from "../hooks";
 import { bikeCountForType, nearestWithBikes } from "../lib/mapConfig";
 
 export default function MapPage() {
-  const { stations, loading, error, reload } = useStations();
+  const { stations, loading, error, stale, staleReason, lastUpd, reload } = useStations();
   const [type, setType] = useState("all");
   const [minBikes, setMinBikes] = useState(0);
   // « Autour de moi » : { coords, stations } transmis à la carte + liste affichée.
@@ -47,6 +48,10 @@ export default function MapPage() {
         </div>
       ) : (
         <>
+          <OfflineBanner stale={stale} staleReason={staleReason} lastUpd={lastUpd} />
+          {/* Conteneur de référence des surcouches (filtres, chargement, « Autour de moi ») :
+              le bandeau de fraîcheur au-dessus ne doit pas passer sous les filtres. */}
+          <div className="map-stage">
           <MapFilters type={type} setType={setType} minBikes={minBikes} setMinBikes={setMinBikes} count={filtered.length} />
           <StationMap stations={filtered} filterType={type} focus={focus} />
           {loading && <div className="map-loading">Chargement des stations…</div>}
@@ -71,6 +76,7 @@ export default function MapPage() {
             <button type="button" className="map-around-btn" onClick={aroundMe} disabled={geo.busy}>
               <Icon name="map-pin" size={18} /> {geo.busy ? "Localisation…" : "Autour de moi"}
             </button>
+          </div>
           </div>
         </>
       )}

@@ -4,8 +4,11 @@ const INFO_URL   = 'https://api.cyclocity.fr/contracts/amiens/gbfs/v2/station_in
 const STATUS_URL = 'https://api.cyclocity.fr/contracts/amiens/gbfs/v2/station_status.json';
 const SYSTEM_URL = 'https://api.cyclocity.fr/contracts/amiens/gbfs/v2/system_information.json';
 
+// Au-delà, on considère que le flux ne répond plus (évite une requête pendue).
+const FETCH_TIMEOUT_MS = Number(process.env.GBFS_TIMEOUT_MS) || 8_000;
+
 async function fetchJSON(url) {
-  const res = await fetch(url);
+  const res = await fetch(url, { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
   if (!res.ok) throw new Error(`GBFS ${url} → HTTP ${res.status}`);
   return res.json();
 }
@@ -22,12 +25,18 @@ async function fetchStationInfo() {
 }
 
 /**
- * Retourne le statut temps réel de toutes les stations (fetch upstream brut).
- * La liste est retournée telle quelle — la fusion avec les infos se fait côté serveur.
+ * Statut temps réel de toutes les stations (fetch upstream brut) + date de
+ * génération du flux (`last_updated`, secondes POSIX, champ racine GBFS).
+ * Renvoie { stations, updatedAt } (ms). Lève si la réponse est mal formée.
  */
-async function fetchStationStatus() {
+async function fetchStationStatus(nowMs = Date.now()) {
   const data = await fetchJSON(STATUS_URL);
-  return data.data.stations;
+  const stations = data?.data?.stations;
+  if (!Array.isArray(stations)) throw new Error('GBFS station_status : réponse mal formée');
+  // Date du flux ; à défaut (ou si incohérente, dans le futur), l'heure de réception.
+  const feedMs = Number(data.last_updated) * 1000;
+  const updatedAt = Number.isFinite(feedMs) && feedMs > 0 && feedMs <= nowMs + 60_000 ? Math.min(feedMs, nowMs) : nowMs;
+  return { stations, updatedAt };
 }
 
 // ── Cache court du statut live ──────────────────────────────────────────────
@@ -37,28 +46,56 @@ async function fetchStationStatus() {
 // par fenêtre, quel que soit le nombre de clients (éco-conception, RGESN).
 const STATUS_TTL_MS = Number(process.env.STATUS_CACHE_TTL_MS) || 10_000;
 
-let statusCache    = { at: 0, data: null };
+// Au-delà, les disponibilités sont considérées comme périmées (bandeau côté client,
+// alertes suspendues côté serveur).
+const STATUS_STALE_MS = 5 * 60_000;
+
+let statusCache    = { at: 0, snapshot: null };
+let lastGood       = null; // dernière réponse valide du flux : { stations, updatedAt }
 let statusInflight = null;
 
 /**
- * Statut live mutualisé : sert la valeur en cache si elle a moins de STATUS_TTL_MS,
- * sinon lance (ou réutilise) un unique fetch partagé par tous les appelants
- * simultanés. Propage l'erreur upstream (502 géré par l'appelant) sans polluer le cache.
+ * Statut live mutualisé. Renvoie un instantané :
+ *   { stations, updatedAt (ms, date des données), upstreamOk, error? }
+ * Si le flux ne répond plus ou répond mal (erreur HTTP, délai, JSON invalide),
+ * on sert la dernière réponse valide avec `upstreamOk: false` plutôt qu'une erreur ;
+ * seule l'absence totale de données fait lever (502 côté route).
  */
 async function getStationStatus() {
-  if (statusCache.data && Date.now() - statusCache.at < STATUS_TTL_MS) {
-    return statusCache.data;
+  if (statusCache.snapshot && Date.now() - statusCache.at < STATUS_TTL_MS) {
+    return statusCache.snapshot;
   }
   if (statusInflight) return statusInflight;
 
   statusInflight = fetchStationStatus()
-    .then((data) => {
-      statusCache = { at: Date.now(), data };
-      return data;
+    .then((fresh) => {
+      lastGood = fresh;
+      return { ...fresh, upstreamOk: true };
+    })
+    .catch((err) => {
+      if (!lastGood) throw err;
+      console.error('[gbfs] flux station_status en échec, données précédentes servies :', err.message);
+      return { ...lastGood, upstreamOk: false, error: err.message };
+    })
+    .then((snapshot) => {
+      statusCache = { at: Date.now(), snapshot };
+      return snapshot;
     })
     .finally(() => { statusInflight = null; });
 
   return statusInflight;
+}
+
+/** Les données de l'instantané sont-elles exploitables (flux OK et récentes) ? */
+function isFresh(snapshot, nowMs = Date.now()) {
+  return !!snapshot?.upstreamOk && nowMs - snapshot.updatedAt < STATUS_STALE_MS;
+}
+
+/** Tests uniquement : oublie cache et dernière réponse valide. */
+function resetStatusCache() {
+  statusCache = { at: 0, snapshot: null };
+  lastGood = null;
+  statusInflight = null;
 }
 
 /**
@@ -71,4 +108,7 @@ async function fetchSystemInformation() {
   return data.data;
 }
 
-module.exports = { fetchStationInfo, fetchStationStatus, getStationStatus, fetchSystemInformation };
+module.exports = {
+  fetchStationInfo, fetchStationStatus, getStationStatus, fetchSystemInformation,
+  isFresh, resetStatusCache, STATUS_STALE_MS,
+};

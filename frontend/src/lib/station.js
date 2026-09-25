@@ -6,10 +6,6 @@
 // compteur `low`). Un seul endroit à ajuster.
 export const LOW_BIKES = 2;
 
-// Au-delà de 5 min sans signal de la borne, le nombre de vélos affiché peut ne plus
-// être à jour (panne, coupure réseau) : on le signale.
-export const STALE_AFTER_MIN = 5;
-
 /** « 75 min », « 2 h », « 3 j ». */
 export function fmtAge(min) {
   if (min < 120) return `${min} min`;
@@ -17,15 +13,26 @@ export function fmtAge(min) {
   return h < 48 ? `${h} h` : `${Math.floor(h / 24)} j`;
 }
 
+// Seuil de péremption des disponibilités (identique au serveur : gbfs.js).
+export const STALE_AFTER_MIN = 5;
+
 /**
- * Avertissement « données périmées » si la borne n'a rien remonté depuis
- * STALE_AFTER_MIN (âge calculé par le serveur au moment du fetch). null sinon,
- * et pour une station hors service (déjà signalée comme telle).
+ * Texte du bandeau de fraîcheur.
+ *  - offline  : l'appareil n'a plus de réseau ;
+ *  - server   : le serveur VéloPulse ne répond pas ;
+ *  - upstream : le flux Vélam ne répond plus / répond mal à notre serveur,
+ *               ou ses données ont au moins STALE_AFTER_MIN minutes.
+ * `when` : heure lisible des données affichées (null si aucune).
  */
-export function staleNote(s) {
-  const age = s.report_age_min;
-  if (age == null || age < STALE_AFTER_MIN || s.is_renting === false) return null;
-  return `Dernière info il y a ${fmtAge(age)}`;
+export function bannerText(reason, lastUpd, when, now = Date.now()) {
+  const data = when ? `données de ${when}` : "aucune donnée enregistrée";
+  if (reason === "offline") return `Hors ligne — ${data}`;
+  if (reason === "server") return `Serveur injoignable — ${data}`;
+  const age = lastUpd ? Math.floor((now - lastUpd.getTime()) / 60_000) : null;
+  if (age !== null && age >= STALE_AFTER_MIN) {
+    return `Disponibilités non mises à jour depuis ${fmtAge(age)} — ${data}`;
+  }
+  return `Données Vélam momentanément indisponibles — ${data}`;
 }
 
 /** « 2 vélos indisponibles » (en panne / réservés à la maintenance), ou null. */

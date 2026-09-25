@@ -3,7 +3,7 @@ import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { staleNote, disabledNote, fmtAge } from "../lib/station";
+import { disabledNote, fmtAge, bannerText } from "../lib/station";
 import { nearestWithBikes } from "../lib/mapConfig";
 import StationListItem from "../components/StationListItem";
 import StationDetailSheet from "../components/StationDetailSheet";
@@ -16,23 +16,33 @@ vi.mock("../components/map/StationMap", () => ({
 }));
 import MapPage from "../pages/MapPage";
 
-describe("données de borne périmées", () => {
+describe("fraîcheur des disponibilités (bandeau global)", () => {
+  const now = new Date(2025, 8, 24, 14, 40).getTime();
+  const at = (min) => new Date(now - min * 60_000);
+
   test("fmtAge", () => {
-    expect(fmtAge(75)).toBe("75 min");
+    expect(fmtAge(7)).toBe("7 min");
     expect(fmtAge(150)).toBe("2 h");
     expect(fmtAge(60 * 50)).toBe("2 j");
   });
-  test("à partir de 5 min sans mise à jour, jamais pour une station hors service", () => {
-    expect(staleNote({ report_age_min: 4 })).toBeNull();
-    expect(staleNote({ report_age_min: 5 })).toBe("Dernière info il y a 5 min");
-    expect(staleNote({ report_age_min: 0 })).toBeNull();
-    expect(staleNote({ report_age_min: 125 })).toBe("Dernière info il y a 2 h");
-    expect(staleNote({ report_age_min: 300, is_renting: false })).toBeNull();
-    expect(staleNote({})).toBeNull();
+
+  test("flux Vélam figé depuis 5 min ou plus", () => {
+    expect(bannerText("upstream", at(7), "14:33", now)).toBe("Disponibilités non mises à jour depuis 7 min — données de 14:33");
+    expect(bannerText("upstream", at(5), "14:35", now)).toMatch(/depuis 5 min/);
   });
-  test("affichée dans la liste", () => {
-    render(<StationListItem s={{ station_id: "1", name: "Gare", report_age_min: 90 }} />);
-    expect(screen.getByText(/Dernière info il y a 90 min/)).toBeTruthy();
+
+  test("flux Vélam en panne mais données encore récentes", () => {
+    expect(bannerText("upstream", at(1), "14:39", now)).toBe("Données Vélam momentanément indisponibles — données de 14:39");
+  });
+
+  test("hors ligne / serveur injoignable / aucune donnée", () => {
+    expect(bannerText("offline", at(3), "14:37", now)).toBe("Hors ligne — données de 14:37");
+    expect(bannerText("server", null, null, now)).toBe("Serveur injoignable — aucune donnée enregistrée");
+  });
+
+  test("plus aucun indicateur par station", () => {
+    render(<StationListItem s={{ station_id: "1", name: "Gare", report_age_min: 90, last_reported: 1 }} />);
+    expect(screen.queryByText(/Dernière info/)).toBeNull();
   });
 });
 
@@ -69,7 +79,7 @@ describe("autour de moi", () => {
   });
 
   test("bouton : liste des stations proches et carte recentrée", async () => {
-    fetch.mockResolvedValue(jsonResponse({ ok: true, stations, fetched_at: new Date().toISOString() }));
+    fetch.mockResolvedValue(jsonResponse({ ok: true, stations, stale: false, data_age_s: 0 }));
     Object.defineProperty(navigator, "geolocation", {
       configurable: true,
       value: { getCurrentPosition: (ok) => ok({ coords: { latitude: here.lat, longitude: here.lon } }) },
@@ -85,7 +95,7 @@ describe("autour de moi", () => {
   });
 
   test("géolocalisation refusée → message", async () => {
-    fetch.mockResolvedValue(jsonResponse({ ok: true, stations, fetched_at: new Date().toISOString() }));
+    fetch.mockResolvedValue(jsonResponse({ ok: true, stations, stale: false, data_age_s: 0 }));
     Object.defineProperty(navigator, "geolocation", {
       configurable: true,
       value: { getCurrentPosition: (_ok, ko) => ko(new Error("refus")) },

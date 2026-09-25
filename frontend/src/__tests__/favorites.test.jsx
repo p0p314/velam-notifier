@@ -53,7 +53,7 @@ describe("page Favoris", () => {
       const method = init.method ?? "GET";
       const body = init.body ? JSON.parse(init.body) : undefined;
       calls.push({ method, path, body });
-      if (path === "/api/stations") return jsonResponse({ ok: true, stations: STATIONS, fetched_at: new Date().toISOString() });
+      if (path === "/api/stations") return jsonResponse({ ok: true, stations: STATIONS, stale: false, data_age_s: 0 });
       if (path === "/api/favorites/order") {
         favorites = body.station_ids.map((id) => favorites.find((f) => f.station_id === id));
         return jsonResponse({ ok: true, favorites });

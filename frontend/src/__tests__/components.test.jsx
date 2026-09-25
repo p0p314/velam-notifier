@@ -29,6 +29,12 @@ describe("OfflineBanner", () => {
     expect(screen.getByRole("status").textContent).toBe("Serveur injoignable — aucune donnée enregistrée");
   });
 
+  test("flux Vélam figé : « non mises à jour depuis X min »", () => {
+    const d = new Date(Date.now() - 8 * 60_000);
+    wrap(<OfflineBanner stale staleReason="upstream" lastUpd={d} />);
+    expect(screen.getByRole("status").textContent).toMatch(/^Disponibilités non mises à jour depuis 8 min — données de \d{2}:\d{2}$/);
+  });
+
   test("réagit au passage hors ligne", () => {
     wrap(<OfflineBanner stale={false} lastUpd={new Date()} />);
     expect(screen.queryByRole("status")).toBeNull();
