@@ -109,15 +109,11 @@ describe("autour de moi", () => {
   });
 });
 
-describe("géolocalisation : jamais d'invite au lancement", () => {
+describe("géolocalisation : une seule mesure partagée", () => {
   const here = { lat: 49.89, lon: 2.30 };
-  const mockGeo = ({ permission, fail = false } = {}) => {
+  const mockGeo = ({ fail = false } = {}) => {
     const getCurrentPosition = vi.fn((ok, ko) => (fail ? ko(new Error("refus")) : ok({ coords: { latitude: here.lat, longitude: here.lon } })));
     Object.defineProperty(navigator, "geolocation", { configurable: true, value: { getCurrentPosition } });
-    Object.defineProperty(navigator, "permissions", {
-      configurable: true,
-      value: permission ? { query: async () => ({ state: permission }) } : undefined,
-    });
     return getCurrentPosition;
   };
   function Probe() {
@@ -128,42 +124,24 @@ describe("géolocalisation : jamais d'invite au lancement", () => {
     </>);
   }
 
-  test("autorisation pas encore donnée → aucune demande, bouton « Trier par proximité »", async () => {
-    const gcp = mockGeo({ permission: "prompt" });
-    render(<Probe />);
-    await new Promise((r) => setTimeout(r, 0));
-    expect(gcp).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole("button", { name: /Trier par proximité/ }));
+  test("localisation au lancement, une seule mesure pour plusieurs pages montées", async () => {
+    const gcp = mockGeo();
+    render(<><Probe /><Probe /></>);
+    await waitFor(() => expect(screen.getAllByTestId("coords").map((n) => n.textContent)).toEqual(["49.89,2.3", "49.89,2.3"]));
     expect(gcp).toHaveBeenCalledTimes(1);
-    await waitFor(() => expect(screen.getByTestId("coords").textContent).toBe("49.89,2.3"));
     expect(screen.queryByRole("status")).toBeNull();
   });
 
-  test("sans Permissions API (anciens navigateurs) → aucune demande automatique", async () => {
-    const gcp = mockGeo({ permission: null });
+  test("refus → message et « Réessayer » relance une mesure", async () => {
+    const gcp = mockGeo({ fail: true });
     render(<Probe />);
-    await new Promise((r) => setTimeout(r, 0));
-    expect(gcp).not.toHaveBeenCalled();
-    expect(screen.getByText("Stations triées par nom.")).toBeTruthy();
-  });
-
-  test("autorisation déjà accordée → localisation automatique", async () => {
-    const gcp = mockGeo({ permission: "granted" });
-    render(<Probe />);
-    await waitFor(() => expect(screen.getByTestId("coords").textContent).toBe("49.89,2.3"));
-    expect(gcp).toHaveBeenCalledTimes(1);
-  });
-
-  test("refus → message, sans redemander", async () => {
-    const gcp = mockGeo({ permission: "prompt", fail: true });
-    render(<Probe />);
-    fireEvent.click(await screen.findByRole("button", { name: /Trier par proximité/ }));
     expect((await screen.findByRole("status")).textContent).toMatch(/Position non autorisée/);
-    expect(gcp).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole("button", { name: /Réessayer/ }));
+    await waitFor(() => expect(gcp).toHaveBeenCalledTimes(2));
   });
 
   test("position partagée entre les pages : une seule mesure", async () => {
-    const gcp = mockGeo({ permission: "prompt" });
+    const gcp = mockGeo();
     expect(await requestPosition()).toEqual(here);
     expect(await requestPosition()).toEqual(here);
     expect(gcp).toHaveBeenCalledTimes(1);

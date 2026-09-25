@@ -27,19 +27,18 @@ const hasGeo = () => typeof navigator !== "undefined" && "geolocation" in naviga
 // pour Favoris, Stations et Carte au lieu d'une par page affichée.
 const GEO_REUSE_MS = 2 * 60_000;
 let lastPos = null; // { coords, at }
+let pending = null; // mesure en cours
 
 /** Tests : oublie la position partagée. */
-export function resetGeoCache() { lastPos = null; }
+export function resetGeoCache() { lastPos = null; pending = null; }
 
-/**
- * Demande la position (peut afficher l'invite du navigateur : à n'appeler que sur
- * action de l'utilisateur, ou si l'autorisation est déjà accordée).
- * Réutilise une position de moins de 2 min.
- */
+/** Demande la position (peut afficher l'invite du navigateur). Réutilise une position de moins de 2 min. */
 export function requestPosition() {
-  return new Promise((resolve, reject) => {
-    if (!hasGeo()) return reject(new Error("Géolocalisation indisponible"));
-    if (lastPos && Date.now() - lastPos.at < GEO_REUSE_MS) return resolve(lastPos.coords);
+  if (!hasGeo()) return Promise.reject(new Error("Géolocalisation indisponible"));
+  if (lastPos && Date.now() - lastPos.at < GEO_REUSE_MS) return Promise.resolve(lastPos.coords);
+  // Plusieurs pages montées en même temps → une seule mesure en cours.
+  if (pending) return pending;
+  const p = new Promise((resolve, reject) => {
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         const coords = { lat: pos.coords.latitude, lon: pos.coords.longitude };
@@ -50,24 +49,22 @@ export function requestPosition() {
       { enableHighAccuracy: true, timeout: 10_000, maximumAge: 30_000 }
     );
   });
-}
-
-/** true seulement si l'autorisation est déjà accordée — l'interroger n'affiche aucune invite. */
-async function geoAlreadyGranted() {
-  try { return (await navigator.permissions?.query({ name: "geolocation" }))?.state === "granted"; }
-  catch { return false; }
+  pending = p;
+  // Libère après coup (le rappel peut être synchrone) ; un échec permet de réessayer.
+  p.finally(() => { if (pending === p) pending = null; }).catch(() => {});
+  return p;
 }
 
 /**
- * Position de l'utilisateur, **sans jamais demander l'autorisation au lancement** :
- * localisation automatique uniquement si elle est déjà accordée, sinon `locate()`
- * (à brancher sur un clic) déclenche l'invite.
- * status : 'idle' | 'locating' | 'granted' | 'denied' | 'unavailable'.
+ * Position de l'utilisateur, mesurée au lancement de l'app puis partagée entre les
+ * pages (une seule mesure GPS tant qu'elle a moins de 2 min). `locate()` relance
+ * une mesure (après un refus, ou au choix du tri proximité).
+ * status : 'locating' | 'granted' | 'denied' | 'unavailable'.
  * Le tri par distance retombe sur l'ordre alphabétique tant que coords est null.
  */
 export function useGeolocation() {
   const [coords, setCoords] = useState(() => lastPos?.coords ?? null);
-  const [status, setStatus] = useState(() => (!hasGeo() ? "unavailable" : lastPos ? "granted" : "idle"));
+  const [status, setStatus] = useState(() => (!hasGeo() ? "unavailable" : lastPos ? "granted" : "locating"));
   const alive = useRef(true);
 
   const locate = useCallback(() => {
@@ -81,7 +78,7 @@ export function useGeolocation() {
 
   useEffect(() => {
     alive.current = true;
-    if (hasGeo()) geoAlreadyGranted().then((ok) => { if (ok && alive.current) locate(); });
+    locate();
     return () => { alive.current = false; };
   }, [locate]);
 
