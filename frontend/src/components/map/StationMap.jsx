@@ -2,7 +2,7 @@ import { useEffect, useRef } from "react";
 import mapboxgl from "mapbox-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
 import {
-  MAPBOX_TOKEN, DEFAULT_CENTER, DEFAULT_ZOOM, MAP_STYLE,
+  MAPBOX_TOKEN, DEFAULT_CENTER, DEFAULT_ZOOM, mapStyleFor,
   bikeCountForType, availabilityLevel,
 } from "../../lib/mapConfig";
 
@@ -38,7 +38,7 @@ function popupHTML(s) {
  * et `filterType` (couleur des markers). Markers diffés (créés une fois, mis à
  * jour en place) → pas de recréation à chaque rafraîchissement API.
  */
-export default function StationMap({ stations, filterType = "all", focus = null }) {
+export default function StationMap({ stations, filterType = "all", focus = null, theme = "light" }) {
   const containerRef = useRef(null);
   const userMarkerRef = useRef(null);
   const mapRef = useRef(null);
@@ -51,7 +51,7 @@ export default function StationMap({ stations, filterType = "all", focus = null 
 
     const map = new mapboxgl.Map({
       container: containerRef.current,
-      style: MAP_STYLE,
+      style: mapStyleFor(theme),
       center: [DEFAULT_CENTER.lng, DEFAULT_CENTER.lat],
       zoom: DEFAULT_ZOOM,
     });
@@ -74,7 +74,19 @@ export default function StationMap({ stations, filterType = "all", focus = null 
     ro.observe(containerRef.current);
 
     return () => { ro.disconnect(); map.remove(); mapRef.current = null; markersRef.current.clear(); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // ── Changement de thème : on remplace seulement le fond de carte ─────────
+  // (les markers sont des éléments DOM : ils survivent à setStyle, pas de recréation).
+  const styleRef = useRef(mapStyleFor(theme));
+  useEffect(() => {
+    const map = mapRef.current;
+    const next = mapStyleFor(theme);
+    if (!map || styleRef.current === next) return;
+    styleRef.current = next;
+    map.setStyle(next);
+  }, [theme]);
 
   // ── Synchro des markers (création / mise à jour / suppression) ─────────────
   useEffect(() => {

@@ -4,12 +4,14 @@ import MapFilters from "../components/map/MapFilters";
 import Icon from "../components/Icon";
 import { OfflineBanner } from "../components/Offline";
 import { useStations, fmtDistance } from "../hooks";
+import { useTheme } from "../useTheme";
 import { bikeCountForType, nearestWithBikes } from "../lib/mapConfig";
 
 export default function MapPage() {
   const { stations, loading, error, stale, staleReason, lastUpd, reload } = useStations();
   const [type, setType] = useState("all");
   const [minBikes, setMinBikes] = useState(0);
+  const { theme } = useTheme();
   // « Autour de moi » : { coords, stations } transmis à la carte + liste affichée.
   const [focus, setFocus] = useState(null);
   const [geo, setGeo] = useState({ busy: false, error: null });
@@ -53,7 +55,7 @@ export default function MapPage() {
               le bandeau de fraîcheur au-dessus ne doit pas passer sous les filtres. */}
           <div className="map-stage">
           <MapFilters type={type} setType={setType} minBikes={minBikes} setMinBikes={setMinBikes} count={filtered.length} />
-          <StationMap stations={filtered} filterType={type} focus={focus} />
+          <StationMap stations={filtered} filterType={type} focus={focus} theme={theme} />
           {loading && <div className="map-loading">Chargement des stations…</div>}
 
           <div className="map-around">

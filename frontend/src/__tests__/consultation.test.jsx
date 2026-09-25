@@ -4,7 +4,8 @@ import { MemoryRouter } from "react-router-dom";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { disabledNote, fmtAge, bannerText } from "../lib/station";
-import { nearestWithBikes } from "../lib/mapConfig";
+import { nearestWithBikes, mapStyleFor } from "../lib/mapConfig";
+import { ThemeProvider } from "../useTheme";
 import StationListItem from "../components/StationListItem";
 import StationDetailSheet from "../components/StationDetailSheet";
 import { jsonResponse } from "./setup";
@@ -12,7 +13,7 @@ import { jsonResponse } from "./setup";
 // La carte Mapbox (WebGL) n'est pas testable en jsdom : on la remplace par un
 // composant qui expose la prop `focus` reçue.
 vi.mock("../components/map/StationMap", () => ({
-  default: ({ focus }) => <div data-testid="map" data-focus={focus ? JSON.stringify(focus.coords) : ""} />,
+  default: ({ focus, theme }) => <div data-testid="map" data-theme={theme} data-focus={focus ? JSON.stringify(focus.coords) : ""} />,
 }));
 import MapPage from "../pages/MapPage";
 
@@ -114,5 +115,42 @@ describe("raccourcis de l'app (manifest)", () => {
       expect(s.name).toBeTruthy();
       expect(s.icons[0].src).toMatch(/^\/icon-/);
     }
+  });
+});
+
+describe("carte en thème sombre", () => {
+  test("mapStyleFor", () => {
+    expect(mapStyleFor("dark")).toMatch(/dark-v11$/);
+    expect(mapStyleFor("light")).toMatch(/light-v11$/);
+    expect(mapStyleFor(undefined)).toMatch(/light-v11$/);
+  });
+
+  test("la page Carte transmet le thème courant à la carte", async () => {
+    localStorage.setItem("velopulse-theme", "dark");
+    fetch.mockImplementation(async () => jsonResponse({ ok: true, stations: [], stale: false, data_age_s: 0 }));
+    render(<MemoryRouter><ThemeProvider><MapPage /></ThemeProvider></MemoryRouter>);
+    expect((await screen.findByTestId("map")).dataset.theme).toBe("dark");
+  });
+});
+
+describe("étoile favori dans la liste mobile", () => {
+  const s = { station_id: "1", name: "Gare", electrical: 1, mechanical: 1, docks_available: 3 };
+
+  test("bascule le favori sans ouvrir la fiche", () => {
+    const onClick = vi.fn();
+    const onToggleFav = vi.fn();
+    render(<StationListItem s={s} onClick={onClick} isFav={false} onToggleFav={onToggleFav} />);
+    const star = screen.getByRole("button", { name: "Ajouter Gare aux favoris" });
+    expect(star.getAttribute("aria-pressed")).toBe("false");
+    fireEvent.click(star);
+    expect(onToggleFav).toHaveBeenCalledWith(s);
+    expect(onClick).not.toHaveBeenCalled();
+  });
+
+  test("état favori et absence d'étoile sans callback", () => {
+    const { rerender } = render(<StationListItem s={s} isFav onToggleFav={() => {}} />);
+    expect(screen.getByRole("button", { name: "Retirer Gare des favoris" }).getAttribute("aria-pressed")).toBe("true");
+    rerender(<StationListItem s={s} />);
+    expect(screen.queryByRole("button", { name: /favoris/ })).toBeNull();
   });
 });
