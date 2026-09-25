@@ -127,6 +127,28 @@ async function getUserByUsername(username) {
   return dbc.get('SELECT * FROM users WHERE username = ?', [username]);
 }
 
+/** Avec le hash du mot de passe : réservé aux vérifications d'identité. */
+async function getUserAuthById(id) {
+  return dbc.get('SELECT id, username, password_hash FROM users WHERE id = ?', [id]);
+}
+
+async function updatePasswordHash(id, hash) {
+  await dbc.run('UPDATE users SET password_hash = ? WHERE id = ?', [hash, id]);
+}
+
+/**
+ * Supprime le compte et toutes ses données (droit à l'effacement, RGPD).
+ * Suppression explicite des tables liées : les clés étrangères SQLite de dev
+ * n'ont pas d'ON DELETE CASCADE.
+ */
+async function deleteUser(id) {
+  for (const table of ['alerts', 'favorites', 'push_subscriptions']) {
+    await dbc.run(`DELETE FROM ${table} WHERE user_id = ?`, [id]);
+  }
+  const { changes } = await dbc.run('DELETE FROM users WHERE id = ?', [id]);
+  return changes > 0;
+}
+
 async function getUserById(id) {
   return dbc.get('SELECT id, username, created_at FROM users WHERE id = ?', [id]);
 }
@@ -348,7 +370,7 @@ module.exports = {
   // config
   getConfig, setConfig,
   // users
-  createUser, getUserByUsername, getUserById,
+  createUser, getUserByUsername, getUserById, getUserAuthById, updatePasswordHash, deleteUser,
   // favorites
   getFavorites, addFavorite, removeFavorite, setFavoriteLabel, reorderFavorites,
   // push

@@ -27,13 +27,18 @@ export function AuthProvider({ children }) {
     return data.user;
   }, [persist]);
 
-  // Async : détache d'abord l'appareil (tant que le jeton est encore valide).
-  const logout = useCallback(async () => {
-    await unlinkPush();
+  /** Oublie la session localement (sans appel serveur). */
+  const endSession = useCallback(() => {
     clearToken();
     setTok(null);
     setUser(null);
   }, []);
+
+  // Async : détache d'abord l'appareil (tant que le jeton est encore valide).
+  const logout = useCallback(async () => {
+    await unlinkPush();
+    endSession();
+  }, [endSession]);
 
   // Jeton rejeté par le serveur (api() a déjà purgé le stockage) → état déconnecté,
   // <Protected> redirige vers /login au lieu d'afficher des listes vides.
@@ -58,7 +63,7 @@ export function AuthProvider({ children }) {
       .catch(() => { /* 401 → géré par AUTH_EXPIRED_EVENT ; réseau → on garde la session */ });
   }, [persist]);
 
-  const value = { user, token, login, register, logout, isAuthenticated: !!token };
+  const value = { user, token, login, register, logout, endSession, isAuthenticated: !!token };
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 

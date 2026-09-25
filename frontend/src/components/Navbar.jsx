@@ -33,7 +33,7 @@ export default function Navbar() {
         <button className="icon-btn" aria-label="Changer de thème" onClick={toggle}>
           <Icon name={theme === "dark" ? "sun" : "moon"} />
         </button>
-        <span className="nav-user">{user?.username}</span>
+        <NavLink to="/compte" className="nav-user" title="Mon compte"><Icon name="user" size={16} /> {user?.username}</NavLink>
         <button className="nav-btn" onClick={async () => { await logout(); navigate("/login", { replace: true }); }}>
           <Icon name="log-out" /> Déconnexion
         </button>

@@ -143,7 +143,9 @@ describe('rental_apps et cron', () => {
 describe('sécurité HTTP', () => {
   test('en-têtes helmet + CSP', async () => {
     const res = await api.get('/health');
-    assert.match(res.headers.get('content-security-policy'), /default-src 'self'/);
+    const csp = res.headers.get('content-security-policy');
+    assert.match(csp, /default-src 'self'/);
+    assert.doesNotMatch(csp, /googleapis|gstatic/, 'polices auto-hébergées : aucune origine Google');
     assert.equal(res.headers.get('x-content-type-options'), 'nosniff');
   });
   test('corps JSON > 16 kb refusé', async () => {
