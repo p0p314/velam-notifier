@@ -9,6 +9,27 @@ Toutes les évolutions notables de VéloPulse. Format inspiré de
 section `## [x.y.z] - AAAA-MM-JJ` ci-dessous, puis merger sur `main` : le workflow
 `release.yml` crée le tag `vx.y.z` et la release GitHub à partir de cette section.
 
+## [1.2.0] - 2026-09-25
+
+### Compte et vie privée
+- Page **Mon compte** : changer son mot de passe, **supprimer son compte** (toutes
+  les données sont effacées), se déconnecter.
+- Page **Confidentialité et mentions légales** : ce qui est enregistré, ce qui ne
+  l'est pas, vos droits, les services tiers.
+- À l'inscription, rappel qu'un mot de passe oublié ne peut pas être récupéré
+  (aucun e-mail n'est demandé).
+- Polices hébergées par l'application : plus aucun appel à Google, et affichage
+  identique hors ligne.
+
+### Ergonomie
+- La carte passe en **fond sombre** avec le thème sombre.
+- **Étoile** dans la liste des stations (mobile) pour ajouter un favori en un geste.
+
+### Technique
+- Passage à **Node 22 LTS** (Node 20 n'est plus maintenu) ; better-sqlite3 12.
+- `/api/health` indique l'état de la boucle d'alerte et du flux Vélam (`ok` / `degraded`).
+- Suppression de l'ancienne page `/redirect`, inutilisée.
+
 ## [1.1.2] - 2026-09-25
 
 ### Corrections
@@ -93,6 +114,7 @@ Première version stable de VéloPulse, l'application de suivi des stations Vél
 - Tests automatisés : backend (SQLite et PostgreSQL) et frontend, exécutés sur chaque PR.
 - Déploiement automatique sur Render à chaque merge sur `main`.
 
+[1.2.0]: https://github.com/p0p314/velam-notifier/releases/tag/v1.2.0
 [1.1.2]: https://github.com/p0p314/velam-notifier/releases/tag/v1.1.2
 [1.1.1]: https://github.com/p0p314/velam-notifier/releases/tag/v1.1.1
 [1.1.0]: https://github.com/p0p314/velam-notifier/releases/tag/v1.1.0
