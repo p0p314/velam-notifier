@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth";
 import { syncPush } from "../push";
 import Logo from "../components/Logo";
@@ -8,6 +8,7 @@ import { APP_VERSION } from "../theme";
 export default function Login() {
   const { login, register } = useAuth();
   const navigate = useNavigate();
+  const accountDeleted = useLocation().state?.accountDeleted;
 
   const [mode,     setMode]     = useState("login");
   const [username, setUsername] = useState("");
@@ -61,12 +62,16 @@ export default function Login() {
             autoComplete={mode === "login" ? "current-password" : "new-password"} required />
         </label>
 
+        {accountDeleted && !error && <div className="form-ok" role="status">Votre compte et toutes vos données ont été supprimés.</div>}
+        {mode === "register" && (
+          <div className="auth-note">Aucune adresse e-mail n'est demandée : notez bien votre mot de passe, il ne pourra pas être récupéré.</div>
+        )}
         {error && <div className="auth-error">{error}</div>}
 
         <button type="submit" className="submit-btn" disabled={busy} style={{ marginTop: 4, opacity: busy ? 0.6 : 1 }}>
           {busy ? "…" : mode === "login" ? "Se connecter" : "Créer un compte"}
         </button>
-        <div className="app-version">v{APP_VERSION}</div>
+        <div className="app-version"><Link to="/confidentialite">Confidentialité</Link> · v{APP_VERSION}</div>
       </form>
     </div>
   );

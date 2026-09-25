@@ -8,7 +8,12 @@ export const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN ?? "";
 // Centre par défaut : Amiens (pas de config ville dédiée dans le projet).
 export const DEFAULT_CENTER = { lng: 2.2957, lat: 49.8941 };
 export const DEFAULT_ZOOM   = 13;
-export const MAP_STYLE      = "mapbox://styles/mapbox/light-v11";
+// Fond de carte assorti au thème de l'app (clair / sombre).
+export const MAP_STYLES = {
+  light: "mapbox://styles/mapbox/light-v11",
+  dark:  "mapbox://styles/mapbox/dark-v11",
+};
+export const mapStyleFor = (theme) => (theme === "dark" ? MAP_STYLES.dark : MAP_STYLES.light);
 
 /** Nombre de vélos pertinent selon le filtre de type actif. */
 export function bikeCountForType(s, type) {

@@ -1,7 +1,7 @@
 {
   "name": "velopulse",
   "private": true,
-  "version": "1.1.2",
+  "version": "1.2.0",
   "type": "module",
   "description": "Dashboard React des stations Vélam (Amiens)",
   "scripts": {
@@ -12,6 +12,8 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@fontsource/geist": "^5.3.0",
+    "@fontsource/geist-mono": "^5.3.0",
     "mapbox-gl": "^3.25.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",

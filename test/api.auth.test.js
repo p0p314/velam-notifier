@@ -87,3 +87,49 @@ test('requireAuth : absent, mal formé, mauvaise signature, expiré → 401', as
     assert.equal(res.body.ok, false);
   }
 });
+
+test('changer de mot de passe : l\'ancien ne fonctionne plus, le nouveau oui', async () => {
+  const { token } = await registerUser(api, 'alice');
+  const res = await api.put('/api/auth/password', { token, body: { current_password: 'motdepasse1', new_password: 'nouveau-mdp-42' } });
+  assert.equal(res.status, 200);
+  assert.equal((await api.post('/api/auth/login', { body: { username: 'alice', password: 'motdepasse1' } })).status, 401);
+  assert.equal((await api.post('/api/auth/login', { body: { username: 'alice', password: 'nouveau-mdp-42' } })).status, 200);
+});
+
+test('changer de mot de passe : validations', async () => {
+  const { token } = await registerUser(api, 'alice');
+  assert.equal((await api.put('/api/auth/password', { token, body: { current_password: 'faux-mdp', new_password: 'nouveau-mdp-42' } })).status, 403);
+  assert.equal((await api.put('/api/auth/password', { token, body: { current_password: 'motdepasse1', new_password: 'court' } })).status, 400);
+  assert.equal((await api.put('/api/auth/password', { token, body: {} })).status, 400);
+  assert.equal((await api.put('/api/auth/password', { body: { current_password: 'a', new_password: 'bbbbbbbb' } })).status, 401);
+});
+
+test('supprimer son compte efface toutes ses données', async () => {
+  const { dbc } = require('./helpers');
+  const { token, user } = await registerUser(api, 'alice');
+  const other = await registerUser(api, 'bob');
+  await api.post('/api/favorites', { token, body: { station_id: '1', station_name: 'Gare' } });
+  await api.post('/api/favorites', { token: other.token, body: { station_id: '1', station_name: 'Gare' } });
+  await api.post('/api/alerts', { token, body: { station_id: '1', station_name: 'Gare', time_start: '08:00', time_end: '09:00' } });
+  await api.post('/api/push/subscribe', { token, body: { subscription: { endpoint: 'https://push.example.com/a', keys: { p256dh: 'p', auth: 'a' } } } });
+
+  assert.equal((await api.delete('/api/auth/me', { token, body: { password: 'faux' } })).status, 403);
+  const res = await api.delete('/api/auth/me', { token, body: { password: 'motdepasse1' } });
+  assert.equal(res.status, 200);
+
+  for (const table of ['users', 'favorites', 'alerts', 'push_subscriptions']) {
+    const col = table === 'users' ? 'id' : 'user_id';
+    const row = await dbc.get(`SELECT COUNT(*) AS n FROM ${table} WHERE ${col} = ?`, [user.id]);
+    assert.equal(Number(row.n), 0, table);
+  }
+  // Les données des autres comptes sont intactes, et le jeton supprimé ne sert plus.
+  assert.equal((await api.get('/api/favorites', { token: other.token })).body.favorites.length, 1);
+  assert.equal((await api.get('/api/auth/me', { token })).status, 401);
+  assert.equal((await api.post('/api/auth/login', { body: { username: 'alice', password: 'motdepasse1' } })).status, 401);
+});
+
+test('supprimer son compte : mot de passe requis, sans compte → 401', async () => {
+  const { token } = await registerUser(api, 'alice');
+  assert.equal((await api.delete('/api/auth/me', { token, body: {} })).status, 400);
+  assert.equal((await api.delete('/api/auth/me', { body: { password: 'x' } })).status, 401);
+});

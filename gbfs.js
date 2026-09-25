@@ -91,6 +91,23 @@ function isFresh(snapshot, nowMs = Date.now()) {
   return !!snapshot?.upstreamOk && nowMs - snapshot.updatedAt < STATUS_STALE_MS;
 }
 
+/**
+ * État du flux Vélam vu par le serveur, sans déclencher d'appel (pour /api/health).
+ * null tant qu'aucune requête n'a été faite depuis le démarrage.
+ */
+function getStatusHealth(nowMs = Date.now()) {
+  const snap = statusCache.snapshot;
+  if (!snap) return null;
+  return {
+    upstream_ok: snap.upstreamOk,
+    fresh: isFresh(snap, nowMs),
+    data_updated_at: new Date(snap.updatedAt).toISOString(),
+    data_age_s: Math.max(0, Math.round((nowMs - snap.updatedAt) / 1000)),
+    last_checked_at: new Date(statusCache.at).toISOString(),
+    last_error: snap.error ?? null,
+  };
+}
+
 /** Tests uniquement : oublie cache et dernière réponse valide. */
 function resetStatusCache() {
   statusCache = { at: 0, snapshot: null };
@@ -110,5 +127,5 @@ async function fetchSystemInformation() {
 
 module.exports = {
   fetchStationInfo, fetchStationStatus, getStationStatus, fetchSystemInformation,
-  isFresh, resetStatusCache, STATUS_STALE_MS,
+  isFresh, resetStatusCache, getStatusHealth, STATUS_STALE_MS,
 };

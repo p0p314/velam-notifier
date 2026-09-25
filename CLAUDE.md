@@ -20,7 +20,7 @@ cette convention (commentaires, libellés UI, messages d'erreur).
 
 ## Commandes
 
-Backend (racine) — Node **20.x** (fetch natif, pas de client HTTP tiers) :
+Backend (racine) — Node **22.x** (LTS) (fetch natif, pas de client HTTP tiers) :
 
 ```bash
 npm install
@@ -70,7 +70,7 @@ Backend (voir `render.yaml`) :
 - `JWT_SECRET` — secret de signature JWT (sinon secret aléatoire persisté en `config`, dev).
 - `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` / `VAPID_EMAIL` — Web Push (sinon générés en dev).
 - `CRON_SECRET` — protège `POST /cron/sync-rental-apps` (obligatoire pour l'activer).
-- `APP_URL` — base `https://` des liens de notification (page `/redirect`).
+- `APP_URL` — base `https://` des liens de notification (page `/open`).
 - `CORS_ORIGIN` — origines autorisées en dev (CSV) ; `FRONTEND_URL` en prod.
 - `ALERT_TZ` — fuseau d'évaluation des alertes (défaut `Europe/Paris`).
 - `JWT_TTL` — durée de vie du jeton (défaut `30d`).
@@ -144,12 +144,15 @@ seulement pour le référentiel lent des stations.
   et `stale` (`!isFresh` : flux en échec ou données ≥ 5 min) ; le client affiche alors le bandeau
   (`OfflineBanner`, textes dans `lib/station.js` → `bannerText`). La boucle d'alerte **n'envoie
   rien** sur des données non fraîches.
-- `GET /api/health` — nb de stations, uptime, version Node. `GET /health` — sonde anti-veille.
+- `GET /api/health` — version, nb de stations, uptime, Node, **état de la boucle d'alerte**
+  (`alert_loop` : démarrée, saine, dernier passage, résultat, dernière erreur) et **du flux Vélam**
+  (`gbfs`, lu depuis le cache sans appel) ; `status` = `ok` | `degraded`. `GET /health` — sonde anti-veille.
 
 Erreurs upstream/proxy → **HTTP 502** `{ ok:false, error }`. Toutes les réponses portent une
 enveloppe `ok` ; le client `api()` lève sur `!res.ok || data.ok === false`. Routes protégées
 (`/api/favorites` (+ `PATCH /:id` label, `PUT /order`), `/api/alerts` (+ `PUT /pause`),
-`/api/push/subscribe|unsubscribe|test`, `/api/auth/me`,
+`/api/push/subscribe|unsubscribe|test`, `/api/auth/me` (GET ; DELETE = suppression du compte),
+`PUT /api/auth/password`,
 `POST /api/stations/refresh`) : Bearer requis. Publiques : login/register,
 `GET /api/stations`, `GET /api/rental-apps`, `GET /api/push/vapid-public-key`.
 Cron (`CRON_SECRET`) : `/cron/sync-rental-apps`, `/cron/refresh-stations` (workflow
@@ -194,15 +197,18 @@ par plateforme). Ils sont synchronisés **une fois par jour** par **GitHub Actio
 (`.github/workflows/sync-rental-apps.yml`, 02:00 UTC) qui appelle `POST /cron/sync-rental-apps`
 (garde `CRON_SECRET`, comparaison à **temps constant**). Aucun cron côté serveur.
 
-Les notifications pointent toujours vers une URL `https://` (`/redirect`) car le Service Worker
-iOS refuse les schemes custom (`velam://`). La page `/redirect` (publique, `noindex`) tente le
-deep link, puis le store de la plateforme, puis le web.
+Les notifications pointent toujours vers une URL `https://` (`/open`, page HTML servie par
+`routes/rentalApps.js`) car le Service Worker iOS refuse les schemes custom (`velam://`).
+`/open` (publique, `noindex`) tente le deep link, puis le store de la plateforme, puis le web.
 
 ### Sécurité (backend)
 
 `helmet` avec CSP adaptée au SPA (JS `'self'`+`blob:` pour les workers Mapbox, styles inline
-React, `connectSrc` Mapbox). CORS en whitelist. Corps JSON borné à **16 kb**. `express-rate-limit`
-sur `login` (10/15 min) et `register` (5/h). `trust proxy` pour l'IP réelle derrière Render.
+React, `connectSrc` Mapbox ; polices `'self'` uniquement — Geist auto-hébergée via `@fontsource`). CORS en whitelist. Corps JSON borné à **16 kb**. `express-rate-limit`
+sur `login` (10/15 min, partagé avec changement de mot de passe et suppression de compte) et
+`register` (5/h). **RGPD** : `DELETE /api/auth/me` (mot de passe exigé) efface compte, favoris,
+alertes et appareils (`db.deleteUser`) ; page publique `/confidentialite` à tenir à jour si le
+modèle de données ou les tiers changent. `trust proxy` pour l'IP réelle derrière Render.
 
 ## Architecture frontend (`frontend/src/`)
 
@@ -244,11 +250,14 @@ différenciée : mobile → `/favoris`, desktop → `/stations`.
 - **pages/** — `Login`, `Stations` (recherche/tri/filtre + détail), `Favorites` (swipe-to-delete,
   tri proximité / ordre choisi, mode « Organiser »), `MapPage` (carte + filtres + « Autour de moi »),
   `Alerts` (formulaire complet, pause, notification de test ; pré-rempli via
-  `location.state.alertStation` depuis la fiche station), `Redirect` (cible push).
-- **components/** — `StationCard` (desktop), `StationListItem` (mobile), `StationDetailSheet`,
+  `location.state.alertStation` depuis la fiche station), `Account` (`/compte` : mot de passe,
+  suppression du compte), `Privacy` (`/confidentialite`, publique).
+- **components/** — `StationCard` (desktop), `StationListItem` (mobile, étoile favori optionnelle
+  via `onToggleFav`), `StationDetailSheet`,
   `BottomSheet`, `BottomNav` / `Navbar`, `Icon` (SVG inline style Lucide), `Logo`, `Offline`,
   `map/StationMap` (markers diffés, pas de recréation), `map/MapFilters`.
-- **lib/mapConfig.js** — config Mapbox + logique de disponibilité (couleur des markers).
+- **lib/mapConfig.js** — config Mapbox (`mapStyleFor(theme)` : fond clair / sombre, changé à chaud
+  par `setStyle`) + logique de disponibilité (couleur des markers).
 - **theme.js** — alias palette (variables CSS), `fmtTime`, `bikeColor`. Styles inline + `styles.css`
   (variables CSS, pas de framework CSS).
 

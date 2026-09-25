@@ -12,7 +12,8 @@ import Login from "./pages/Login";
 import Stations from "./pages/Stations";
 import Favorites from "./pages/Favorites";
 import Alerts from "./pages/Alerts";
-import Redirect from "./pages/Redirect";
+import Account from "./pages/Account";
+import Privacy from "./pages/Privacy";
 import { OnlineOnly } from "./components/Offline";
 import Onboarding from "./components/Onboarding";
 
@@ -32,7 +33,6 @@ function Landing() {
 }
 
 function Layout() {
-  const { logout } = useAuth();
   const { theme, toggle } = useTheme();
   const { open: openInstall } = usePwaInstall();
   const navigate = useNavigate();
@@ -51,8 +51,8 @@ function Layout() {
           <button className="icon-btn" aria-label="Installer l'app" onClick={openInstall}>
             <Icon name="download" />
           </button>
-          <button className="icon-btn" aria-label="Déconnexion" onClick={async () => { await logout(); navigate("/login", { replace: true }); }}>
-            <Icon name="log-out" />
+          <button className="icon-btn" aria-label="Mon compte" onClick={() => navigate("/compte")}>
+            <Icon name="user" />
           </button>
         </div>
       </header>
@@ -72,8 +72,8 @@ export default function App() {
         <PwaInstallProvider>
           <Routes>
             <Route path="/login" element={<Login />} />
-            {/* Cible des notifications push — publique, ouvre l'app native puis store/web. */}
-            <Route path="/redirect" element={<Redirect />} />
+            {/* Confidentialité / mentions légales — publique. */}
+            <Route path="/confidentialite" element={<Privacy />} />
             <Route element={<Protected />}>
               <Route element={<Layout />}>
                 <Route path="/" element={<Landing />} />
@@ -81,6 +81,7 @@ export default function App() {
                 <Route path="/carte" element={<OnlineOnly><Suspense fallback={<div className="view-state">Chargement de la carte…</div>}><MapPage /></Suspense></OnlineOnly>} />
                 <Route path="/favoris" element={<Favorites />} />
                 <Route path="/alertes" element={<OnlineOnly><Alerts /></OnlineOnly>} />
+                <Route path="/compte" element={<OnlineOnly><Account /></OnlineOnly>} />
               </Route>
             </Route>
             <Route path="*" element={<Navigate to="/" replace />} />

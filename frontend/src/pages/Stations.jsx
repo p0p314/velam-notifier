@@ -137,7 +137,8 @@ export default function Stations() {
         ) : (
           <div className="station-list">
             {visible.map((s) => (
-              <StationListItem key={s.station_id} s={s} dist={coords ? distanceKm(coords, s) : null} onClick={() => setSelId(s.station_id)} />
+              <StationListItem key={s.station_id} s={s} dist={coords ? distanceKm(coords, s) : null} onClick={() => setSelId(s.station_id)}
+                isFav={favIds.has(s.station_id)} onToggleFav={toggleFav} />
             ))}
           </div>
         )}

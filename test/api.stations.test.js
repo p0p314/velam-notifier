@@ -84,6 +84,30 @@ describe('santé', () => {
     const res = await api.get('/api/health');
     assert.equal(res.body.ok, true);
     assert.equal(res.body.stations_in_db, 0);
+    // Boucle d'alerte non démarrée dans les tests d'API → dégradé, et flux jamais interrogé.
+    assert.equal(res.body.alert_loop.started, false);
+    assert.equal(res.body.status, 'degraded');
+    assert.equal(res.body.gbfs, null);
+  });
+
+  test('/api/health reflète l\'état du flux Vélam sans l\'interroger', async () => {
+    gbfs.info = [info('1', 'Gare')];
+    gbfs.status = [{ station_id: '1', num_bikes_available: 2 }];
+    await api.get('/api/stations');
+    const calls = gbfs.calls.status;
+    const ok = (await api.get('/api/health')).body.gbfs;
+    assert.equal(gbfs.calls.status, calls, 'aucun appel supplémentaire au flux');
+    assert.equal(ok.upstream_ok, true);
+    assert.equal(ok.fresh, true);
+    assert.equal(ok.last_error, null);
+
+    await expireCache();
+    gbfs.fail = true;
+    await api.get('/api/stations');
+    const ko = (await api.get('/api/health')).body.gbfs;
+    assert.equal(ko.upstream_ok, false);
+    assert.equal(ko.fresh, false);
+    assert.match(ko.last_error, /503/);
   });
 });
 
@@ -143,7 +167,9 @@ describe('rental_apps et cron', () => {
 describe('sécurité HTTP', () => {
   test('en-têtes helmet + CSP', async () => {
     const res = await api.get('/health');
-    assert.match(res.headers.get('content-security-policy'), /default-src 'self'/);
+    const csp = res.headers.get('content-security-policy');
+    assert.match(csp, /default-src 'self'/);
+    assert.doesNotMatch(csp, /googleapis|gstatic/, 'polices auto-hébergées : aucune origine Google');
     assert.equal(res.headers.get('x-content-type-options'), 'nosniff');
   });
   test('corps JSON > 16 kb refusé', async () => {

@@ -740,3 +740,27 @@ select option { background: var(--surface); color: var(--text); }
 .onboarding-dots { display: flex; gap: 6px; }
 .onboarding-dots span { width: 7px; height: 7px; border-radius: 50%; background: var(--border-strong); }
 .onboarding-dots span.on { background: var(--accent); }
+
+/* Compte et confidentialité */
+.account-page { display: flex; flex-direction: column; gap: 14px; max-width: 520px; }
+.account-card { display: flex; flex-direction: column; gap: 12px; padding: 16px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-md); }
+.account-card.danger { border-color: var(--danger); }
+.account-card .cancel-btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+.account-id { display: flex; align-items: center; gap: 8px; font-size: 15px; color: var(--text); }
+.account-text { margin: 0; font-size: 13px; line-height: 1.5; color: var(--text-2); }
+.account-links { display: flex; justify-content: space-between; align-items: center; font-size: 13px; }
+.account-links a, .legal-page a, .app-version a { color: var(--accent); display: inline-flex; align-items: center; gap: 6px; }
+.danger-btn { min-height: 44px; padding: 0 16px; border: none; border-radius: var(--r-sm); background: var(--danger); color: var(--on-accent); font-size: 14px; font-weight: 600; cursor: pointer; }
+.danger-btn:disabled { opacity: .6; }
+.form-ok { color: var(--ok); font-size: 13px; }
+.auth-note { font-size: 12px; line-height: 1.45; color: var(--text-3); }
+.nav-user { display: inline-flex; align-items: center; gap: 6px; text-decoration: none; }
+.legal-page { max-width: 720px; margin: 0 auto; padding: 24px 16px 48px; color: var(--text-2); font-size: 14px; line-height: 1.6; background: var(--bg); }
+.legal-page h2 { font-size: 16px; color: var(--text); margin: 24px 0 8px; }
+.legal-page ul { padding-left: 20px; }
+.legal-todo { font-style: italic; color: var(--text-3); }
+
+/* Étoile favori dans la liste mobile (cible tactile 44 px) */
+.item-fav { flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; margin: -10px -8px -10px -4px; border: none; background: none; color: var(--text-3); cursor: pointer; border-radius: var(--r-sm); }
+.item-fav.on { color: var(--accent); }
+.item-fav:focus-visible { box-shadow: var(--focus-ring); }

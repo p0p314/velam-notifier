@@ -2,7 +2,11 @@ import Icon from "./Icon";
 import { fmtDistance } from "../hooks";
 import { stationStatus, bikeCounts, LOW_BIKES } from "../lib/station";
 
-export default function StationListItem({ s, onClick, dist }) {
+/**
+ * Ligne de station (mobile). `onToggleFav` (facultatif) affiche une étoile pour
+ * ajouter / retirer le favori sans ouvrir la fiche.
+ */
+export default function StationListItem({ s, onClick, dist, isFav = false, onToggleFav }) {
   const offline = s.is_renting === false;
   const st = stationStatus(s);
   const { elec, meca } = bikeCounts(s);
@@ -18,7 +22,8 @@ export default function StationListItem({ s, onClick, dist }) {
   );
 
   return (
-    <div className={"station-item" + (offline ? " offline" : "")} role="button" tabIndex={0} onClick={onClick} onKeyDown={onKey}>
+    <div className={"station-item" + (offline ? " offline" : "")} role="button" tabIndex={0} onClick={onClick} onKeyDown={onKey}
+      aria-label={`${s.name}, voir le détail`}>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div className="station-item-name">{s.name}</div>
         {s.subtitle && <div className="station-item-sub">{s.subtitle}</div>}
@@ -38,6 +43,15 @@ export default function StationListItem({ s, onClick, dist }) {
 
       {Pill}
       <span className="card-status">{Pill}</span>
+      {onToggleFav && (
+        <button type="button" className={"item-fav" + (isFav ? " on" : "")}
+          aria-label={isFav ? `Retirer ${s.name} des favoris` : `Ajouter ${s.name} aux favoris`}
+          aria-pressed={isFav}
+          onClick={(e) => { e.stopPropagation(); onToggleFav(s); }}
+          onKeyDown={(e) => e.stopPropagation()}>
+          <Icon name="star" size={20} style={isFav ? { fill: "currentColor" } : null} />
+        </button>
+      )}
     </div>
   );
 }

@@ -283,26 +283,26 @@ function isDue(alert, { hhmm, isoDay, date }) {
 /** `date` injectable pour les tests (défaut : maintenant). */
 async function checkAlerts(date = new Date()) {
   // Ne rien faire si aucune alerte active n'existe en base
-  if (await countActiveAlerts() === 0) return;
+  if (await countActiveAlerts() === 0) return 'aucune_alerte';
 
   // Heure / jour / date courants dans le fuseau des alertes (pas l'UTC serveur).
   const now = nowInTz(date);
   await deleteExpiredAlerts(now.date); // alertes ponctuelles des jours passés
 
   const due = (await getActiveAlerts(now.date)).filter((a) => isDue(a, now));
-  if (due.length === 0) return;
+  if (due.length === 0) return 'aucune_due';
 
   let status;
   try {
     status = await getStationStatus();
   } catch (err) {
     console.error('[push] fetch GBFS status', err.message);
-    return;
+    return 'flux_indisponible';
   }
   // Flux Vélam en panne ou données figées : on n'alerte pas sur des chiffres périmés.
   if (!isFresh(status)) {
     console.warn('[push] disponibilités périmées — cycle d\'alerte ignoré');
-    return;
+    return 'donnees_perimees';
   }
 
   const statusMap = Object.fromEntries(status.stations.map((s) => [s.station_id, s]));
@@ -339,17 +339,52 @@ async function checkAlerts(date = new Date()) {
 let pollingTimer = null;
 let isRunning    = false;
 
+// État de la boucle, exposé par /api/health (une panne silencieuse devient visible).
+const loop = {
+  runs: 0,
+  lastRunAt: null,      // ms, début du dernier cycle terminé
+  lastDurationMs: null,
+  lastOutcome: null,    // aucune_alerte | aucune_due | flux_indisponible | donnees_perimees | verifiees
+  lastError: null,      // { message, at }
+};
+
 /** Enveloppe checkAlerts d'un verrou : un cycle lent ne chevauche pas le suivant. */
-async function runPollCycle() {
+async function runPollCycle(date) {
   if (isRunning) return;
   isRunning = true;
+  const started = Date.now();
   try {
-    await checkAlerts();
+    loop.lastOutcome = (await checkAlerts(date)) ?? 'verifiees';
   } catch (err) {
+    loop.lastOutcome = 'erreur';
+    loop.lastError = { message: err.message, at: new Date().toISOString() };
     console.error('[push] boucle', err.message);
   } finally {
+    loop.runs++;
+    loop.lastRunAt = started;
+    loop.lastDurationMs = Date.now() - started;
     isRunning = false;
   }
+}
+
+/**
+ * Santé de la boucle d'alerte. `healthy` = démarrée et un cycle a abouti depuis
+ * moins de 3 intervalles (sinon elle est bloquée ou arrêtée) sans erreur au dernier cycle.
+ */
+function getAlertLoopHealth(nowMs = Date.now()) {
+  const lagMs = loop.lastRunAt === null ? null : nowMs - loop.lastRunAt;
+  const healthy = !!pollingTimer && lagMs !== null && lagMs < 3 * POLL_MS && loop.lastOutcome !== 'erreur';
+  return {
+    started: !!pollingTimer,
+    running: isRunning,
+    healthy,
+    runs: loop.runs,
+    last_run_at: loop.lastRunAt === null ? null : new Date(loop.lastRunAt).toISOString(),
+    last_duration_ms: loop.lastDurationMs,
+    last_outcome: loop.lastOutcome,
+    last_error: loop.lastError,
+    interval_s: POLL_MS / 1000,
+  };
 }
 
 function startPolling() {
@@ -366,7 +401,7 @@ function stopPolling() {
 }
 
 module.exports = {
-  initPush, getVapidPublicKey, startPolling, stopPolling,
+  initPush, getVapidPublicKey, startPolling, stopPolling, getAlertLoopHealth,
   // exposés pour les tests
-  checkAlerts, findFallback, fallbacksFor, buildTestPayload, countForType, docksOf, evaluateAlert, buildMessage, buildPayload, sendToUser, inWindow, nowInTz,
+  checkAlerts, runPollCycle, getAlertLoopHealth, findFallback, fallbacksFor, buildTestPayload, countForType, docksOf, evaluateAlert, buildMessage, buildPayload, sendToUser, inWindow, nowInTz,
 };
