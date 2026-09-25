@@ -22,8 +22,10 @@ describe("données de borne périmées", () => {
     expect(fmtAge(150)).toBe("2 h");
     expect(fmtAge(60 * 50)).toBe("2 j");
   });
-  test("au-delà d'une heure seulement, jamais pour une station hors service", () => {
-    expect(staleNote({ report_age_min: 59 })).toBeNull();
+  test("à partir de 5 min sans mise à jour, jamais pour une station hors service", () => {
+    expect(staleNote({ report_age_min: 4 })).toBeNull();
+    expect(staleNote({ report_age_min: 5 })).toBe("Dernière info il y a 5 min");
+    expect(staleNote({ report_age_min: 0 })).toBeNull();
     expect(staleNote({ report_age_min: 125 })).toBe("Dernière info il y a 2 h");
     expect(staleNote({ report_age_min: 300, is_renting: false })).toBeNull();
     expect(staleNote({})).toBeNull();

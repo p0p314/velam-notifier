@@ -6,8 +6,9 @@
 // compteur `low`). Un seul endroit à ajuster.
 export const LOW_BIKES = 2;
 
-// Au-delà, la borne ne remonte plus d'information fiable (panne, coupure réseau).
-export const STALE_AFTER_MIN = 60;
+// Au-delà de 5 min sans signal de la borne, le nombre de vélos affiché peut ne plus
+// être à jour (panne, coupure réseau) : on le signale.
+export const STALE_AFTER_MIN = 5;
 
 /** « 75 min », « 2 h », « 3 j ». */
 export function fmtAge(min) {

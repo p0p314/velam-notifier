@@ -9,6 +9,12 @@ Toutes les évolutions notables de VéloPulse. Format inspiré de
 section `## [x.y.z] - AAAA-MM-JJ` ci-dessous, puis merger sur `main` : le workflow
 `release.yml` crée le tag `vx.y.z` et la release GitHub à partir de cette section.
 
+## [1.1.1] - 2026-09-25
+
+### Corrections
+- « Dernière info il y a… » s'affiche dès que le nombre de vélos d'une station n'a
+  pas été mis à jour depuis **5 minutes** ou plus (au lieu d'une heure).
+
 ## [1.1.0] - 2026-09-24
 
 Des alertes pensées pour le trajet quotidien, et une consultation plus fiable.
@@ -76,5 +82,6 @@ Première version stable de VéloPulse, l'application de suivi des stations Vél
 - Tests automatisés : backend (SQLite et PostgreSQL) et frontend, exécutés sur chaque PR.
 - Déploiement automatique sur Render à chaque merge sur `main`.
 
+[1.1.1]: https://github.com/p0p314/velam-notifier/releases/tag/v1.1.1
 [1.1.0]: https://github.com/p0p314/velam-notifier/releases/tag/v1.1.0
 [1.0.0]: https://github.com/p0p314/velam-notifier/releases/tag/v1.0.0

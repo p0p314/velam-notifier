@@ -137,7 +137,7 @@ seulement pour le référentiel lent des stations.
   rechargent le référentiel (`replaceStations` : upsert + retrait des stations disparues, sauf
   si le flux renvoie moins de la moitié des stations connues).
 - Chaque station porte `report_age_min` (minutes depuis le dernier signal de la borne,
-  calculé au fetch) : l'UI affiche « Dernière info il y a… » au-delà de 60 min.
+  calculé au fetch) : l'UI affiche « Dernière info il y a… » à partir de 5 min (`STALE_AFTER_MIN`).
 - `GET /api/health` — nb de stations, uptime, version Node. `GET /health` — sonde anti-veille.
 
 Erreurs upstream/proxy → **HTTP 502** `{ ok:false, error }`. Toutes les réponses portent une
