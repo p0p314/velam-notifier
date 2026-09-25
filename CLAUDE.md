@@ -70,7 +70,7 @@ Backend (voir `render.yaml`) :
 - `JWT_SECRET` — secret de signature JWT (sinon secret aléatoire persisté en `config`, dev).
 - `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` / `VAPID_EMAIL` — Web Push (sinon générés en dev).
 - `CRON_SECRET` — protège `POST /cron/sync-rental-apps` (obligatoire pour l'activer).
-- `APP_URL` — base `https://` des liens de notification (page `/redirect`).
+- `APP_URL` — base `https://` des liens de notification (page `/open`).
 - `CORS_ORIGIN` — origines autorisées en dev (CSV) ; `FRONTEND_URL` en prod.
 - `ALERT_TZ` — fuseau d'évaluation des alertes (défaut `Europe/Paris`).
 - `JWT_TTL` — durée de vie du jeton (défaut `30d`).
