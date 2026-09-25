@@ -5,6 +5,7 @@ import StationDetailSheet from "../components/StationDetailSheet";
 import BottomSheet from "../components/BottomSheet";
 import Icon from "../components/Icon";
 import { OfflineBanner } from "../components/Offline";
+import LocateHint from "../components/LocateHint";
 import { useStations, useFavorites, useGeolocation, distanceKm } from "../hooks";
 
 const FILTERS = [
@@ -33,11 +34,16 @@ function SearchBox({ value, onChange }) {
 export default function Stations() {
   const { stations, loading, error, stale, staleReason, lastUpd, reload } = useStations();
   const { favIds, toggleFav } = useFavorites();
-  const { coords } = useGeolocation();
+  const { coords, status: geoStatus, locate } = useGeolocation();
 
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("all");
-  const [sort,   setSort]   = useState("distance"); // proximité par défaut
+  const [sort,   setSortState] = useState("distance"); // proximité par défaut
+  const setSort = (v) => {
+    setSortState(v);
+    if (v === "distance" && !coords) locate(); // clic = consentement explicite
+  };
+  const hint = sort === "distance" && !coords && <LocateHint status={geoStatus} onLocate={locate} />;
   const [selId,  setSelId]  = useState(null);
   const [controlsOpen, setControlsOpen] = useState(false); // tri/filtre mobile
 
@@ -129,6 +135,7 @@ export default function Stations() {
           </button>
         </div>
         <OfflineBanner stale={stale} staleReason={staleReason} lastUpd={lastUpd} />
+        {hint}
         {loading ? (
           <div className="view-state">Connexion au serveur…</div>
         ) : error ? ErrorBox
@@ -172,6 +179,7 @@ export default function Stations() {
         </div>
 
         <OfflineBanner stale={stale} staleReason={staleReason} lastUpd={lastUpd} />
+        {hint}
         {loading ? (
           <div className="view-state">Connexion au serveur…</div>
         ) : error ? ErrorBox

@@ -230,6 +230,9 @@ différenciée : mobile → `/favoris`, desktop → `/stations`.
   `upstream` = verdict serveur, `server` = serveur injoignable), `useFavorites` (liste, toggle, `rename`, `reorder`
   optimiste ; modifications **mises en file**, seule la réponse de la dernière est appliquée),
   `useOnline`, `useGeolocation`, `useIsMobile`, helpers `distanceKm` / `fmtDistance`.
+  **Géolocalisation** : mesurée au lancement puis **partagée** entre Favoris, Stations et
+  Carte (`requestPosition` : une mesure en cours à la fois, réutilisée 2 min) ;
+  `components/LocateHint` affiche « Localisation… » / refus + « Réessayer ».
 - **lib/** — logique pure testable : `alerts.js` (formulaire ↔ API, résumés), `favorites.js`
   (tri, déplacement, nom personnalisé), `station.js` (statut, `bannerText`, `disabledNote`),
   `mapConfig.js` (couleurs, `nearestWithBikes`), `onboarding.js` (étapes utiles), `offlineCache.js`.

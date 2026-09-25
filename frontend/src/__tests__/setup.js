@@ -1,6 +1,7 @@
 // Environnement commun des tests frontend.
 import { afterEach, beforeEach, vi } from "vitest";
 import { cleanup } from "@testing-library/react";
+import { resetGeoCache } from "../hooks";
 
 /** Force navigator.onLine (jsdom le fixe à true) et émet l'événement correspondant. */
 export function setOnline(value, { emit = true } = {}) {
@@ -25,6 +26,7 @@ beforeEach(() => {
   localStorage.clear();
   setMobileViewport(false);
   setOnline(true, { emit: false });
+  resetGeoCache();
   globalThis.fetch = vi.fn(async () => { throw new Error("fetch non simulé dans ce test"); });
 });
 
