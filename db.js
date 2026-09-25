@@ -49,6 +49,25 @@ async function saveStations(stations) {
   console.log(`[db] ${unique.length} stations enregistrées`);
 }
 
+/**
+ * Synchronise le référentiel : upsert de `stations` puis suppression de celles
+ * absentes du flux. Garde-fou : si le flux renvoie moins de la moitié des stations
+ * connues (flux partiel / incident), on n'en supprime aucune.
+ * Renvoie { count, removed }.
+ */
+async function replaceStations(stations) {
+  await saveStations(stations);
+  const ids = [...new Set(stations.map((s) => s.station_id))];
+  const known = await countStations();
+  if (ids.length === 0 || ids.length < known / 2) return { count: ids.length, removed: 0 };
+  const { changes } = await dbc.run(
+    `DELETE FROM stations WHERE station_id NOT IN (${ids.map(() => '?').join(', ')})`,
+    ids
+  );
+  if (changes) console.log(`[db] ${changes} station(s) retirée(s) du référentiel`);
+  return { count: ids.length, removed: changes };
+}
+
 // ── Rental apps (deep links officiels, sync GBFS quotidienne) ────────────────
 
 /**
@@ -114,24 +133,59 @@ async function getUserById(id) {
 
 // ── Favorites ────────────────────────────────────────────────────────────────
 
+/**
+ * Favoris dans l'ordre choisi par l'utilisateur (sort_order), puis alphabétique
+ * pour ceux jamais ordonnés. `label` : nom personnalisé facultatif.
+ */
 async function getFavorites(userId) {
   const { rows } = await dbc.query(
-    'SELECT station_id, station_name FROM favorites WHERE user_id = ? ORDER BY LOWER(station_name)',
+    `SELECT station_id, station_name, label, sort_order FROM favorites WHERE user_id = ?
+     ORDER BY CASE WHEN sort_order IS NULL THEN 1 ELSE 0 END, sort_order, LOWER(station_name)`,
     [userId]
   );
   return rows;
 }
 
+/**
+ * Ajoute un favori. Tant que l'utilisateur n'a jamais ordonné ses favoris, tous
+ * restent sans position (ordre alphabétique) ; ensuite, un nouveau favori va en
+ * fin de liste. Un favori existant garde son nom personnalisé et sa place.
+ */
 async function addFavorite(userId, stationId, stationName) {
+  const row = await dbc.get('SELECT MAX(sort_order) AS m FROM favorites WHERE user_id = ?', [userId]);
+  const next = row?.m == null ? null : Number(row.m) + 1;
   await dbc.run(
-    `INSERT INTO favorites (user_id, station_id, station_name) VALUES (?, ?, ?)
+    `INSERT INTO favorites (user_id, station_id, station_name, sort_order) VALUES (?, ?, ?, ?)
      ON CONFLICT(user_id, station_id) DO UPDATE SET station_name = excluded.station_name`,
-    [userId, stationId, stationName]
+    [userId, stationId, stationName, next]
   );
 }
 
 async function removeFavorite(userId, stationId) {
   await dbc.run('DELETE FROM favorites WHERE user_id = ? AND station_id = ?', [userId, stationId]);
+}
+
+/** Renomme un favori (`label` null = nom de la station). Renvoie false si absent. */
+async function setFavoriteLabel(userId, stationId, label) {
+  const { changes } = await dbc.run(
+    'UPDATE favorites SET label = ? WHERE user_id = ? AND station_id = ?',
+    [label, userId, stationId]
+  );
+  return changes > 0;
+}
+
+/**
+ * Enregistre l'ordre : `stationIds[i]` prend la position i. Les favoris absents de
+ * la liste passent après, dans leur ordre actuel ; les identifiants inconnus sont ignorés.
+ */
+async function reorderFavorites(userId, stationIds) {
+  const current = (await getFavorites(userId)).map((f) => f.station_id);
+  const known = new Set(current);
+  const wanted = [...new Set(stationIds)].filter((id) => known.has(id));
+  const order = [...wanted, ...current.filter((id) => !wanted.includes(id))];
+  for (let i = 0; i < order.length; i++) {
+    await dbc.run('UPDATE favorites SET sort_order = ? WHERE user_id = ? AND station_id = ?', [i, userId, order[i]]);
+  }
 }
 
 // ── Push subscriptions ───────────────────────────────────────────────────────
@@ -173,8 +227,13 @@ async function removeSubscriptionById(id) {
 
 // ── Alerts ───────────────────────────────────────────────────────────────────
 
-async function getAlerts(userId) {
-  const { rows } = await dbc.query('SELECT * FROM alerts WHERE user_id = ? ORDER BY created_at DESC', [userId]);
+/** Alertes de l'utilisateur ; si `today` est fourni, masque les ponctuelles expirées. */
+async function getAlerts(userId, today = null) {
+  const { rows } = await dbc.query(
+    `SELECT * FROM alerts WHERE user_id = ? AND (valid_on IS NULL OR valid_on >= ?)
+     ORDER BY created_at DESC, id DESC`,
+    [userId, today ?? '0000-00-00']
+  );
   return rows;
 }
 
@@ -182,38 +241,43 @@ async function getAlert(userId, id) {
   return dbc.get('SELECT * FROM alerts WHERE id = ? AND user_id = ?', [id, userId]);
 }
 
+// Champs d'alerte modifiables par l'utilisateur (whitelist SQL).
+const ALERT_FIELDS = [
+  'station_id', 'station_name', 'bike_type', 'target', 'comparison', 'threshold',
+  'arrival_station_id', 'arrival_station_name', 'arrival_threshold', 'valid_on',
+  'time_start', 'time_end', 'days', 'active',
+];
+
 async function createAlert(userId, a) {
+  const row = {
+    bike_type: 'any', target: 'bikes', comparison: 'at_most', threshold: 1,
+    arrival_station_id: null, arrival_station_name: null, arrival_threshold: null,
+    valid_on: null, days: '1,2,3,4,5,6,7', active: 1,
+    ...a,
+  };
+  row.active = row.active ? 1 : 0;
+  const cols = ALERT_FIELDS.filter((k) => row[k] !== undefined);
   const { id } = await dbc.run(
-    `INSERT INTO alerts (user_id, station_id, station_name, bike_type, min_count, time_start, time_end, active, days)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [
-      userId,
-      a.station_id,
-      a.station_name,
-      a.bike_type,
-      a.min_count ?? 1,
-      a.time_start,
-      a.time_end,
-      a.active === undefined ? 1 : (a.active ? 1 : 0),
-      a.days ?? '1,2,3,4,5,6,7',
-    ]
+    `INSERT INTO alerts (user_id, ${cols.join(', ')}) VALUES (?, ${cols.map(() => '?').join(', ')})`,
+    [userId, ...cols.map((k) => row[k])]
   );
   return getAlert(userId, id);
 }
 
 /**
  * Met à jour les champs fournis d'une alerte de l'utilisateur.
+ * Toute modification réarme l'anti-spam (last_notified_*) : une alerte éditée
+ * (nouveau seuil, nouvel horaire…) doit pouvoir notifier à nouveau le jour même.
  * Retourne l'alerte mise à jour, ou null si introuvable / non possédée.
  */
 async function updateAlert(userId, id, fields) {
   const current = await getAlert(userId, id);
   if (!current) return null;
 
-  const allowed = ['station_id', 'station_name', 'bike_type', 'min_count', 'time_start', 'time_end', 'active', 'days'];
-  const keys = Object.keys(fields).filter((k) => allowed.includes(k));
+  const keys = Object.keys(fields).filter((k) => ALERT_FIELDS.includes(k));
   if (keys.length === 0) return current;
 
-  const setClause = keys.map((k) => `${k} = ?`).join(', ');
+  const setClause = [...keys.map((k) => `${k} = ?`), 'last_notified_date = NULL', 'last_notified_key = NULL'].join(', ');
   const params = keys.map((k) => (k === 'active' ? (fields[k] ? 1 : 0) : fields[k]));
   params.push(id, userId);
 
@@ -226,12 +290,14 @@ async function deleteAlert(userId, id) {
   return changes > 0;
 }
 
-async function markAlertNotified(id, date, count) {
-  await dbc.run('UPDATE alerts SET last_notified_date = ?, last_notified_count = ? WHERE id = ?', [date, count, id]);
+/** Première notification du jour : mémorise la date et l'état notifié. */
+async function markAlertNotified(id, date, key) {
+  await dbc.run('UPDATE alerts SET last_notified_date = ?, last_notified_key = ? WHERE id = ?', [date, key, id]);
 }
 
-async function setAlertNotifiedCount(id, count) {
-  await dbc.run('UPDATE alerts SET last_notified_count = ? WHERE id = ?', [count, id]);
+/** Met à jour l'état notifié (null = réarmée : la prochaine atteinte du seuil re-notifie). */
+async function setAlertNotifiedKey(id, key) {
+  await dbc.run('UPDATE alerts SET last_notified_key = ? WHERE id = ?', [key, id]);
 }
 
 async function countActiveAlerts() {
@@ -239,15 +305,44 @@ async function countActiveAlerts() {
   return Number(row?.n ?? 0);
 }
 
-async function getActiveAlerts() {
-  const { rows } = await dbc.query('SELECT * FROM alerts WHERE active = 1');
+/**
+ * Alertes actives à évaluer le jour `today` (YYYY-MM-DD, fuseau des alertes) :
+ * exclut les comptes en pause (alerts_paused_until >= today) et les alertes
+ * ponctuelles d'un autre jour.
+ */
+async function getActiveAlerts(today) {
+  const { rows } = await dbc.query(
+    `SELECT a.* FROM alerts a JOIN users u ON u.id = a.user_id
+     WHERE a.active = 1
+       AND (u.alerts_paused_until IS NULL OR u.alerts_paused_until < ?)
+       AND (a.valid_on IS NULL OR a.valid_on = ?)`,
+    [today, today]
+  );
   return rows;
+}
+
+/** Supprime les alertes ponctuelles dont le jour est passé. Renvoie le nombre supprimé. */
+async function deleteExpiredAlerts(today) {
+  const { changes } = await dbc.run('DELETE FROM alerts WHERE valid_on IS NOT NULL AND valid_on < ?', [today]);
+  return changes;
+}
+
+// ── Pause globale des alertes ────────────────────────────────────────────────
+
+async function getAlertsPause(userId) {
+  const row = await dbc.get('SELECT alerts_paused_until FROM users WHERE id = ?', [userId]);
+  return row?.alerts_paused_until ?? null;
+}
+
+/** `until` : YYYY-MM-DD (inclus) ou null pour reprendre. */
+async function setAlertsPause(userId, until) {
+  await dbc.run('UPDATE users SET alerts_paused_until = ? WHERE id = ?', [until, userId]);
 }
 
 module.exports = {
   initialize,
   // stations
-  countStations, getStations, saveStations,
+  countStations, getStations, saveStations, replaceStations,
   // rental apps
   upsertRentalApp, getRentalApps, getRentalAppsMap,
   // config
@@ -255,10 +350,11 @@ module.exports = {
   // users
   createUser, getUserByUsername, getUserById,
   // favorites
-  getFavorites, addFavorite, removeFavorite,
+  getFavorites, addFavorite, removeFavorite, setFavoriteLabel, reorderFavorites,
   // push
   addSubscription, removeSubscriptionByEndpoint, getSubscriptionsByUser, removeSubscriptionById,
   // alerts
   getAlerts, getAlert, createAlert, updateAlert, deleteAlert,
-  markAlertNotified, setAlertNotifiedCount, countActiveAlerts, getActiveAlerts,
+  markAlertNotified, setAlertNotifiedKey, countActiveAlerts, getActiveAlerts, deleteExpiredAlerts,
+  getAlertsPause, setAlertsPause,
 };

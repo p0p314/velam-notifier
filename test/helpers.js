@@ -116,6 +116,7 @@ function client(baseUrl) {
     get:    (p, o) => call('GET', p, o),
     post:   (p, o) => call('POST', p, o),
     patch:  (p, o) => call('PATCH', p, o),
+    put:    (p, o) => call('PUT', p, o),
     delete: (p, o) => call('DELETE', p, o),
   };
 }

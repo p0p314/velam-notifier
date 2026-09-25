@@ -73,7 +73,7 @@ describe("Alerts — bandeau notifications", () => {
     await screen.findByText(/Notifications bloquées/);
   });
 
-  test("permission accordée : pas de bandeau", async () => {
+  test("permission accordée : pas de bouton Activer (bouton Tester à la place)", async () => {
     setupNotification("granted");
     wrap(<Alerts />);
     await waitFor(() => expect(fetch).toHaveBeenCalled());

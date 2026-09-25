@@ -43,6 +43,22 @@ router.post('/cron/sync-rental-apps', requireCronSecret, async (req, res) => {
   }
 });
 
+/**
+ * POST /cron/refresh-stations
+ * Déclenché quotidiennement par GitHub Actions : recharge le référentiel des
+ * stations (nouvelles stations, déplacements, suppressions). Protégé par CRON_SECRET.
+ */
+router.post('/cron/refresh-stations', requireCronSecret, async (req, res) => {
+  try {
+    const { refreshStationCatalog } = require('./stations');
+    const { count, removed } = await refreshStationCatalog();
+    res.json({ ok: true, count, removed });
+  } catch (err) {
+    console.error('[POST /cron/refresh-stations]', err.message);
+    res.status(502).json({ ok: false, error: 'Échec du rechargement des stations' });
+  }
+});
+
 /** GET /api/rental-apps — lecture publique des deep links/stores synchronisés. */
 router.get('/api/rental-apps', async (req, res) => {
   try {

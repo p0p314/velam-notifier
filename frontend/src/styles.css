@@ -486,6 +486,22 @@ select option { background: var(--surface); color: var(--text); }
 .alert-card.off { opacity: .6; }
 .push-banner { display: flex; align-items: center; gap: 10px; padding: 12px 14px; background: var(--inset); border: 1px solid var(--border); border-radius: var(--r-md); font-size: 13px; color: var(--text-2); }
 .push-banner > span { flex: 1; }
+.push-banner-btn.ghost { background: var(--surface); color: var(--accent); border: 1px solid var(--border-strong); }
+.pause-banner { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 12px 14px; background: var(--inset); border: 1px solid var(--border); border-radius: var(--r-md); font-size: 13px; color: var(--text-2); }
+.pause-banner > span { flex: 1; }
+.pause-banner .ic { color: var(--warn); }
+.pause-form { display: flex; align-items: center; gap: 8px; flex: 1; font-size: 13px; }
+.pause-form .field { height: 36px; }
+.pause-cancel { background: none; border: none; color: var(--text-3); cursor: pointer; padding: 4px; }
+.pause-link { align-self: flex-start; display: inline-flex; align-items: center; gap: 6px; background: none; border: none; padding: 2px 0; color: var(--text-3); font-size: 13px; cursor: pointer; }
+.pause-link:hover { color: var(--text-2); }
+.trip-box { display: flex; flex-direction: column; gap: 10px; padding: 12px; border: 1px dashed var(--border-strong); border-radius: var(--r-sm); }
+.check-row { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-2); cursor: pointer; }
+.check-row input { width: 18px; height: 18px; accent-color: var(--accent); }
+.form-hint { font-size: 12px; color: var(--text-3); }
+.form-error { color: var(--danger); font-size: 13px; width: 100%; }
+.alert-once { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-2); font-family: var(--font-mono); }
+.detail-cta.secondary { background: var(--surface); color: var(--accent); border: 1px solid var(--border-strong); margin-top: 8px; }
 .push-banner-btn { min-height: 36px; padding: 0 14px; background: var(--accent); border: none; border-radius: var(--r-sm); color: var(--on-accent); font-size: 13px; font-weight: 600; cursor: pointer; }
 .alert-card-head { display: flex; align-items: center; gap: 12px; }
 .alert-card-name { font-size: 14px; font-weight: 600; color: var(--text); }
@@ -685,3 +701,44 @@ select option { background: var(--surface); color: var(--text); }
 @media (min-width: 1280px) {
   .station-list, .favoris-grid { grid-template-columns: repeat(3, 1fr); }
 }
+.detail-cta.secondary:hover { background: var(--inset); }
+
+/* Favoris : tri + mode « Organiser » */
+.organize-toggle { margin-left: auto; background: none; border: none; color: var(--accent); font-size: 14px; font-weight: 600; cursor: pointer; padding: 4px 0; }
+.fav-sort { margin: 12px 0; max-width: 320px; }
+.organize-list { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
+.organize-item { display: flex; align-items: center; gap: 8px; padding: 10px 12px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-md); }
+.organize-fields { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.organize-fields .field { width: 100%; }
+.organize-sub { font-size: 12px; color: var(--text-3); padding-left: 2px; }
+.organize-item .icon-btn:disabled { opacity: .3; cursor: default; }
+
+/* Données de borne périmées / vélos indisponibles */
+.station-item-sub { font-size: 12px; color: var(--text-3); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.stale-note { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--warn); margin-top: 4px; }
+.detail-stale { display: flex; margin: 10px 0 4px; }
+.sc-notes { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 12px; color: var(--text-3); margin-top: 8px; }
+.sc-notes .stale-note { margin-top: 0; }
+
+/* Carte : « Autour de moi » */
+.map-around { position: absolute; right: 28px; bottom: 28px; z-index: 5; display: flex; flex-direction: column; align-items: flex-end; gap: 8px; max-width: calc(100% - 56px); }
+.map-around-btn { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; padding: 0 16px; border: none; border-radius: var(--r-pill); background: var(--accent); color: var(--on-accent); font-size: 14px; font-weight: 600; box-shadow: var(--shadow-fab); cursor: pointer; }
+.map-around-btn:disabled { opacity: .7; cursor: default; }
+.map-around-panel { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-md); padding: 10px 12px; box-shadow: var(--shadow-pop); font-size: 13px; color: var(--text-2); min-width: 220px; }
+.map-around-panel ol { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; }
+.map-around-name { display: block; font-weight: 600; color: var(--text); }
+.map-around-meta { font-family: var(--font-mono); font-size: 12px; color: var(--text-3); }
+.map-user-dot { width: 16px; height: 16px; border-radius: 50%; background: var(--accent); border: 3px solid var(--surface); box-shadow: var(--focus-ring); }
+
+/* Accueil (premier lancement) */
+.onboarding { display: flex; flex-direction: column; gap: 14px; }
+.onboarding-head { display: flex; align-items: center; justify-content: space-between; }
+.onboarding-count { font-family: var(--font-mono); font-size: 12px; color: var(--text-3); }
+.onboarding-text { margin: 0; font-size: 14px; line-height: 1.5; color: var(--text-2); }
+.onboarding-ok { display: inline-flex; align-items: center; gap: 8px; color: var(--ok); font-weight: 600; font-size: 14px; }
+.onboarding-nav { display: flex; align-items: center; gap: 10px; margin-top: 6px; }
+.onboarding-nav .cancel-btn { width: auto; margin-left: auto; padding: 0 16px; }
+.onboarding-next { min-height: 44px; padding: 0 20px; border: none; border-radius: var(--r-sm); background: var(--accent); color: var(--on-accent); font-size: 14px; font-weight: 600; cursor: pointer; }
+.onboarding-dots { display: flex; gap: 6px; }
+.onboarding-dots span { width: 7px; height: 7px; border-radius: 50%; background: var(--border-strong); }
+.onboarding-dots span.on { background: var(--accent); }

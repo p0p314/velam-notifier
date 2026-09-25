@@ -7,7 +7,7 @@
 //   - /assets/* (fichiers Vite hashés, immuables) + icônes → cache d'abord.
 // Jamais l'API (/api, /open, /cron) : la fraîcheur des données est gérée par le front.
 // Incrémenter la version si un fichier non hashé (icônes, manifest, theme-init) change.
-const CACHE = "velopulse-shell-v1";
+const CACHE = "velopulse-shell-v2";
 const SHELL = "/index.html";
 const STATIC_RE = /^\/(assets\/|icon-|badge-|manifest\.json|velopulse-icon|theme-init\.js)/;
 

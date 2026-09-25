@@ -1,6 +1,7 @@
-name: Sync rental_apps (GBFS)
+name: Synchronisation quotidienne (GBFS)
 
-# Synchronisation quotidienne des deep links officiels Vélam (rental_apps).
+# Synchronisation quotidienne : deep links officiels Vélam (rental_apps) et
+# référentiel des stations.
 # Toute la planification vit ici — aucun cron côté serveur (Render/backend).
 on:
   schedule:
@@ -31,4 +32,17 @@ jobs:
 
           echo "HTTP $http_code"
           echo "Réponse :"
+          cat response.json
+
+      # Référentiel des stations (nouvelles stations, déplacements, suppressions).
+      - name: Rechargement du référentiel des stations
+        env:
+          BACKEND_URL: ${{ secrets.BACKEND_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          set -euo pipefail
+          curl -sS -f -o response.json \
+            -X POST "${BACKEND_URL%/}/cron/refresh-stations" \
+            -H "Authorization: Bearer ${CRON_SECRET}" \
+            -H "Content-Type: application/json"
           cat response.json

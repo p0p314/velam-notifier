@@ -108,9 +108,12 @@ Modules CommonJS, séparation nette des responsabilités :
   session glissante via `GET /api/auth/me` qui renvoie un jeton neuf au démarrage du client). Secret résolu une
   fois au boot (`JWT_SECRET` env, sinon aléatoire persisté). `requireAuth` lit
   `Authorization: Bearer`, pose `req.user`, sinon 401.
-- **push.js** — clés VAPID (env ou générées), envoi `web-push`, et la **boucle d'alerte**
-  (`startPolling` → cycle non concurrent toutes les 30 s). Voir l'invariant d'alerte plus bas.
-  Construit l'URL de notification via la page `/redirect` (deep link + stores).
+- **push.js** — clés VAPID (env ou générées), envoi `web-push` (`sendToUser` → `{ total, sent }`),
+  et la **boucle d'alerte** (`startPolling` → cycle non concurrent toutes les 30 s) :
+  `evaluateAlert` (pure), messages (`buildMessage`), stations de repli (`findFallback`).
+  Voir l'invariant d'alerte plus bas. Les notifications ouvrent `/open` (deep link + stores).
+- **time.js** — heure « métier » dans `ALERT_TZ` (`nowInTz`, `inWindow`, `addDays`).
+- **geo.js** — `distanceKm` / `fmtDistance` côté serveur (stations de repli).
 - **rentalApps.js** — synchronise les `rental_apps` (deep links officiels Vélam) depuis
   `system_information`. Données quasi statiques → **sync quotidienne**, jamais par requête.
 - **app.js** — construit l'app Express sans la démarrer (importable par les tests) :
@@ -130,36 +133,53 @@ seulement pour le référentiel lent des stations.
 - `GET /api/stations` — auto-peuple la base au premier appel si vide, puis fusionne l'info en
   cache avec un fetch statut live. Le détail par type vient de `vehicle_types_available`
   (`mechanical` / `electrical`).
-- `POST /api/stations/refresh` — force le rechargement du référentiel statique (**protégée**).
+- `POST /api/stations/refresh` (**protégée**) et `POST /cron/refresh-stations` (cron quotidien) —
+  rechargent le référentiel (`replaceStations` : upsert + retrait des stations disparues, sauf
+  si le flux renvoie moins de la moitié des stations connues).
+- Chaque station porte `report_age_min` (minutes depuis le dernier signal de la borne,
+  calculé au fetch) : l'UI affiche « Dernière info il y a… » au-delà de 60 min.
 - `GET /api/health` — nb de stations, uptime, version Node. `GET /health` — sonde anti-veille.
 
 Erreurs upstream/proxy → **HTTP 502** `{ ok:false, error }`. Toutes les réponses portent une
 enveloppe `ok` ; le client `api()` lève sur `!res.ok || data.ok === false`. Routes protégées
-(`/api/favorites`, `/api/alerts`, `/api/push/subscribe|unsubscribe`, `/api/auth/me`,
+(`/api/favorites` (+ `PATCH /:id` label, `PUT /order`), `/api/alerts` (+ `PUT /pause`),
+`/api/push/subscribe|unsubscribe|test`, `/api/auth/me`,
 `POST /api/stations/refresh`) : Bearer requis. Publiques : login/register,
 `GET /api/stations`, `GET /api/rental-apps`, `GET /api/push/vapid-public-key`.
+Cron (`CRON_SECRET`) : `/cron/sync-rental-apps`, `/cron/refresh-stations` (workflow
+`sync-rental-apps.yml`, 02:00 UTC).
 
 ### Invariant de la boucle d'alerte
 
 `startPolling` exécute un cycle toutes les 30 s, protégé par un verrou (`isRunning`) pour ne
 pas se chevaucher, et **ne fait rien** tant qu'aucune alerte n'est `active=1`
-(`countActiveAlerts`). Il ne fetch GBFS que si au moins une alerte active a sa **fenêtre
-horaire** (`time_start`–`time_end`) et son **jour** (`days`, 1=lundi…7=dimanche) qui couvrent
-l'instant courant. L'heure est évaluée dans **`ALERT_TZ`** (Europe/Paris), pas en UTC serveur.
+(`countActiveAlerts`). Chaque cycle supprime les alertes ponctuelles des jours passés, puis
+ne fetch GBFS que si au moins une alerte est **due** : fenêtre horaire (`time_start`–`time_end`)
+et jour (`days`, 1=lundi…7=dimanche) — ou, pour une ponctuelle, `valid_on` = aujourd'hui —
+compte **non en pause** (`users.alerts_paused_until` < aujourd'hui). Heure évaluée dans
+**`ALERT_TZ`** (Europe/Paris), pas en UTC serveur.
 
-Sémantique du seuil : l'alerte se déclenche sur **basse disponibilité** —
-`count <= min_count` (par type : `mechanical`, `ebike`→GBFS `electrical`, `any`→total).
-Anti-spam par jour : notifie une fois quand le seuil est atteint (`last_notified_date`), re-notifie
-uniquement si le compte **change** (`last_notified_count`), et se réarme quand le compte
-repasse strictement au-dessus du seuil. Envoi à **toutes** les subscriptions de l'utilisateur ;
-les réponses 404/410 suppriment la subscription morte.
+Modèle d'alerte (`routes/alerts.js` → `validateAlertPayload`, PATCH = fusion puis revalidation) :
+
+- `target` : `bikes` (filtré par `bike_type`) ou `docks` (places libres) ;
+- `comparison` + `threshold` : `at_most` N (« il en reste peu », 0 permis) ou `at_least` N
+  (« il y en a de nouveau ») ;
+- trajet : `arrival_station_*` + `arrival_threshold` (uniquement `bikes`/`at_most`) ⇒
+  déclenche si peu de vélos au départ **ou** peu de places à l'arrivée ;
+- `valid_on` (YYYY-MM-DD) : alerte ponctuelle.
+
+Station fermée : `is_renting=false` ⇒ 0 vélo, `is_returning=false` ⇒ 0 place.
+Anti-spam par jour, générique : `evaluateAlert` renvoie `{ triggered, key }` (clé = compte, ou
+`départ|arrivée` pour un trajet). Notifie à la première atteinte du jour (`last_notified_date`),
+re-notifie si la **clé change** (`last_notified_key`), se réarme (clé → NULL) quand la condition
+se lève. **Toute modification** d'une alerte remet ces deux champs à NULL. Une alerte « au plus N »
+déclenchée ajoute la **station de repli** la plus proche (≤ 1 km) qui ne pose pas le même
+problème. Envoi à **toutes** les subscriptions de l'utilisateur ; 404/410 suppriment la
+subscription morte. `POST /api/push/test` : notification de test (5 / 10 min / compte).
 
 Subscriptions : **une ligne par appareil** (`endpoint` unique). Un `subscribe` d'un appareil
 déjà connu le **réattribue** au compte courant (téléphone partagé) ; la déconnexion appelle
 `POST /api/push/unsubscribe` pour détacher l'appareil du compte.
-
-> ⚠️ Dette de nommage : `min_count` désigne en réalité un **plafond** (« notifier si au plus N
-> vélos »). Le nom est trompeur — à considérer lors d'une refonte.
 
 ### rental_apps & redirection push
 
@@ -194,8 +214,12 @@ différenciée : mobile → `/favoris`, desktop → `/stations`.
 - **auth.jsx** — `AuthContext` / `useAuth` (login/register/logout async, `isAuthenticated`).
   Au démarrage : `/api/auth/me` (ignoré si la session a changé entre-temps) puis `syncPush()`.
 - **useTheme.jsx** — thème clair/sombre via `data-theme` sur `<html>`, persisté.
-- **hooks.js** — `useStations` (poll 60 s), `useFavorites` (liste + toggle optimiste),
+- **hooks.js** — `useStations` (poll 60 s), `useFavorites` (liste, toggle, `rename`, `reorder`
+  optimiste ; modifications **mises en file**, seule la réponse de la dernière est appliquée),
   `useOnline`, `useGeolocation`, `useIsMobile`, helpers `distanceKm` / `fmtDistance`.
+- **lib/** — logique pure testable : `alerts.js` (formulaire ↔ API, résumés), `favorites.js`
+  (tri, déplacement, nom personnalisé), `station.js` (statut, `staleNote`, `disabledNote`),
+  `mapConfig.js` (couleurs, `nearestWithBikes`), `onboarding.js` (étapes utiles), `offlineCache.js`.
 - **Hors ligne** — `lib/offlineCache.js` garde en `localStorage` la dernière liste des stations
   et des favoris (horodatée ; favoris purgés à la déconnexion). Les hooks exposent `stale` +
   `lastUpd` ; `components/Offline.jsx` fournit `OfflineBanner` (« Hors ligne — données de HH:MM »)
@@ -206,9 +230,14 @@ différenciée : mobile → `/favoris`, desktop → `/stations`.
   **silencieux** : ne fait rien sans permission accordée, resouscrit si la clé VAPID a changé.
   `enablePush()` demande la permission, **uniquement sur clic** (bandeau de la page Alertes). Le SW gère `push` + `notificationclick`.
 - **usePwaInstallPrompt.js** + **components/PwaInstall*** — modal d'installation **réservée au
-  mobile** (jamais desktop), réapparaît le lendemain si ignorée.
-- **pages/** — `Login`, `Stations` (recherche/tri/filtre + détail), `Favorites` (swipe-to-delete),
-  `MapPage` (carte + filtres), `Alerts` (CRUD depuis les favoris), `Redirect` (cible push).
+  mobile** (jamais desktop), réapparaît le lendemain si ignorée ; pas d'ouverture auto tant que
+  l'accueil est en attente.
+- **components/Onboarding.jsx** — accueil au premier lancement (installer / notifications /
+  favoris), uniquement les étapes encore utiles ; rien n'est monté une fois terminé.
+- **pages/** — `Login`, `Stations` (recherche/tri/filtre + détail), `Favorites` (swipe-to-delete,
+  tri proximité / ordre choisi, mode « Organiser »), `MapPage` (carte + filtres + « Autour de moi »),
+  `Alerts` (formulaire complet, pause, notification de test ; pré-rempli via
+  `location.state.alertStation` depuis la fiche station), `Redirect` (cible push).
 - **components/** — `StationCard` (desktop), `StationListItem` (mobile), `StationDetailSheet`,
   `BottomSheet`, `BottomNav` / `Navbar`, `Icon` (SVG inline style Lucide), `Logo`, `Offline`,
   `map/StationMap` (markers diffés, pas de recréation), `map/MapFilters`.
@@ -219,14 +248,17 @@ différenciée : mobile → `/favoris`, desktop → `/stations`.
 ### Seam de nommage des types de vélo
 
 L'UI et la DB utilisent **`ebike`** (électrique) ; GBFS l'appelle **`electrical`**. Le mapping
-se fait dans `push.js` (`countForType`) et `server.js` (`extractCount`). Bien conserver ce seam.
+se fait dans `push.js` (`countForType`) et `routes/stations.js` (`extractCount`). Bien conserver ce seam.
 
 ## Base de données (schéma)
 
 Tables (créées/migrées par `database/migrations.js`, dialecte selon `DATABASE_URL`) :
 `stations` (référentiel statique), `config` (clé/valeur : secret JWT, clés VAPID),
-`users`, `favorites` (unique `user_id+station_id`), `push_subscriptions` (unique `endpoint`), `alerts`
-(fenêtre horaire + `days` + suivi de notification), `rental_apps` (deep links par plateforme).
+`users` (+ `alerts_paused_until`), `favorites` (unique `user_id+station_id`, `label`, `sort_order`
+— NULL tant que l'utilisateur n'a jamais ordonné : ordre alphabétique), `push_subscriptions`
+(unique `endpoint`), `alerts` (cf. modèle ci-dessus ; `threshold` a remplacé `min_count`,
+`last_notified_key` a remplacé `last_notified_count`), `rental_apps` (deep links par plateforme).
+Helpers de migration portables : `columnsOf` / `addColumn` / `dropColumn` (`migrations.js`).
 
 ## Conventions & bonnes pratiques
 

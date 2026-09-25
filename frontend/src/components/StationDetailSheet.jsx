@@ -1,7 +1,8 @@
+import { useNavigate } from "react-router-dom";
 import BottomSheet from "./BottomSheet";
 import Icon from "./Icon";
 import { fmtTime } from "../theme";
-import { stationStatus } from "../lib/station";
+import { stationStatus, staleNote } from "../lib/station";
 
 function Row({ icon, kind, label, value }) {
   return (
@@ -13,6 +14,7 @@ function Row({ icon, kind, label, value }) {
 }
 
 export default function StationDetailSheet({ station, open, onClose, isFav, onToggleFav }) {
+  const navigate = useNavigate();
   const s = station;
   if (!s) return <BottomSheet open={open} onClose={onClose} heightVh={70} />;
 
@@ -26,10 +28,14 @@ export default function StationDetailSheet({ station, open, onClose, isFav, onTo
       {s.address?.trim() && <div className="detail-addr">{s.address.trim()}</div>}
 
       <span className={"detail-badge " + st.cls}><span className="dot" />{st.labelLong}</span>
+      {staleNote(s) && <div className="stale-note detail-stale"><Icon name="clock" size={14} /> {staleNote(s)} : disponibilités peut-être inexactes</div>}
 
       <Row icon="bolt" kind="elec" label="Vélos électriques" value={offline ? "—" : (s.electrical ?? 0)} />
       <Row icon="bike" kind="meca" label="Vélos mécaniques" value={offline ? "—" : (s.mechanical ?? 0)} />
       <Row icon="parking" kind="places" label="Places libres" value={offline ? "—" : (s.docks_available ?? 0)} />
+      {!offline && (s.bikes_disabled ?? 0) > 0 && (
+        <Row icon="x" kind="disabled" label="Vélos indisponibles" value={s.bikes_disabled} />
+      )}
 
       <div className="detail-meta">
         <span>Capacité {s.capacity ?? 0}</span>
@@ -39,6 +45,12 @@ export default function StationDetailSheet({ station, open, onClose, isFav, onTo
       <button className={"detail-cta" + (isFav ? " on" : "")} onClick={() => onToggleFav(s)}>
         <Icon name="star" size={18} style={isFav ? { fill: "currentColor" } : null} />
         {isFav ? "Retirer des favoris" : "Ajouter aux favoris"}
+      </button>
+      {/* Création d'alerte en un clic : formulaire pré-rempli sur cette station. */}
+      <button className="detail-cta secondary"
+        onClick={() => navigate("/alertes", { state: { alertStation: { station_id: s.station_id, name: s.name } } })}>
+        <Icon name="bell-plus" size={18} />
+        Créer une alerte
       </button>
     </BottomSheet>
   );

@@ -131,3 +131,37 @@ describe("distances", () => {
     expect(fmtDistance(Infinity)).toBeNull();
   });
 });
+
+describe("useFavorites — modifications concurrentes", () => {
+  test("renommer puis déplacer vite : l'état final est celui de la dernière action", async () => {
+    const A = { station_id: "1", station_name: "Gare", label: null };
+    const B = { station_id: "2", station_name: "Zoo", label: null };
+    fetch.mockResolvedValueOnce(jsonResponse({ ok: true, favorites: [A, B] }));
+    const { result } = renderHook(() => useFavorites());
+    await waitFor(() => expect(result.current.favorites).toHaveLength(2));
+
+    // Le PATCH répond lentement (ancien ordre), le PUT répond vite (nouvel ordre).
+    let releasePatch;
+    const order = [];
+    fetch.mockImplementation((url, init) => {
+      order.push(init.method);
+      if (init.method === "PATCH") {
+        return new Promise((r) => { releasePatch = () => r(jsonResponse({ ok: true, favorites: [{ ...A, label: "Maison" }, B] })); });
+      }
+      return Promise.resolve(jsonResponse({ ok: true, favorites: [B, { ...A, label: "Maison" }] }));
+    });
+
+    let p1, p2;
+    act(() => {
+      p1 = result.current.rename("1", "Maison");
+      p2 = result.current.reorder(["2", "1"]);
+    });
+    // Ordre optimiste affiché immédiatement
+    expect(result.current.favorites.map((f) => f.station_id)).toEqual(["2", "1"]);
+    await waitFor(() => expect(releasePatch).toBeTypeOf("function"));
+    expect(order).toEqual(["PATCH"]); // le PUT attend la fin du PATCH (file)
+    await act(async () => { releasePatch(); await p1; await p2; });
+    expect(order).toEqual(["PATCH", "PUT"]);
+    expect(result.current.favorites.map((f) => [f.station_id, f.label])).toEqual([["2", null], ["1", "Maison"]]);
+  });
+});

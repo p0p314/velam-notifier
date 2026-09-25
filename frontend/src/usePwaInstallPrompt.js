@@ -1,8 +1,14 @@
 import { useState } from "react";
 import { isMobileDevice } from "./hooks";
+import { isOnboardingDone } from "./lib/onboarding";
 
 const KEY = "pwa-modal-dismissed";
 const todayStr = () => new Date().toISOString().slice(0, 10);
+
+/** Considère la modale comme ignorée aujourd'hui (réapparaît demain). */
+export function markPwaDismissedToday() {
+  try { localStorage.setItem(KEY, todayStr()); } catch { /* facultatif */ }
+}
 
 /**
  * Pilote l'affichage du modal d'installation PWA.
@@ -21,7 +27,8 @@ export function usePwaInstallPrompt() {
 
   const dismissedToday = localStorage.getItem(KEY) === todayStr();
 
-  const [isOpen, setIsOpen] = useState(isMobile && !isInstalled && !dismissedToday);
+  // Pas d'ouverture automatique tant que l'accueil (qui inclut l'installation) est en attente.
+  const [isOpen, setIsOpen] = useState(isMobile && !isInstalled && !dismissedToday && isOnboardingDone());
 
   const dismiss = () => {
     localStorage.setItem(KEY, todayStr());

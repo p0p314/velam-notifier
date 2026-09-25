@@ -150,3 +150,50 @@ describe('sécurité HTTP', () => {
     assert.equal(res.status, 413);
   });
 });
+
+describe('référentiel et fraîcheur des données (v1.1)', () => {
+  test('report_age_min : minutes depuis le dernier signal de la borne', async () => {
+    const now = Math.floor(Date.now() / 1000);
+    gbfs.info = [info('1', 'Gare'), info('2', 'Zoo'), info('3', 'Cirque')];
+    gbfs.status = [
+      { station_id: '1', last_reported: now - 30 },
+      { station_id: '2', last_reported: now - 2 * 3600 },
+      { station_id: '3' },
+    ];
+    const { body } = await api.get('/api/stations');
+    const age = Object.fromEntries(body.stations.map((s) => [s.station_id, s.report_age_min]));
+    assert.deepEqual(age, { 1: 0, 2: 120, 3: null });
+  });
+
+  test('cron refresh-stations : ajoute, met à jour et retire les stations disparues', async () => {
+    process.env.CRON_SECRET = 'cron-secret';
+    const auth = { headers: { Authorization: 'Bearer cron-secret' } };
+    gbfs.info = [info('1', 'Gare'), info('2', 'Zoo'), info('3', 'Cirque')];
+    await api.post('/cron/refresh-stations', auth);
+
+    gbfs.info = [info('1', 'Gare SNCF'), info('2', 'Zoo'), info('4', 'Nouvelle')];
+    const res = await api.post('/cron/refresh-stations', auth);
+    assert.equal(res.status, 200);
+    assert.deepEqual({ count: res.body.count, removed: res.body.removed }, { count: 3, removed: 1 });
+    const { rows } = await dbc.query('SELECT station_id, name FROM stations ORDER BY station_id');
+    assert.deepEqual(rows.map((r) => [r.station_id, r.name]), [['1', 'Gare SNCF'], ['2', 'Zoo'], ['4', 'Nouvelle']]);
+  });
+
+  test('flux partiel (moins de la moitié) : aucune suppression', async () => {
+    process.env.CRON_SECRET = 'cron-secret';
+    const auth = { headers: { Authorization: 'Bearer cron-secret' } };
+    gbfs.info = [info('1', 'A'), info('2', 'B'), info('3', 'C'), info('4', 'D')];
+    await api.post('/cron/refresh-stations', auth);
+    gbfs.info = [info('1', 'A')];
+    const res = await api.post('/cron/refresh-stations', auth);
+    assert.equal(res.body.removed, 0);
+    assert.equal(Number((await dbc.get('SELECT COUNT(*) AS n FROM stations')).n), 4);
+  });
+
+  test('cron refresh-stations : protégé, 502 si GBFS en panne', async () => {
+    process.env.CRON_SECRET = 'cron-secret';
+    assert.equal((await api.post('/cron/refresh-stations')).status, 401);
+    gbfs.fail = true;
+    assert.equal((await api.post('/cron/refresh-stations', { headers: { Authorization: 'Bearer cron-secret' } })).status, 502);
+  });
+});

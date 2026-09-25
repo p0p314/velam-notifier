@@ -4,6 +4,7 @@ import StationDetailSheet from "../components/StationDetailSheet";
 import Icon from "../components/Icon";
 import { OfflineBanner } from "../components/Offline";
 import { useStations, useFavorites, useGeolocation, distanceKm } from "../hooks";
+import { SORTS, loadSortPref, saveSortPref, moveItem, displayStation, sortFavorites } from "../lib/favorites";
 
 const REVEAL = 84;
 
@@ -67,20 +68,50 @@ function FavoriteItem({ s, onOpen, onDelete, dist }) {
   );
 }
 
+/** Ligne du mode « Organiser » : renommer + monter / descendre. */
+function OrganizeItem({ fav, index, count, onMove, onRename }) {
+  const [label, setLabel] = useState(fav.label ?? "");
+  const commit = () => { if ((fav.label ?? "") !== label.trim()) onRename(fav.station_id, label.trim()); };
+  return (
+    <div className="organize-item">
+      <div className="organize-fields">
+        <input className="field" value={label} maxLength={40} placeholder={fav.station_name}
+          aria-label={`Nom personnalisé pour ${fav.station_name}`}
+          onChange={(e) => setLabel(e.target.value)} onBlur={commit}
+          onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); }} />
+        {label.trim() && <span className="organize-sub">{fav.station_name}</span>}
+      </div>
+      <button type="button" className="icon-btn" aria-label={`Monter ${fav.station_name}`}
+        disabled={index === 0} onClick={() => onMove(index, -1)}><Icon name="arrow-up" size={18} /></button>
+      <button type="button" className="icon-btn" aria-label={`Descendre ${fav.station_name}`}
+        disabled={index === count - 1} onClick={() => onMove(index, 1)}><Icon name="arrow-down" size={18} /></button>
+    </div>
+  );
+}
+
 export default function Favorites() {
   const { stations, loading, stale, lastUpd } = useStations();
-  const { favorites, favIds, toggleFav, loading: favLoading, stale: favStale } = useFavorites();
+  const { favorites, favIds, toggleFav, rename, reorder, loading: favLoading, stale: favStale } = useFavorites();
   const { coords } = useGeolocation();
   const [selId, setSelId] = useState(null);
+  const [sort, setSort] = useState(loadSortPref);
+  const [organizing, setOrganizing] = useState(false);
+  const changeSort = (v) => { setSort(v); saveSortPref(v); };
 
-  // Tri par proximité si la position est autorisée, sinon ordre alphabétique.
-  const favStations = favorites
-    .map((f) => stations.find((s) => s.station_id === f.station_id) ?? {
-      station_id: f.station_id, name: f.station_name, electrical: 0, mechanical: 0, capacity: 0, docks_available: 0,
-    })
-    .sort((a, b) =>
-      coords ? distanceKm(coords, a) - distanceKm(coords, b) : a.name.localeCompare(b.name, "fr")
-    );
+  // Données live de chaque favori (repli sur le nom enregistré si la station manque),
+  // nom personnalisé en titre, puis tri : proximité (si position) ou ordre choisi.
+  const favStations = sortFavorites(
+    favorites.map((f) => displayStation(
+      stations.find((s) => s.station_id === f.station_id) ?? {
+        station_id: f.station_id, name: f.station_name, electrical: 0, mechanical: 0, capacity: 0, docks_available: 0,
+      },
+      f,
+    )),
+    sort,
+    coords,
+  );
+
+  const move = (index, delta) => reorder(moveItem(favorites, index, delta).map((f) => f.station_id));
 
   const selected = stations.find((s) => s.station_id === selId) ?? null;
 
@@ -89,7 +120,21 @@ export default function Favorites() {
       <div className="page-head">
         <h2 className="page-title">Mes favoris</h2>
         {favStations.length > 0 && <span className="page-count">{favStations.length} station{favStations.length !== 1 ? "s" : ""}</span>}
+        {favorites.length > 1 && (
+          <button type="button" className="organize-toggle" onClick={() => setOrganizing((o) => !o)}>
+            {organizing ? "Terminé" : "Organiser"}
+          </button>
+        )}
       </div>
+
+      {favorites.length > 1 && !organizing && (
+        <div className="seg fav-sort" role="group" aria-label="Trier les favoris">
+          <button type="button" aria-pressed={sort === SORTS.distance} className={sort === SORTS.distance ? "active" : ""}
+            onClick={() => changeSort(SORTS.distance)}>Proximité</button>
+          <button type="button" aria-pressed={sort === SORTS.custom} className={sort === SORTS.custom ? "active" : ""}
+            onClick={() => changeSort(SORTS.custom)}>Mon ordre</button>
+        </div>
+      )}
 
       <OfflineBanner stale={stale || favStale} lastUpd={lastUpd} />
 
@@ -100,6 +145,12 @@ export default function Favorites() {
           <Icon name="star" size={40} />
           <div className="empty-title">Ajoutez des stations en favoris</div>
           <div className="empty-sub">Depuis l'onglet Stations, ouvrez une station puis « Ajouter aux favoris ».</div>
+        </div>
+      ) : organizing ? (
+        <div className="organize-list">
+          {favorites.map((f, i) => (
+            <OrganizeItem key={f.station_id} fav={f} index={i} count={favorites.length} onMove={move} onRename={rename} />
+          ))}
         </div>
       ) : (
         <div className="favoris-grid">

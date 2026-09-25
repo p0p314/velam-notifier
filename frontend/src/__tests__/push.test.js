@@ -97,6 +97,17 @@ describe("syncPush (silencieux)", () => {
 });
 
 describe("enablePush (sur clic)", () => {
+  test("service worker jamais prêt : abandon après délai, sans blocage", async () => {
+    vi.useFakeTimers();
+    Object.defineProperty(navigator, "serviceWorker", { configurable: true, value: { ready: new Promise(() => {}) } });
+    permission = "default";
+    requestPermission.mockImplementation(async () => { permission = "granted"; return "granted"; });
+    const p = enablePush();
+    await vi.advanceTimersByTimeAsync(10_000);
+    await expect(p).resolves.toBe("granted");
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
   test("demande la permission puis synchronise", async () => {
     permission = "default";
     requestPermission.mockImplementation(async () => { permission = "granted"; return "granted"; });

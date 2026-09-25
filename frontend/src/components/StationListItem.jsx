@@ -1,6 +1,6 @@
 import Icon from "./Icon";
 import { fmtDistance } from "../hooks";
-import { stationStatus, bikeCounts, LOW_BIKES } from "../lib/station";
+import { stationStatus, bikeCounts, LOW_BIKES, staleNote } from "../lib/station";
 
 export default function StationListItem({ s, onClick, dist }) {
   const offline = s.is_renting === false;
@@ -21,7 +21,9 @@ export default function StationListItem({ s, onClick, dist }) {
     <div className={"station-item" + (offline ? " offline" : "")} role="button" tabIndex={0} onClick={onClick} onKeyDown={onKey}>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div className="station-item-name">{s.name}</div>
+        {s.subtitle && <div className="station-item-sub">{s.subtitle}</div>}
         {s.address?.trim() && <div className="station-item-addr">{s.address.trim()}</div>}
+        {staleNote(s) && <div className="stale-note"><Icon name="clock" size={13} /> {staleNote(s)}</div>}
         {distLabel && <div className="station-item-dist"><Icon name="map-pin" size={13} /> {distLabel}</div>}
 
         {/* Compteurs mobile */}

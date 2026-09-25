@@ -3,10 +3,10 @@ import BottomSheet from "./BottomSheet";
 import Icon from "./Icon";
 import Logo from "./Logo";
 
-const isIOS     = /iphone|ipad|ipod/i.test(navigator.userAgent);
+export const isIOS     = /iphone|ipad|ipod/i.test(navigator.userAgent);
 const isAndroid = /android/i.test(navigator.userAgent);
 
-const STEPS = {
+export const STEPS = {
   ios: [
     "Appuyez sur l'icône Partager dans Safari",
     "Sélectionnez « Sur l'écran d'accueil »",
