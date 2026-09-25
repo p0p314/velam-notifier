@@ -20,7 +20,7 @@ cette convention (commentaires, libellés UI, messages d'erreur).
 
 ## Commandes
 
-Backend (racine) — Node **20.x** (fetch natif, pas de client HTTP tiers) :
+Backend (racine) — Node **22.x** (LTS) (fetch natif, pas de client HTTP tiers) :
 
 ```bash
 npm install
