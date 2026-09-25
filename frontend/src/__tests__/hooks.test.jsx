@@ -43,12 +43,23 @@ describe("useStations", () => {
   });
 
   test("retour au premier plan → rafraîchissement immédiat", async () => {
-    fetch.mockResolvedValue(jsonResponse({ ok: true, stations: STATIONS, stale: false, data_age_s: 0 }));
+    // Une Response neuve par appel (un corps ne se lit qu'une fois).
+    fetch.mockImplementation(async () => jsonResponse({ ok: true, stations: STATIONS, stale: false, data_age_s: 0 }));
     renderHook(() => useStations());
     await waitFor(() => expect(fetch).toHaveBeenCalledTimes(1));
     Object.defineProperty(document, "visibilityState", { configurable: true, get: () => "visible" });
     act(() => document.dispatchEvent(new Event("visibilitychange")));
     await waitFor(() => expect(fetch).toHaveBeenCalledTimes(2));
+    delete document.visibilityState; // rétablit la propriété d'origine de jsdom
+  });
+
+  test("réponse 200 sans liste de stations → échec géré, liste conservée", async () => {
+    saveCache("stations", STATIONS, 1000);
+    fetch.mockImplementation(async () => new Response("{}", { status: 200, headers: { "Content-Type": "application/json" } }));
+    const { result } = renderHook(() => useStations());
+    await waitFor(() => expect(result.current.stale).toBe(true));
+    expect(result.current.staleReason).toBe("server");
+    expect(result.current.stations).toEqual(STATIONS);
   });
 
   test("hors ligne avec cache : liste affichée, marquée périmée, heure du cache", async () => {

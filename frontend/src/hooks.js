@@ -105,6 +105,9 @@ export function useStations() {
   const reload = useCallback(async () => {
     try {
       const data = await api("/api/stations", { auth: false });
+      // Réponse illisible ou incomplète (proxy, corps tronqué…) : traitée comme un échec
+      // plutôt que d'écraser la liste affichée par `undefined`.
+      if (!Array.isArray(data?.stations)) throw new Error("Réponse du serveur invalide");
       // Âge fourni par le serveur : insensible à un décalage d'horloge de l'appareil.
       const at = Date.now() - (Number(data.data_age_s) || 0) * 1000;
       setStations(data.stations);
