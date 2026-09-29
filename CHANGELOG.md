@@ -9,6 +9,26 @@ Toutes les évolutions notables de VéloPulse. Format inspiré de
 section `## [x.y.z] - AAAA-MM-JJ` ci-dessous, puis merger sur `main` : le workflow
 `release.yml` crée le tag `vx.y.z` et la release GitHub à partir de cette section.
 
+## [1.4.0] - 2026-09-29
+
+### Paramètres
+- « Mon compte » devient **Paramètres**, en trois onglets : Préférences, Notifications, Sécurité.
+- **Préférences** (propres à l'appareil) : thème clair / sombre / **automatique** (suit le
+  réglage du téléphone), **type de vélo par défaut** (alertes, filtres Stations et Carte),
+  **page d'ouverture** de l'application.
+- **Notifications** : activer ou couper les notifications de cet appareil, notification de
+  test ; la page Alertes signale les notifications coupées et propose de les réactiver.
+- **Sécurité** : liste des **appareils connectés** (type, dernière activité) avec
+  déconnexion d'un appareil ou de tous les autres ; changer de mot de passe déconnecte les
+  autres appareils ; **export de toutes ses données** ; suppression du compte.
+- Bouton **Partager VéloPulse** (feuille de partage, sinon lien copié).
+
+### Corrections
+- Notification → app Vélam : on peut désormais **revenir dans VéloPulse** (la page
+  intermédiaire n'ouvre plus le site Vélam à la place de l'application, et son script
+  n'est plus bloqué).
+- Le bouton « Installer » n'apparaît plus quand l'application est déjà installée.
+
 ## [1.3.1] - 2026-09-29
 
 ### Amélioration
