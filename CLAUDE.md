@@ -226,10 +226,12 @@ par plateforme). Ils sont synchronisés **une fois par jour** par **GitHub Actio
 Les notifications pointent toujours vers une URL `https://` (`/open`, page HTML servie par
 `routes/rentalApps.js`) car le Service Worker iOS refuse les schemes custom (`velam://`).
 `/open` (publique, `noindex`) s'affiche **dans la fenêtre de VéloPulse** : elle ne doit jamais y
-charger un site externe (une PWA installée n'a ni barre d'adresse ni retour). Elle tente le deep
-link une fois, propose le store si l'app ne s'ouvre pas, ouvre le site Vélam en `target="_blank"`
-et garde « Retour à VéloPulse » ; si l'app Vélam s'est ouverte, revenir ramène à `/`. Script
-externe `/open.js` (la CSP `script-src 'self'` bloque l'inline), liens passés en `data-*` échappés.
+charger un site externe (une PWA installée n'a ni barre d'adresse ni retour). Le deep link et le
+store sont choisis **selon la plateforme de l'appareil** (lien iOS ≠ lien Android) et l'app ne
+s'ouvre que **sur appui** (une tentative automatique affiche « adresse non valide » sur iPhone si
+le lien ne s'ouvre pas) ; le site Vélam s'ouvre en `target="_blank"` ; « Retour à VéloPulse »
+toujours présent ; si l'app Vélam s'est ouverte, revenir ramène à `/`. Script externe `/open.js`
+(la CSP `script-src 'self'` bloque l'inline), liens passés en `data-*` échappés.
 
 ### Sécurité (backend)
 
