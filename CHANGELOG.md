@@ -9,6 +9,15 @@ Toutes les évolutions notables de VéloPulse. Format inspiré de
 section `## [x.y.z] - AAAA-MM-JJ` ci-dessous, puis merger sur `main` : le workflow
 `release.yml` crée le tag `vx.y.z` et la release GitHub à partir de cette section.
 
+## [1.4.1] - 2026-09-29
+
+### Corrections
+- Notification → app Vélam : l'app s'ouvre sur appui du bouton « Ouvrir l'app Vélam »
+  (l'ouverture automatique affichait « adresse non valide » sur iPhone) ; lien et store
+  choisis selon le téléphone (iPhone / Android).
+- Carte, « Autour de moi » : les 3 stations proposées suivent les filtres (type de vélo,
+  nombre minimum) même modifiés après coup, et les disponibilités à jour.
+
 ## [1.4.0] - 2026-09-29
 
 ### Paramètres

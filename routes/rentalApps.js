@@ -87,9 +87,12 @@ router.get('/open', async (req, res) => {
   let apps = {};
   try { apps = await getRentalAppsMap(); } catch (_) { /* dégrade vers web seul */ }
 
-  const deepLink     = apps.ios?.discovery_uri || apps.android?.discovery_uri || '';
-  const storeIos     = apps.ios?.store_uri     || '';
-  const storeAndroid = apps.android?.store_uri || '';
+  // Un lien par plateforme : celui d'iOS ne s'ouvre pas sur Android (et inversement) ;
+  // le script choisit selon l'appareil.
+  const deepIos      = apps.ios?.discovery_uri     || '';
+  const deepAndroid  = apps.android?.discovery_uri || '';
+  const storeIos     = apps.ios?.store_uri         || '';
+  const storeAndroid = apps.android?.store_uri     || '';
 
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
   res.setHeader('Cache-Control', 'no-store');
@@ -115,11 +118,12 @@ router.get('/open', async (req, res) => {
     [hidden]{display:none!important}
   </style>
 </head>
-<body data-deep="${attr(deepLink)}" data-store-ios="${attr(storeIos)}" data-store-android="${attr(storeAndroid)}">
+<body data-deep-ios="${attr(deepIos)}" data-deep-android="${attr(deepAndroid)}"
+      data-store-ios="${attr(storeIos)}" data-store-android="${attr(storeAndroid)}">
   <img src="/icon-192.png" alt="" width="64" height="64">
-  <p id="msg">${deepLink ? 'Ouverture de l\'application Vélam…' : 'Réservez votre vélo avec Vélam.'}</p>
+  <p id="msg">Réservez votre vélo avec Vélam.</p>
   <div class="actions">
-    ${deepLink ? `<a class="btn primary" id="open-app" href="${attr(deepLink)}">Ouvrir l'app Vélam</a>` : ''}
+    <a class="btn primary" id="open-app" href="#" hidden>Ouvrir l'app Vélam</a>
     <a class="btn" id="store" href="#" hidden target="_blank" rel="noopener">Installer l'app Vélam</a>
     <a class="btn" href="${attr(OFFICIAL_WEB)}" target="_blank" rel="noopener">Site Vélam (navigateur)</a>
     <a class="btn back" id="back" href="/">← Retour à VéloPulse</a>
@@ -130,40 +134,33 @@ router.get('/open', async (req, res) => {
 });
 
 /**
- * Script de /open : tente l'app Vélam une fois ; si elle s'ouvre (la page passe en
- * arrière-plan), revenir dans VéloPulse ramène à l'application et non plus sur
- * /open ; sinon, propose le store. Ne navigue jamais vers une page externe.
+ * Script de /open : choisit le lien de l'app Vélam et du store selon le système de
+ * l'appareil. L'app ne s'ouvre que sur appui (une tentative automatique affiche, sur
+ * iPhone, « adresse non valide » quand le lien ne peut pas être ouvert). Si l'app
+ * s'ouvre, revenir dans VéloPulse ramène à l'application. Jamais de page externe.
  */
 const OPEN_JS = `(function () {
-  var body = document.body;
-  var deep = body.dataset.deep;
-  var isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent) ||
-    (/Macintosh/.test(navigator.userAgent) && navigator.maxTouchPoints > 1);
-  var isAndroid = /android/i.test(navigator.userAgent);
-  var store = isIOS ? body.dataset.storeIos : isAndroid ? body.dataset.storeAndroid : "";
-  var msg = document.getElementById("msg");
+  var data = document.body.dataset;
+  var ua = navigator.userAgent;
+  var isIOS = /iphone|ipad|ipod/i.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
+  var isAndroid = /android/i.test(ua);
+  var deep = isIOS ? data.deepIos : isAndroid ? data.deepAndroid : "";
+  var store = isIOS ? data.storeIos : isAndroid ? data.storeAndroid : "";
+  var openLink = document.getElementById("open-app");
   var storeLink = document.getElementById("store");
   var left = false;
 
-  function showStore() {
-    if (store) { storeLink.href = store; storeLink.hidden = false; }
-  }
-  // Retour dans VéloPulse : remplace /open dans l'historique (pas de nouvel essai d'ouverture).
+  if (deep) { openLink.href = deep; openLink.hidden = false; }
+  if (store) { storeLink.href = store; storeLink.hidden = false; }
+
+  // Retour dans VéloPulse : remplace /open dans l'historique.
   function backToApp() { window.location.replace("/"); }
   document.getElementById("back").addEventListener("click", function (e) { e.preventDefault(); backToApp(); });
 
   document.addEventListener("visibilitychange", function () {
     if (document.hidden) { left = true; return; }
-    if (left) backToApp(); // l'app Vélam s'est ouverte, l'utilisateur revient
+    if (left) backToApp(); // l'app Vélam (ou le store) s'est ouverte, l'utilisateur revient
   });
-
-  if (!deep) { showStore(); return; }
-  window.location.href = deep;
-  setTimeout(function () {
-    if (left) return;
-    msg.textContent = "L'application Vélam ne s'est pas ouverte ? Installez-la ou utilisez le site.";
-    showStore();
-  }, 2500);
 })();
 `;
 

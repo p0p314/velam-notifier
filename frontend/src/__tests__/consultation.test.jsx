@@ -15,7 +15,10 @@ import { jsonResponse } from "./setup";
 // La carte Mapbox (WebGL) n'est pas testable en jsdom : on la remplace par un
 // composant qui expose la prop `focus` reçue.
 vi.mock("../components/map/StationMap", () => ({
-  default: ({ focus, theme }) => <div data-testid="map" data-theme={theme} data-focus={focus ? JSON.stringify(focus.coords) : ""} />,
+  default: ({ focus, theme }) => (
+    <div data-testid="map" data-theme={theme} data-focus={focus ? JSON.stringify(focus.coords) : ""}
+      data-near={focus ? focus.stations.map((st) => st.station_id).join(",") : ""} />
+  ),
 }));
 import MapPage from "../pages/MapPage";
 
@@ -95,6 +98,34 @@ describe("autour de moi", () => {
     expect([...panel.querySelectorAll(".map-around-name")].map((n) => n.textContent)).toEqual(["Proche", "Moyen", "Loin"]);
     expect(panel.textContent).toMatch(/222 m · 3 vélos/);
     expect(screen.getByTestId("map").dataset.focus).toBe(JSON.stringify(here));
+  });
+
+  test("les stations proposées suivent les filtres changés après coup (type, minimum)", async () => {
+    fetch.mockResolvedValue(jsonResponse({ ok: true, stations, stale: false, data_age_s: 0 }));
+    Object.defineProperty(navigator, "geolocation", {
+      configurable: true,
+      value: { getCurrentPosition: (ok) => ok({ coords: { latitude: here.lat, longitude: here.lon } }) },
+    });
+    render(<MemoryRouter><MapPage /></MemoryRouter>);
+    await waitFor(() => expect(fetch).toHaveBeenCalled());
+    await new Promise((r) => setTimeout(r, 0));
+    fireEvent.click(await screen.findByRole("button", { name: /Autour de moi/ }));
+    const names = () => [...screen.getByRole("status").querySelectorAll(".map-around-name")].map((n) => n.textContent);
+    await waitFor(() => expect(names()).toEqual(["Proche", "Moyen", "Loin"]));
+
+    // Filtre électrique : « Moyen » (0 élec.) disparaît, la carte est recadrée sur la nouvelle sélection.
+    fireEvent.click(screen.getByRole("button", { name: "Élec." }));
+    expect(names()).toEqual(["Proche", "Loin", "Très loin"]);
+    expect(screen.getByRole("status").textContent).toMatch(/1 élec\./);
+    expect(screen.getByTestId("map").dataset.near).toBe("b,e,f");
+
+    // Minimum 3 vélos : seules les stations à ≥ 3 élec. restent.
+    fireEvent.change(screen.getByRole("slider"), { target: { value: "3" } });
+    expect(names()).toEqual(["Loin", "Très loin"]);
+
+    // Rien ne correspond : message explicite.
+    fireEvent.change(screen.getByRole("slider"), { target: { value: "10" } });
+    expect(screen.getByRole("status").textContent).toMatch(/Aucune station ne correspond à vos filtres/);
   });
 
   test("géolocalisation refusée → message", async () => {
