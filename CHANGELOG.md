@@ -9,6 +9,20 @@ Toutes les évolutions notables de VéloPulse. Format inspiré de
 section `## [x.y.z] - AAAA-MM-JJ` ci-dessous, puis merger sur `main` : le workflow
 `release.yml` crée le tag `vx.y.z` et la release GitHub à partir de cette section.
 
+## [1.3.0] - 2026-09-29
+
+### Alertes
+- **Groupe de stations** : une alerte peut surveiller 2 à 5 stations proches
+  (avec un nom facultatif, ex. « Maison »). « Il en reste peu » ne prévient que si
+  **toutes** les stations sont basses, « il y en a de nouveau » dès qu'**une** suffit.
+  Une seule notification, avec le détail par station.
+- **Résumé à heure fixe** : nouveau type d'alerte. Les jours choisis, à l'heure
+  choisie, le nombre de vélos (mécaniques, électriques ou les deux) de 1 à 5
+  stations. Jamais envoyé avec des chiffres périmés ; abandonné s'il ne peut pas
+  partir dans les 15 minutes.
+- Page Alertes : **filtre** par type (disponibilité / résumés) et **tri** par heure,
+  par nom ou plus récentes ; les alertes désactivées passent en fin de liste.
+
 ## [1.2.1] - 2026-09-25
 
 ### Corrections
