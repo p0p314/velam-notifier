@@ -13,14 +13,28 @@ export default function MapPage() {
   const [type, setType] = useState(() => stationFilterFor(getBikePref()));
   const [minBikes, setMinBikes] = useState(0);
   const { theme } = useTheme();
-  // « Autour de moi » : { coords, stations } transmis à la carte + liste affichée.
-  const [focus, setFocus] = useState(null);
+  // « Autour de moi » : position mesurée au clic ; les 3 stations sont recalculées
+  // en continu depuis les filtres (type, minimum) et les disponibilités à jour.
+  const [around, setAround] = useState(null); // { coords, seq }
   const [geo, setGeo] = useState({ busy: false, error: null });
 
   // Filtrage (type + seuil) — recalculé seulement si nécessaire.
   const filtered = useMemo(
     () => stations.filter((s) => bikeCountForType(s, type) >= minBikes),
     [stations, type, minBikes]
+  );
+
+  const near = useMemo(
+    () => (around ? nearestWithBikes(filtered, around.coords, type, 3) : []),
+    [filtered, around, type]
+  );
+  // Objet transmis à la carte : ne change (et ne recadre) que si la sélection change
+  // — un filtre modifié, pas un simple rafraîchissement aux mêmes stations.
+  const nearKey = near.map((s) => s.station_id).join("|");
+  const focus = useMemo(
+    () => (around ? { coords: around.coords, stations: near, seq: around.seq } : null),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [around, nearKey]
   );
 
   const aroundMe = () => {
@@ -31,7 +45,7 @@ export default function MapPage() {
     setGeo({ busy: true, error: null });
     requestPosition().then(
       (coords) => {
-        setFocus({ coords, stations: nearestWithBikes(filtered, coords, type, 3) });
+        setAround((a) => ({ coords, seq: (a?.seq ?? 0) + 1 }));
         setGeo({ busy: false, error: null });
       },
       () => setGeo({ busy: false, error: "Position indisponible : autorisez la géolocalisation." })
@@ -61,10 +75,10 @@ export default function MapPage() {
             {(focus || geo.error) && (
               <div className="map-around-panel" role="status">
                 {geo.error ? geo.error
-                  : focus.stations.length === 0 ? "Aucune station avec des vélos autour de vous."
+                  : near.length === 0 ? "Aucune station ne correspond à vos filtres autour de vous."
                   : (
                     <ol>
-                      {focus.stations.map((s) => (
+                      {near.map((s) => (
                         <li key={s.station_id}>
                           <span className="map-around-name">{s.name}</span>
                           <span className="map-around-meta">{fmtDistance(s.km)} · {s.count} {unit}{unit === "vélo" && s.count > 1 ? "s" : ""}</span>

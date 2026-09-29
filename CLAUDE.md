@@ -293,7 +293,7 @@ différenciée (réglable dans Paramètres › Préférences) : par défaut mobi
 - **components/Onboarding.jsx** — accueil au premier lancement (installer / notifications /
   favoris), uniquement les étapes encore utiles ; rien n'est monté une fois terminé.
 - **pages/** — `Login`, `Stations` (recherche/tri/filtre + détail), `Favorites` (swipe-to-delete,
-  tri proximité / ordre choisi, mode « Organiser »), `MapPage` (carte + filtres + « Autour de moi »),
+  tri proximité / ordre choisi, mode « Organiser »), `MapPage` (carte + filtres + « Autour de moi » : position mesurée au clic, 3 stations les plus proches recalculées en continu selon les filtres),
   `Alerts` (formulaire complet, pause, notification de test ; liste filtrable par type — filtre
   affiché seulement si les deux types coexistent — et triable par heure / nom / récentes,
   désactivées en dernier, choix mémorisés en `localStorage` ; pré-rempli via
