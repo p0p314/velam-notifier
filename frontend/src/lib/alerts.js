@@ -219,6 +219,57 @@ export function describeAlert(a) {
   return { title: a.station_name, detail: `${cmp} ${n} ${what} · ${window}` };
 }
 
+// ── Liste : filtre et tri ─────────────────────────────────────────────────────
+
+export const LIST_FILTERS = [
+  { value: "all",       label: "Toutes" },
+  { value: "threshold", label: "Disponibilité" },
+  { value: "summary",   label: "Résumés" },
+];
+export const LIST_SORTS = [
+  { value: "time",   label: "Par heure" },
+  { value: "name",   label: "Par nom" },
+  { value: "recent", label: "Plus récentes" },
+];
+const LIST_PREFS_KEY = "velopulse-alerts-list";
+
+/** Préférences de liste mémorisées sur l'appareil (confort : défaut si absentes/illisibles). */
+export function loadListPrefs() {
+  const def = { filter: "all", sort: "time" };
+  try {
+    const p = JSON.parse(localStorage.getItem(LIST_PREFS_KEY)) ?? {};
+    return {
+      filter: LIST_FILTERS.some((f) => f.value === p.filter) ? p.filter : def.filter,
+      sort: LIST_SORTS.some((o) => o.value === p.sort) ? p.sort : def.sort,
+    };
+  } catch { return def; }
+}
+export function saveListPrefs(prefs) {
+  try { localStorage.setItem(LIST_PREFS_KEY, JSON.stringify(prefs)); } catch { /* facultatif */ }
+}
+
+const kindOf = (a) => (a.kind === "summary" ? "summary" : "threshold");
+
+/**
+ * Alertes à afficher : filtrées par type, triées (heure de début / d'envoi, nom affiché,
+ * ou création la plus récente). Les alertes désactivées passent toujours en fin de liste.
+ */
+export function visibleAlerts(alerts, { filter = "all", sort = "time" } = {}) {
+  const title = (a) => describeAlert(a).title;
+  const byName = (a, b) => title(a).localeCompare(title(b), "fr");
+  const cmp = {
+    time:   (a, b) => a.time_start.localeCompare(b.time_start) || byName(a, b),
+    name:   (a, b) => byName(a, b) || a.time_start.localeCompare(b.time_start),
+    recent: (a, b) => b.id - a.id,
+  }[sort] ?? (() => 0);
+  return alerts
+    .filter((a) => filter === "all" || kindOf(a) === filter)
+    .sort((a, b) => (b.active ? 1 : 0) - (a.active ? 1 : 0) || cmp(a, b));
+}
+
+/** Le filtre par type n'a d'intérêt que si les deux types coexistent. */
+export const hasBothKinds = (alerts) => new Set(alerts.map(kindOf)).size > 1;
+
 /** « 30/09 » pour les bandeaux (pause, alerte ponctuelle). */
 export function fmtDay(ymd) {
   if (!ymd) return "";

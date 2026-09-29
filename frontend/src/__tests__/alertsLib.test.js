@@ -2,6 +2,7 @@ import { describe, test, expect } from "vitest";
 import {
   defaultForm, formFromAlert, validateForm, payloadFromForm, describeAlert,
   tripAllowed, groupRuleText, localYmd, addDaysYmd, fmtDay,
+  visibleAlerts, hasBothKinds, loadListPrefs, saveListPrefs,
 } from "../lib/alerts";
 
 const names = { 1: "Gare", 2: "Zoo" };
@@ -181,6 +182,45 @@ describe("describeAlert", () => {
     expect(describeAlert(g)).toEqual({ title: "Maison", detail: "Gare, Zoo · toutes ≤ 1 vélo · 08:00–09:00" });
     expect(describeAlert({ ...g, group_name: null, comparison: "at_least" }))
       .toEqual({ title: "Gare, Zoo", detail: "L'une ≥ 1 vélo · 08:00–09:00" });
+  });
+});
+
+describe("liste : filtre et tri", () => {
+  const mk = (id, station_name, time_start, extra = {}) => ({
+    id, station_name, time_start, time_end: time_start, active: 1, kind: "threshold",
+    target: "bikes", comparison: "at_most", bike_type: "any", threshold: 1, ...extra,
+  });
+  const list = [
+    mk(1, "Zoo", "08:00"),
+    mk(2, "Gare", "17:30"),
+    mk(3, "Beffroi", "07:15", { kind: "summary", group_stations: [{ station_id: "3", station_name: "Beffroi" }] }),
+    mk(4, "Cirque", "06:00", { active: 0 }),
+  ];
+  const ids = (opts) => visibleAlerts(list, opts).map((a) => a.id);
+
+  test("par heure (défaut), désactivées en dernier", () => expect(ids()).toEqual([3, 1, 2, 4]));
+  test("par nom affiché", () => expect(ids({ sort: "name" })).toEqual([3, 2, 1, 4]));
+  test("plus récentes", () => expect(ids({ sort: "recent" })).toEqual([3, 2, 1, 4]));
+  test("filtre par type", () => {
+    expect(ids({ filter: "summary" })).toEqual([3]);
+    expect(ids({ filter: "threshold" })).toEqual([1, 2, 4]);
+  });
+  test("ne modifie pas la liste d'origine", () => {
+    visibleAlerts(list, { sort: "name" });
+    expect(list.map((a) => a.id)).toEqual([1, 2, 3, 4]);
+  });
+  test("deux types présents ?", () => {
+    expect(hasBothKinds(list)).toBe(true);
+    expect(hasBothKinds(list.filter((a) => a.kind !== "summary"))).toBe(false);
+  });
+  test("préférences mémorisées, valeurs inconnues ignorées", () => {
+    expect(loadListPrefs()).toEqual({ filter: "all", sort: "time" });
+    saveListPrefs({ filter: "summary", sort: "name" });
+    expect(loadListPrefs()).toEqual({ filter: "summary", sort: "name" });
+    localStorage.setItem("velopulse-alerts-list", JSON.stringify({ filter: "x", sort: "y" }));
+    expect(loadListPrefs()).toEqual({ filter: "all", sort: "time" });
+    localStorage.setItem("velopulse-alerts-list", "{");
+    expect(loadListPrefs()).toEqual({ filter: "all", sort: "time" });
   });
 });
 

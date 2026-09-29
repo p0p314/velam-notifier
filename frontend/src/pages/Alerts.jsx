@@ -5,7 +5,7 @@ import { useFavorites, useIsMobile } from "../hooks";
 import { pushPermission, enablePush } from "../push";
 import {
   ALL_DAYS, defaultForm, formFromAlert, validateForm, payloadFromForm, describeAlert,
-  tripAllowed, groupRuleText, localYmd, addDaysYmd, fmtDay, GROUP_MIN, GROUP_MAX, GROUP_NAME_MAX,
+  tripAllowed, groupRuleText, LIST_FILTERS, LIST_SORTS, loadListPrefs, saveListPrefs, visibleAlerts, hasBothKinds, localYmd, addDaysYmd, fmtDay, GROUP_MIN, GROUP_MAX, GROUP_NAME_MAX,
 } from "../lib/alerts";
 import BottomSheet from "../components/BottomSheet";
 import Icon from "../components/Icon";
@@ -399,6 +399,24 @@ function AlertForm({ stations, form, setField, error, onSubmit, onCancel, editin
   );
 }
 
+/** Filtre par type (si les deux coexistent) + tri de la liste. */
+function ListControls({ prefs, onChange, showFilter }) {
+  return (
+    <div className="alerts-list-controls">
+      {showFilter && (
+        <Seg label="Filtrer les alertes" options={LIST_FILTERS} value={prefs.filter}
+          onChange={(filter) => onChange({ ...prefs, filter })} />
+      )}
+      <div className="select-wrap">
+        <select value={prefs.sort} aria-label="Trier les alertes" onChange={(e) => onChange({ ...prefs, sort: e.target.value })}>
+          {LIST_SORTS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+        </select>
+        <Icon name="chevron-down" size={15} />
+      </div>
+    </div>
+  );
+}
+
 export default function Alerts() {
   const { favorites } = useFavorites();
   const isMobile = useIsMobile();
@@ -409,6 +427,8 @@ export default function Alerts() {
   const [error, setError] = useState(null);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [editing, setEditing] = useState(null);
+  const [listPrefs, setListPrefs] = useState(loadListPrefs);
+  const changeListPrefs = (p) => { setListPrefs(p); saveListPrefs(p); };
   // Station transmise par « Créer une alerte » (fiche station) : formulaire pré-rempli.
   const [preset] = useState(() => location.state?.alertStation ?? null);
   const [form, setForm] = useState(() => defaultForm(preset));
@@ -496,6 +516,9 @@ export default function Alerts() {
   };
 
   const activeCount = alerts.filter((a) => a.active).length;
+  const showFilter = hasBothKinds(alerts);
+  // Filtre masqué (un seul type restant) ⇒ ignoré, sinon la liste pourrait rester vide.
+  const shown = visibleAlerts(alerts, { ...listPrefs, filter: showFilter ? listPrefs.filter : "all" });
   const formProps = { stations, form, setField, error, onSubmit: save, onCancel: cancelEdit, editing };
 
   return (
@@ -509,6 +532,7 @@ export default function Alerts() {
 
           <PushBanner />
           {alerts.length > 0 && <PauseControl pausedUntil={pausedUntil} onChange={setPausedUntil} />}
+          {alerts.length > 1 && <ListControls prefs={listPrefs} onChange={changeListPrefs} showFilter={showFilter} />}
 
           {alerts.length === 0 ? (
             <div className="empty-state">
@@ -516,8 +540,10 @@ export default function Alerts() {
               <div className="empty-title">Aucune alerte configurée</div>
               <div className="empty-sub">Touchez « + » pour en créer une.</div>
             </div>
+          ) : shown.length === 0 ? (
+            <div className="view-state">Aucune alerte de ce type.</div>
           ) : (
-            alerts.map((a) => (
+            shown.map((a) => (
               <AlertCard key={a.id} a={a} paused={!!pausedUntil} onToggle={toggle} onDelete={remove} onEdit={startEdit} />
             ))
           )}

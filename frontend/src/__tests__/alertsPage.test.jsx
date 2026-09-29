@@ -225,6 +225,54 @@ describe("liste", () => {
   });
 });
 
+describe("filtre et tri de la liste", () => {
+  const base = { active: 1, target: "bikes", comparison: "at_most", bike_type: "any", threshold: 1, days: "1,2,3,4,5", valid_on: null };
+  const names = () => [...document.querySelectorAll(".alertes-list .alert-card-name")].map((n) => n.textContent);
+
+  test("tri par heure, puis par nom ; filtre par type ; choix mémorisés", async () => {
+    alerts = [
+      { ...base, id: 1, station_id: "2", station_name: "Zoo", time_start: "08:00", time_end: "09:00" },
+      { ...base, id: 2, station_id: "1", station_name: "Gare", time_start: "17:00", time_end: "18:00" },
+      { ...base, id: 3, kind: "summary", station_id: "1", station_name: "Gare", time_start: "07:00", time_end: "07:00",
+        group_name: "Matin", group_stations: [{ station_id: "1", station_name: "Gare" }] },
+    ];
+    const { unmount } = renderPage();
+    await screen.findByText("Matin");
+    expect(names()).toEqual(["Matin", "Zoo", "Gare"]);
+
+    fireEvent.change(screen.getByLabelText("Trier les alertes"), { target: { value: "name" } });
+    expect(names()).toEqual(["Gare", "Matin", "Zoo"]);
+
+    const filters = within(screen.getByRole("group", { name: "Filtrer les alertes" }));
+    fireEvent.click(filters.getByRole("button", { name: "Résumés" }));
+    expect(names()).toEqual(["Matin"]);
+
+    unmount();
+    renderPage();
+    await screen.findByText("Matin");
+    expect(names()).toEqual(["Matin"]);
+    expect(screen.getByLabelText("Trier les alertes").value).toBe("name");
+  });
+
+  test("un seul type : pas de filtre (et filtre mémorisé ignoré) ; une seule alerte : aucun contrôle", async () => {
+    localStorage.setItem("velopulse-alerts-list", JSON.stringify({ filter: "summary", sort: "time" }));
+    alerts = [
+      { ...base, id: 1, station_id: "2", station_name: "Zoo", time_start: "08:00", time_end: "09:00" },
+      { ...base, id: 2, station_id: "1", station_name: "Gare", time_start: "07:00", time_end: "09:00" },
+    ];
+    const { unmount } = renderPage();
+    await screen.findByText("Zoo", { selector: ".alert-card-name" });
+    expect(screen.queryByRole("group", { name: "Filtrer les alertes" })).toBeNull();
+    expect(names()).toEqual(["Gare", "Zoo"]);
+
+    unmount();
+    alerts = alerts.slice(0, 1);
+    renderPage();
+    await screen.findByText("Zoo", { selector: ".alert-card-name" });
+    expect(screen.queryByLabelText("Trier les alertes")).toBeNull();
+  });
+});
+
 describe("pause globale", () => {
   const one = [{ id: 1, active: 1, station_id: "1", station_name: "Gare", target: "bikes", comparison: "at_most",
     bike_type: "any", threshold: 1, time_start: "08:00", time_end: "09:00", days: "1,2,3,4,5,6,7" }];

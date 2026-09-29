@@ -267,7 +267,9 @@ différenciée : mobile → `/favoris`, desktop → `/stations`.
   favoris), uniquement les étapes encore utiles ; rien n'est monté une fois terminé.
 - **pages/** — `Login`, `Stations` (recherche/tri/filtre + détail), `Favorites` (swipe-to-delete,
   tri proximité / ordre choisi, mode « Organiser »), `MapPage` (carte + filtres + « Autour de moi »),
-  `Alerts` (formulaire complet, pause, notification de test ; pré-rempli via
+  `Alerts` (formulaire complet, pause, notification de test ; liste filtrable par type — filtre
+  affiché seulement si les deux types coexistent — et triable par heure / nom / récentes,
+  désactivées en dernier, choix mémorisés en `localStorage` ; pré-rempli via
   `location.state.alertStation` depuis la fiche station), `Account` (`/compte` : mot de passe,
   suppression du compte), `Privacy` (`/confidentialite`, publique).
 - **components/** — `StationCard` (desktop), `StationListItem` (mobile, étoile favori optionnelle

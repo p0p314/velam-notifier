@@ -261,6 +261,9 @@ select option { background: var(--surface); color: var(--text); }
 .toolbar-top { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
 .stations-stats { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; font-size: 13px; color: var(--text-3); }
 .stations-stats b { font-size: 14px; font-weight: 600; font-family: var(--font-mono); color: var(--text); }
+.alerts-list-controls { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+.alerts-list-controls .seg { flex: 1 1 240px; }
+.alerts-list-controls .select-wrap { margin-left: auto; }
 .stations-filters { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 
 /* Select stylé (tri, station) */
