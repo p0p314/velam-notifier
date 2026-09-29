@@ -3,6 +3,11 @@
 
 export const ALL_DAYS = [1, 2, 3, 4, 5, 6, 7];
 
+// Groupe de stations : bornes alignées sur le serveur (routes/alerts.js).
+export const GROUP_MIN = 2;
+export const GROUP_MAX = 5;
+export const GROUP_NAME_MAX = 40;
+
 const BIKE_WORD = { mechanical: " mécanique", ebike: " électrique", any: "" };
 
 /** Date locale de l'appareil au format YYYY-MM-DD (l'API compare en heure de Paris). */
@@ -26,6 +31,9 @@ const hhmm = (d) => `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinu
 export function defaultForm(station = null, now = new Date()) {
   const form = {
     stationId: station?.station_id ?? "",
+    group: false,
+    groupIds: [],
+    groupName: "",
     target: "bikes",
     comparison: "at_most",
     bikeType: "any",
@@ -53,6 +61,9 @@ export function defaultForm(station = null, now = new Date()) {
 export function formFromAlert(a) {
   return {
     stationId: a.station_id,
+    group: !!a.group_stations?.length,
+    groupIds: a.group_stations?.map((s) => s.station_id) ?? [],
+    groupName: a.group_name ?? "",
     target: a.target ?? "bikes",
     comparison: a.comparison ?? "at_most",
     bikeType: a.bike_type ?? "any",
@@ -68,14 +79,31 @@ export function formFromAlert(a) {
   };
 }
 
-/** Le trajet n'a de sens que pour « vélos, il en reste peu ». */
-export const tripAllowed = (form) => form.target === "bikes" && form.comparison === "at_most";
+/** Le trajet n'a de sens que pour « vélos, il en reste peu », sur une seule station. */
+export const tripAllowed = (form) => !form.group && form.target === "bikes" && form.comparison === "at_most";
+
+/**
+ * Règle d'un groupe en toutes lettres (sous le seuil du formulaire) :
+ * « au plus N » ⇒ toutes les stations ; « au moins N » ⇒ une seule suffit.
+ */
+export function groupRuleText(form) {
+  const n = Number(form.threshold) || 0;
+  const what = form.target === "docks" ? `${n} ${docksWord(n)} libre${n > 1 ? "s" : ""}` : `${n} ${bikesWord(form.bikeType, n)}`;
+  return form.comparison === "at_least"
+    ? `Alerte dès qu'une des stations a au moins ${what}.`
+    : `Alerte seulement quand toutes les stations ont au plus ${what}.`;
+}
 
 /**
  * Contrôles côté client (le serveur revalide tout). Renvoie un message ou null.
  */
 export function validateForm(form) {
-  if (!form.stationId) return "Choisissez une station";
+  if (form.group) {
+    if (form.groupIds.length < GROUP_MIN || form.groupIds.length > GROUP_MAX) {
+      return `Choisissez de ${GROUP_MIN} à ${GROUP_MAX} stations`;
+    }
+    if (form.groupName.trim().length > GROUP_NAME_MAX) return `Nom du groupe : ${GROUP_NAME_MAX} caractères maximum`;
+  } else if (!form.stationId) return "Choisissez une station";
   if (!form.timeStart || !form.timeEnd || form.timeEnd <= form.timeStart) {
     return "L'heure de fin doit être postérieure à l'heure de début";
   }
@@ -97,9 +125,15 @@ export function validateForm(form) {
  */
 export function payloadFromForm(form, names, today = localYmd()) {
   const trip = form.trip && tripAllowed(form);
+  const stationId = form.group ? form.groupIds[0] : form.stationId;
   return {
-    station_id: form.stationId,
-    station_name: names[form.stationId] ?? form.stationId,
+    station_id: stationId,
+    station_name: names[stationId] ?? stationId,
+    // Toujours envoyés (null en mode simple) : un PATCH repasse ainsi un groupe en simple.
+    group_stations: form.group
+      ? form.groupIds.map((id) => ({ station_id: id, station_name: names[id] ?? id }))
+      : null,
+    group_name: form.group ? (form.groupName.trim() || null) : null,
     target: form.target,
     comparison: form.comparison,
     bike_type: form.target === "bikes" ? form.bikeType : "any",
@@ -123,6 +157,13 @@ export function describeAlert(a) {
   const n = a.threshold ?? 0;
   const what = a.target === "docks" ? docksWord(n) : bikesWord(a.bike_type, n);
   const window = `${a.time_start}–${a.time_end}`;
+  if (a.group_stations?.length) {
+    const list = a.group_stations.map((s) => s.station_name).join(", ");
+    const rule = a.comparison === "at_least" ? `l'une ≥ ${n} ${what}` : `toutes ≤ ${n} ${what}`;
+    return a.group_name
+      ? { title: a.group_name, detail: `${list} · ${rule} · ${window}` }
+      : { title: list, detail: `${rule[0].toUpperCase()}${rule.slice(1)} · ${window}` };
+  }
   if (a.arrival_station_id) {
     const arr = a.arrival_threshold ?? 0;
     return {

@@ -25,6 +25,7 @@ describe('validateAlertPayload — création', () => {
     assert.deepEqual(fields, {
       ...validAlert, target: 'bikes', comparison: 'at_most', valid_on: null, active: 1,
       arrival_station_id: null, arrival_station_name: null, arrival_threshold: null,
+      group_name: null, group_stations: null,
     });
   });
 
@@ -109,6 +110,58 @@ describe('validateAlertPayload — trajet', () => {
   test('uniquement en mode vélos / au plus', () => {
     assert.ok(v({ ...trip, target: 'docks' }).errors.length);
     assert.ok(v({ ...trip, comparison: 'at_least' }).errors.length);
+  });
+});
+
+describe('validateAlertPayload — groupe de stations', () => {
+  const trio = [
+    { station_id: '1', station_name: 'Gare' },
+    { station_id: '2', station_name: 'Cathédrale' },
+    { station_id: '3', station_name: 'Beffroi' },
+  ];
+  const { station_id, station_name, ...noStation } = validAlert;
+  const group = { ...noStation, group_stations: trio, group_name: '  Maison ' };
+
+  test('groupe valide : 1re station recopiée, nom nettoyé', () => {
+    const { fields, errors } = v(group);
+    assert.deepEqual(errors, []);
+    assert.deepEqual(fields.group_stations, trio);
+    assert.equal(fields.group_name, 'Maison');
+    assert.equal(fields.station_id, '1');
+    assert.equal(fields.station_name, 'Gare');
+  });
+  test('nom facultatif (vide → null)', () => {
+    assert.equal(v({ ...group, group_name: '' }).fields.group_name, null);
+    assert.equal(v({ ...group, group_name: undefined }).fields.group_name, null);
+  });
+  test('nom trop long refusé', () => {
+    assert.ok(v({ ...group, group_name: 'x'.repeat(41) }).errors.length);
+  });
+  test('de 2 à 5 stations distinctes', () => {
+    assert.ok(v({ ...group, group_stations: trio.slice(0, 1) }).errors.length);
+    const six = Array.from({ length: 6 }, (_, i) => ({ station_id: String(i), station_name: `S${i}` }));
+    assert.ok(v({ ...group, group_stations: six }).errors.length);
+    assert.ok(v({ ...group, group_stations: [trio[0], trio[0]] }).errors.length);
+    assert.ok(v({ ...group, group_stations: [trio[0], { station_id: '2' }] }).errors.length);
+    assert.ok(v({ ...group, group_stations: 'Gare' }).errors.length);
+  });
+  test('places libres et « au moins N » acceptés', () => {
+    assert.deepEqual(v({ ...group, target: 'docks', comparison: 'at_least' }).errors, []);
+  });
+  test('incompatible avec un trajet', () => {
+    const errors = v({ ...group, arrival_station_id: '40', arrival_station_name: 'Zoo' }).errors;
+    assert.ok(errors.includes('trajet : impossible pour un groupe de stations'));
+  });
+  test('sans groupe, le nom est ignoré', () => {
+    assert.equal(v({ ...validAlert, group_name: 'Maison' }).fields.group_name, null);
+  });
+  test('PATCH : le groupe existant est conservé, group_stations: null repasse en simple', () => {
+    const current = { ...v(group).fields, id: 1 };
+    assert.deepEqual(v({ threshold: 0 }, { current }).fields.group_stations, trio);
+    const single = v({ group_stations: null, station_id: '9', station_name: 'Zoo' }, { current }).fields;
+    assert.equal(single.group_stations, null);
+    assert.equal(single.group_name, null);
+    assert.equal(single.station_id, '9');
   });
 });
 
@@ -240,6 +293,32 @@ describe('evaluateAlert', () => {
   });
 });
 
+describe('evaluateAlert — groupe de stations', () => {
+  const statusMap = {
+    '1': { num_bikes_available: 0, num_docks_available: 9 },
+    '2': { num_bikes_available: 1, num_docks_available: 0 },
+    '3': { num_bikes_available: 4, num_docks_available: 2, is_renting: false },
+  };
+  const group = {
+    station_id: '1', bike_type: 'any', target: 'bikes', comparison: 'at_most', threshold: 1,
+    group_stations: [{ station_id: '1' }, { station_id: '2' }, { station_id: '3' }],
+  };
+
+  test('« au plus N » : déclenche seulement si toutes les stations sont basses', () => {
+    const ev = evaluateAlert(group, statusMap); // 3 fermée à la location → 0
+    assert.deepEqual(ev, { triggered: true, key: '0|1|0', count: 1, counts: [0, 1, 0], departureHit: true });
+    assert.equal(evaluateAlert(group, { ...statusMap, '3': { num_bikes_available: 4 } }).triggered, false);
+  });
+  test('« au moins N » : une station suffit', () => {
+    const atLeast = { ...group, comparison: 'at_least', threshold: 5 };
+    assert.equal(evaluateAlert({ ...atLeast, target: 'docks' }, statusMap).triggered, true);
+    assert.equal(evaluateAlert(atLeast, statusMap).triggered, false);
+  });
+  test('station absente du flux = 0', () => {
+    assert.deepEqual(evaluateAlert(group, {}).counts, [0, 0, 0]);
+  });
+});
+
 describe('buildMessage / buildPayload', () => {
   const bikes = { station_id: '12', station_name: 'Gare', bike_type: 'ebike', target: 'bikes', comparison: 'at_most', threshold: 2 };
   const msg = (alert, ev) => buildMessage(alert, { count: 0, ...ev });
@@ -275,6 +354,27 @@ describe('buildMessage / buildPayload', () => {
     const m = msg(trip, { count: 3, arrivalDocks: 0, departureHit: false, arrivalHit: true });
     assert.equal(m.title, '⚠️ Trajet Gare → Zoo');
     assert.equal(m.body, 'Départ Gare : 3 vélos · Arrivée Zoo : 0 place');
+  });
+  describe('groupe de stations', () => {
+    const group = {
+      ...bikes, bike_type: 'any', group_name: 'Maison',
+      group_stations: [{ station_id: '1', station_name: 'Gare' }, { station_id: '2', station_name: 'Beffroi' }],
+    };
+    test('peu de vélos : détail par station', () => {
+      const m = msg(group, { count: 1, counts: [0, 1] });
+      assert.equal(m.title, 'Maison : peu de vélos');
+      assert.equal(m.body, 'Gare : 0 · Beffroi : 1');
+    });
+    test('plus rien nulle part → avertissement', () => {
+      assert.equal(msg({ ...group, bike_type: 'ebike' }, { count: 0, counts: [0, 0] }).title, '⚠️ Maison : plus aucun vélo électrique');
+      assert.equal(msg({ ...group, target: 'docks' }, { count: 0, counts: [0, 0] }).title, '⚠️ Maison : plus aucune place libre');
+    });
+    test('au moins N / sans nom de groupe', () => {
+      const m = msg({ ...group, group_name: null, comparison: 'at_least' }, { count: 5, counts: [5, 0] });
+      assert.equal(m.title, '✅ Vos stations : vélos disponibles');
+      assert.equal(msg({ ...group, target: 'docks', comparison: 'at_least' }, { count: 3, counts: [3, 3] }).title,
+        '✅ Maison : places libres disponibles');
+    });
   });
 });
 
@@ -367,6 +467,9 @@ describe('stations de repli', () => {
   test('« au moins N » → pas de repli', () => {
     const alert = { station_id: '1', bike_type: 'any', target: 'bikes', comparison: 'at_least', threshold: 3 };
     assert.deepEqual(fallbacksFor(alert, { departureHit: true }, stations, { 2: st(9, 9) }), {});
+    // Groupe : les stations alternatives sont déjà dans le groupe.
+    const grouped = { ...alert, comparison: 'at_most', arrival_station_id: null, group_stations: [{ station_id: '1' }, { station_id: '3' }] };
+    assert.deepEqual(fallbacksFor(grouped, { departureHit: true }, stations, { 2: st(9, 9) }), {});
   });
 
   test('le repli est ajouté au corps de la notification', () => {

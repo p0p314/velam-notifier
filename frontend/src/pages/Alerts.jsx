@@ -5,7 +5,7 @@ import { useFavorites, useIsMobile } from "../hooks";
 import { pushPermission, enablePush } from "../push";
 import {
   ALL_DAYS, defaultForm, formFromAlert, validateForm, payloadFromForm, describeAlert,
-  tripAllowed, localYmd, addDaysYmd, fmtDay,
+  tripAllowed, groupRuleText, localYmd, addDaysYmd, fmtDay, GROUP_MAX, GROUP_NAME_MAX,
 } from "../lib/alerts";
 import BottomSheet from "../components/BottomSheet";
 import Icon from "../components/Icon";
@@ -19,6 +19,10 @@ const BIKE_OPTIONS = [
 const TARGET_OPTIONS = [
   { value: "bikes", label: "Vélos" },
   { value: "docks", label: "Places libres" },
+];
+const MODE_OPTIONS = [
+  { value: "single", label: "Une station" },
+  { value: "group",  label: "Plusieurs stations" },
 ];
 const COMPARISON_OPTIONS = [
   { value: "at_most",  label: "Il en reste peu" },
@@ -169,7 +173,8 @@ function PauseControl({ pausedUntil, onChange }) {
 
 function AlertCard({ a, onToggle, onDelete, onEdit, paused }) {
   const { title, detail } = describeAlert(a);
-  const icon = a.arrival_station_id ? "route" : a.target === "docks" ? "parking" : BIKE_ICON[a.bike_type];
+  const icon = a.group_stations?.length ? "map-pin"
+    : a.arrival_station_id ? "route" : a.target === "docks" ? "parking" : BIKE_ICON[a.bike_type];
   return (
     <div className={"alert-card" + (a.active && !paused ? "" : " off")}>
       <div className="alert-card-head">
@@ -207,19 +212,55 @@ function AlertForm({ stations, form, setField, error, onSubmit, onCancel, editin
   const unit = form.target === "docks" ? "places libres" : "vélos disponibles";
   const arrivals = stations.filter((s) => s.station_id !== form.stationId);
 
+  const setMode = (mode) => {
+    setField("group", mode === "group");
+    // Premier passage en groupe : on part de la station déjà choisie.
+    if (mode === "group" && form.groupIds.length === 0 && form.stationId) setField("groupIds", [form.stationId]);
+  };
+  const toggleGroupStation = (id) => {
+    const ids = form.groupIds.includes(id) ? form.groupIds.filter((x) => x !== id) : [...form.groupIds, id];
+    setField("groupIds", ids);
+  };
+
   return (
     <form onSubmit={onSubmit} style={{ display: "flex", flexDirection: "column", gap: 16 }} aria-label="Formulaire d'alerte">
       <div className="form-title">{editing ? "Modifier l'alerte" : "Nouvelle alerte"}</div>
 
-      <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-        <span className="form-label">{form.trip && tripAllowed(form) ? "Station de départ" : "Station"}</span>
-        <div className="select-wrap select-inset">
-          <select value={form.stationId} onChange={(e) => setField("stationId", e.target.value)} required aria-label="Station">
-            {stations.map((f) => <option key={f.station_id} value={f.station_id}>{f.station_name}</option>)}
-          </select>
-          <Icon name="chevron-down" size={15} />
+      <Seg label="Stations surveillées" options={MODE_OPTIONS} value={form.group ? "group" : "single"} onChange={setMode} />
+
+      {form.group ? (
+        <div className="trip-box">
+          <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            <span className="form-label">Nom du groupe (facultatif)</span>
+            <input type="text" className="field" value={form.groupName} maxLength={GROUP_NAME_MAX}
+              placeholder="ex. Maison, Travail" aria-label="Nom du groupe"
+              onChange={(e) => setField("groupName", e.target.value)} />
+          </label>
+          <span className="form-label">Stations ({form.groupIds.length}/{GROUP_MAX})</span>
+          {stations.length < 2 && <div className="form-hint">Ajoutez au moins deux stations en favoris.</div>}
+          {stations.map((f) => {
+            const checked = form.groupIds.includes(f.station_id);
+            return (
+              <label key={f.station_id} className="check-row">
+                <input type="checkbox" checked={checked}
+                  disabled={!checked && form.groupIds.length >= GROUP_MAX}
+                  onChange={() => toggleGroupStation(f.station_id)} />
+                <span>{f.station_name}</span>
+              </label>
+            );
+          })}
         </div>
-      </label>
+      ) : (
+        <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          <span className="form-label">{form.trip && tripAllowed(form) ? "Station de départ" : "Station"}</span>
+          <div className="select-wrap select-inset">
+            <select value={form.stationId} onChange={(e) => setField("stationId", e.target.value)} required aria-label="Station">
+              {stations.map((f) => <option key={f.station_id} value={f.station_id}>{f.station_name}</option>)}
+            </select>
+            <Icon name="chevron-down" size={15} />
+          </div>
+        </label>
+      )}
 
       <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
         <span className="form-label">Surveiller</span>
@@ -246,6 +287,7 @@ function AlertForm({ stations, form, setField, error, onSubmit, onCancel, editin
             onChange={(e) => setField("threshold", e.target.value)} className="field mono" style={{ width: 80 }} />
           <span style={{ fontSize: 13, color: "var(--text-3)" }}>{unit}</span>
         </div>
+        {form.group && <span className="form-hint">{groupRuleText(form)}</span>}
       </label>
 
       {tripAllowed(form) && (
@@ -337,6 +379,7 @@ export default function Alerts() {
   };
   if (preset) addOption(preset.station_id, preset.name);
   if (editing) {
+    for (const g of editing.group_stations ?? []) addOption(g.station_id, g.station_name);
     addOption(editing.arrival_station_id, editing.arrival_station_name);
     addOption(editing.station_id, editing.station_name);
   }

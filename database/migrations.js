@@ -91,6 +91,16 @@ async function migrateAlertsV11(db) {
   }
 }
 
+/**
+ * v1.3 — alertes de groupe : plusieurs stations surveillées ensemble.
+ * `group_stations` : JSON [{ station_id, station_name }] (2 à 5 stations, lu avec
+ * l'alerte, jamais filtré en SQL) ; `group_name` : nom libre (« Maison »).
+ */
+async function migrateAlertGroups(db) {
+  await addColumn(db, 'alerts', 'group_name', 'TEXT DEFAULT NULL');
+  await addColumn(db, 'alerts', 'group_stations', 'TEXT DEFAULT NULL');
+}
+
 async function runMigrations(db) {
   const isPostgres = !!process.env.DATABASE_URL;
 
@@ -139,6 +149,8 @@ async function runMigrations(db) {
       arrival_station_id   TEXT DEFAULT NULL,
       arrival_station_name TEXT DEFAULT NULL,
       arrival_threshold    INTEGER DEFAULT NULL,
+      group_name         TEXT DEFAULT NULL,
+      group_stations     TEXT DEFAULT NULL,
       valid_on           TEXT DEFAULT NULL,
       time_start         TEXT NOT NULL,
       time_end           TEXT NOT NULL,
@@ -151,6 +163,7 @@ async function runMigrations(db) {
     await db.run('ALTER TABLE push_subscriptions ADD COLUMN IF NOT EXISTS endpoint TEXT');
     await migratePushEndpoint(db);
     await migrateAlertsV11(db);
+    await migrateAlertGroups(db);
     await db.run(`CREATE TABLE IF NOT EXISTS rental_apps (
       platform      TEXT PRIMARY KEY,
       name          TEXT NOT NULL,
@@ -207,6 +220,8 @@ async function runMigrations(db) {
     arrival_station_id   TEXT DEFAULT NULL,
     arrival_station_name TEXT DEFAULT NULL,
     arrival_threshold    INTEGER DEFAULT NULL,
+    group_name   TEXT DEFAULT NULL,
+    group_stations TEXT DEFAULT NULL,
     valid_on     TEXT DEFAULT NULL,
     time_start   TEXT NOT NULL,
     time_end     TEXT NOT NULL,
@@ -232,6 +247,7 @@ async function runMigrations(db) {
   await addColumn(db, 'push_subscriptions', 'endpoint', 'TEXT');
   await migratePushEndpoint(db);
   await migrateAlertsV11(db);
+  await migrateAlertGroups(db);
 
   console.log('[db] migrations SQLite appliquées');
 }

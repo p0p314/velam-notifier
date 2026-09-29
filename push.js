@@ -75,8 +75,18 @@ const compare = (count, comparison, threshold) =>
  * l'anti-spam re-notifie seulement quand cette clé change.
  */
 function evaluateAlert(alert, statusMap) {
-  const status = statusMap[alert.station_id];
-  const count = alert.target === 'docks' ? docksOf(status) : countForType(status, alert.bike_type);
+  const measure = (status) => (alert.target === 'docks' ? docksOf(status) : countForType(status, alert.bike_type));
+
+  if (alert.group_stations?.length) {
+    // Groupe : la règle porte sur la meilleure station (« au plus N » ⇒ toutes sont
+    // basses ; « au moins N » ⇒ une suffit). La clé = le détail de chaque station.
+    const counts = alert.group_stations.map((s) => measure(statusMap[s.station_id]));
+    const count = Math.max(...counts);
+    const departureHit = compare(count, alert.comparison, alert.threshold);
+    return { triggered: departureHit, key: counts.join('|'), count, counts, departureHit };
+  }
+
+  const count = measure(statusMap[alert.station_id]);
   const departureHit = compare(count, alert.comparison, alert.threshold);
 
   if (!alert.arrival_station_id) {
@@ -123,7 +133,8 @@ function findFallback(stationId, stations, statusMap, measure, threshold) {
  * station surveillée) manque de places. Aucune pour les alertes « au moins N ».
  */
 function fallbacksFor(alert, ev, stations, statusMap) {
-  if (alert.comparison !== 'at_most' || !stations?.length) return {};
+  // Un groupe couvre déjà les stations alternatives choisies par l'utilisateur.
+  if (alert.comparison !== 'at_most' || alert.group_stations?.length || !stations?.length) return {};
   const bikes = (st) => countForType(st, alert.bike_type);
   const out = {};
   if (ev.departureHit) {
@@ -194,6 +205,8 @@ function describeDeparture(alerte, n) {
 function buildMessage(alerte, ev) {
   const n = ev.count;
 
+  if (alerte.group_stations?.length) return buildGroupMessage(alerte, ev);
+
   if (alerte.arrival_station_id) {
     const parts = [
       `Départ ${alerte.station_name} : ${bikesLabel(alerte.bike_type, n)}`,
@@ -227,6 +240,28 @@ function buildMessage(alerte, ev) {
       ? `Plus que ${what} · Pensez à une autre station`
       : `${what} disponible${n > 1 ? 's' : ''} · Réservez vite`,
   };
+}
+
+/**
+ * Groupe : « Maison : peu de vélos » + le détail « Gare : 0 · Cathédrale : 1 ».
+ * `ev.count` = meilleure station du groupe, `ev.counts` = une valeur par station.
+ */
+function buildGroupMessage(alerte, ev) {
+  const label = alerte.group_name || 'Vos stations';
+  const docks = alerte.target === 'docks';
+  const kinds = docks ? 'places libres' : bikesLabel(alerte.bike_type, 2).replace(/^2 /, '');
+  let title;
+  if (alerte.comparison === 'at_least') {
+    title = `✅ ${label} : ${kinds} disponibles`;
+  } else if (ev.count === 0) {
+    title = `⚠️ ${label} : ${docks ? 'plus aucune place libre' : `plus aucun ${bikesLabel(alerte.bike_type, 1).replace(/^1 /, '')}`}`;
+  } else {
+    title = `${label} : peu de ${kinds}`;
+  }
+  const body = alerte.group_stations
+    .map((s, i) => `${s.station_name} : ${ev.counts?.[i] ?? 0}`)
+    .join(' · ');
+  return { title, body };
 }
 
 /** « Cathédrale (350 m) : 6 vélos » */

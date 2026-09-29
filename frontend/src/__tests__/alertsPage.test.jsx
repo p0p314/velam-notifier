@@ -111,6 +111,54 @@ describe("création d'alertes", () => {
   });
 });
 
+describe("groupe de stations", () => {
+  test("création : stations cochées, nom, règle expliquée, pas de trajet", async () => {
+    await ready();
+    const f = within(form());
+    fireEvent.click(f.getByRole("button", { name: "Plusieurs stations" }));
+    expect(f.queryByLabelText("Station")).toBeNull();
+    expect(f.queryByLabelText(/Trajet/)).toBeNull();
+    // La station déjà choisie (1er favori) est pré-cochée.
+    expect(f.getByRole("checkbox", { name: "Gare" }).checked).toBe(true);
+    expect(f.getByText("Alerte seulement quand toutes les stations ont au plus 1 vélo.")).toBeTruthy();
+
+    // Une seule station → refus côté client.
+    fireEvent.click(f.getByRole("button", { name: "Créer l'alerte" }));
+    expect((await f.findByRole("alert")).textContent).toMatch(/de 2 à 5 stations/);
+    expect(lastPost()).toBeUndefined();
+
+    fireEvent.click(f.getByRole("checkbox", { name: "Zoo" }));
+    fireEvent.change(f.getByLabelText("Nom du groupe"), { target: { value: "Maison" } });
+    fireEvent.click(f.getByRole("button", { name: "Créer l'alerte" }));
+    await waitFor(() => expect(lastPost()).toBeTruthy());
+    expect(lastPost()).toMatchObject({
+      station_id: "1", group_name: "Maison", arrival_station_id: null,
+      group_stations: [{ station_id: "1", station_name: "Gare" }, { station_id: "2", station_name: "Zoo" }],
+    });
+  });
+
+  test("carte et édition d'un groupe", async () => {
+    alerts = [{ id: 5, active: 1, station_id: "1", station_name: "Gare", target: "bikes", comparison: "at_most",
+      bike_type: "any", threshold: 0, time_start: "08:00", time_end: "09:00", days: "1,2,3,4,5", valid_on: null,
+      group_name: "Maison", group_stations: [{ station_id: "1", station_name: "Gare" }, { station_id: "9", station_name: "Cirque" }] }];
+    renderPage();
+    expect(await screen.findByText("Maison")).toBeTruthy();
+    expect(screen.getByText("Gare, Cirque · toutes ≤ 0 vélo · 08:00–09:00")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Modifier" }));
+    const f = within(form());
+    // Station du groupe hors favoris quand même proposée et cochée.
+    expect(f.getByRole("checkbox", { name: "Cirque" }).checked).toBe(true);
+    expect(f.getByLabelText("Nom du groupe").value).toBe("Maison");
+
+    // Repasser en « Une station » : le PATCH efface le groupe.
+    fireEvent.click(f.getByRole("button", { name: "Une station" }));
+    fireEvent.click(f.getByRole("button", { name: "Enregistrer" }));
+    await waitFor(() => expect(calls.some((c) => c.method === "PATCH")).toBe(true));
+    expect(calls.find((c) => c.method === "PATCH").body).toMatchObject({ station_id: "1", group_stations: null, group_name: null });
+  });
+});
+
 describe("liste", () => {
   test("résumés : trajet, ponctuelle", async () => {
     alerts = [

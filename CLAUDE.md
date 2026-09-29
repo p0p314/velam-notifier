@@ -175,7 +175,12 @@ Modèle d'alerte (`routes/alerts.js` → `validateAlertPayload`, PATCH = fusion 
   (« il y en a de nouveau ») ;
 - trajet : `arrival_station_*` + `arrival_threshold` (uniquement `bikes`/`at_most`) ⇒
   déclenche si peu de vélos au départ **ou** peu de places à l'arrivée ;
-- `valid_on` (YYYY-MM-DD) : alerte ponctuelle.
+- `valid_on` (YYYY-MM-DD) : alerte ponctuelle ;
+- groupe : `group_stations` (JSON `[{ station_id, station_name }]`, 2 à 5 stations) +
+  `group_name` facultatif (« Maison ») ⇒ la règle porte sur la **meilleure** station du
+  groupe : « au plus N » déclenche quand **toutes** sont basses, « au moins N » dès qu'**une**
+  suffit. Une seule notification (détail par station), clé anti-spam = `n1|n2|…`, pas de
+  station de repli ni de trajet. La 1re station est recopiée dans `station_id` / `station_name`.
 
 Station fermée : `is_renting=false` ⇒ 0 vélo, `is_returning=false` ⇒ 0 place.
 Anti-spam par jour, générique : `evaluateAlert` renvoie `{ triggered, key }` (clé = compte, ou
@@ -275,7 +280,8 @@ Tables (créées/migrées par `database/migrations.js`, dialecte selon `DATABASE
 `stations` (référentiel statique), `config` (clé/valeur : secret JWT, clés VAPID),
 `users` (+ `alerts_paused_until`), `favorites` (unique `user_id+station_id`, `label`, `sort_order`
 — NULL tant que l'utilisateur n'a jamais ordonné : ordre alphabétique), `push_subscriptions`
-(unique `endpoint`), `alerts` (cf. modèle ci-dessus ; `threshold` a remplacé `min_count`,
+(unique `endpoint`), `alerts` (cf. modèle ci-dessus ; `group_stations` stocké en JSON texte,
+parsé par `db.js` → tableau ; `threshold` a remplacé `min_count`,
 `last_notified_key` a remplacé `last_notified_count`), `rental_apps` (deep links par plateforme).
 Helpers de migration portables : `columnsOf` / `addColumn` / `dropColumn` (`migrations.js`).
 

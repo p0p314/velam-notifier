@@ -1,7 +1,7 @@
 import { describe, test, expect } from "vitest";
 import {
   defaultForm, formFromAlert, validateForm, payloadFromForm, describeAlert,
-  tripAllowed, localYmd, addDaysYmd, fmtDay,
+  tripAllowed, groupRuleText, localYmd, addDaysYmd, fmtDay,
 } from "../lib/alerts";
 
 const names = { 1: "Gare", 2: "Zoo" };
@@ -53,6 +53,7 @@ describe("payloadFromForm", () => {
     expect(payloadFromForm({ ...base, bikeType: "ebike", days: [1, 3] }, names, "2025-09-24")).toEqual({
       station_id: "1", station_name: "Gare", target: "bikes", comparison: "at_most", bike_type: "ebike",
       threshold: 2, arrival_station_id: null, arrival_station_name: null, arrival_threshold: null,
+      group_stations: null, group_name: null,
       time_start: "08:00", time_end: "10:00", days: "1,3", valid_on: null,
     });
   });
@@ -82,10 +83,52 @@ describe("formFromAlert ↔ payloadFromForm", () => {
     const alert = {
       id: 3, station_id: "1", station_name: "Gare", target: "bikes", comparison: "at_most", bike_type: "mechanical",
       threshold: 1, arrival_station_id: "2", arrival_station_name: "Zoo", arrival_threshold: 2,
+      group_stations: null, group_name: null,
       time_start: "07:30", time_end: "08:30", days: "1,2,3,4,5", valid_on: null,
     };
     const { id, ...rest } = alert;
     expect(payloadFromForm(formFromAlert(alert), names)).toEqual(rest);
+  });
+
+  test("aller-retour d'un groupe", () => {
+    const alert = {
+      id: 4, station_id: "2", station_name: "Zoo", target: "docks", comparison: "at_least", bike_type: "any",
+      threshold: 3, arrival_station_id: null, arrival_station_name: null, arrival_threshold: null,
+      group_stations: [{ station_id: "2", station_name: "Zoo" }, { station_id: "1", station_name: "Gare" }],
+      group_name: "Maison", time_start: "07:30", time_end: "08:30", days: "1,2,3,4,5", valid_on: null,
+    };
+    const { id, ...rest } = alert;
+    expect(payloadFromForm(formFromAlert(alert), names)).toEqual(rest);
+  });
+});
+
+describe("groupe de stations", () => {
+  const group = { ...defaultForm(), stationId: "1", group: true, groupIds: ["1", "2"], groupName: " Maison " };
+
+  test("validation : 2 à 5 stations, nom ≤ 40 caractères", () => {
+    expect(validateForm(group)).toBeNull();
+    expect(validateForm({ ...group, groupIds: ["1"] })).toMatch(/de 2 à 5 stations/);
+    expect(validateForm({ ...group, groupIds: ["1", "2", "3", "4", "5", "6"] })).toMatch(/de 2 à 5 stations/);
+    expect(validateForm({ ...group, groupName: "x".repeat(41) })).toMatch(/40 caractères/);
+  });
+  test("payload : stations nommées, 1re station recopiée, nom nettoyé", () => {
+    const p = payloadFromForm({ ...group, groupIds: ["2", "1"] }, names);
+    expect(p).toMatchObject({
+      station_id: "2", station_name: "Zoo", group_name: "Maison",
+      group_stations: [{ station_id: "2", station_name: "Zoo" }, { station_id: "1", station_name: "Gare" }],
+    });
+    expect(payloadFromForm({ ...group, groupName: "  " }, names).group_name).toBeNull();
+  });
+  test("pas de trajet sur un groupe", () => {
+    expect(tripAllowed(group)).toBe(false);
+    expect(payloadFromForm({ ...group, trip: true, arrivalId: "2" }, names).arrival_station_id).toBeNull();
+  });
+  test("règle en toutes lettres", () => {
+    expect(groupRuleText({ ...group, threshold: 1 })).toBe("Alerte seulement quand toutes les stations ont au plus 1 vélo.");
+    expect(groupRuleText({ ...group, comparison: "at_least", bikeType: "ebike", threshold: 2 }))
+      .toBe("Alerte dès qu'une des stations a au moins 2 vélos électriques.");
+    expect(groupRuleText({ ...group, target: "docks", threshold: 3 }))
+      .toBe("Alerte seulement quand toutes les stations ont au plus 3 places libres.");
   });
 });
 
@@ -97,6 +140,13 @@ describe("describeAlert", () => {
   test("trajet", () => {
     const d = describeAlert({ ...a, bike_type: "any", threshold: 1, arrival_station_id: "2", arrival_station_name: "Zoo", arrival_threshold: 0 });
     expect(d).toEqual({ title: "Gare → Zoo", detail: "Départ ≤ 1 vélo · Arrivée ≤ 0 place · 08:00–09:00" });
+  });
+  test("groupe nommé / sans nom", () => {
+    const g = { ...a, bike_type: "any", threshold: 1, group_name: "Maison",
+      group_stations: [{ station_id: "1", station_name: "Gare" }, { station_id: "2", station_name: "Zoo" }] };
+    expect(describeAlert(g)).toEqual({ title: "Maison", detail: "Gare, Zoo · toutes ≤ 1 vélo · 08:00–09:00" });
+    expect(describeAlert({ ...g, group_name: null, comparison: "at_least" }))
+      .toEqual({ title: "Gare, Zoo", detail: "L'une ≥ 1 vélo · 08:00–09:00" });
   });
 });
 

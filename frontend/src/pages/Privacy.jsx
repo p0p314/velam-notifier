@@ -16,7 +16,7 @@ export default function Privacy() {
       <ul>
         <li><b>Votre compte</b> : un nom d'utilisateur et votre mot de passe <b>chiffré</b> (haché, jamais lisible). Aucune adresse e-mail, aucun nom réel.</li>
         <li><b>Vos favoris</b> et le nom que vous leur donnez, ainsi que leur ordre.</li>
-        <li><b>Vos alertes</b> : stations, seuils, horaires, jours, et la date de pause éventuelle.</li>
+        <li><b>Vos alertes</b> : stations, seuils, horaires, jours, le nom éventuel de vos groupes de stations, et la date de pause éventuelle.</li>
         <li><b>Vos appareils</b> ayant activé les notifications : l'adresse technique fournie par votre navigateur pour vous les envoyer.</li>
       </ul>
       <p>Sur votre appareil, l'application garde votre session et la dernière liste des stations et de vos favoris, pour fonctionner hors ligne. Votre position n'est utilisée que sur votre appareil (tri par proximité, « Autour de moi ») et n'est <b>jamais envoyée</b> au serveur.</p>

@@ -14,6 +14,9 @@ const BIKE_TYPES = ['mechanical', 'ebike', 'any'];
 const TARGETS    = ['bikes', 'docks'];
 const COMPARISONS = ['at_most', 'at_least'];
 const MAX_COUNT  = 50;
+const GROUP_MIN  = 2;
+const GROUP_MAX  = 5;   // au-delà, le corps de la notification est tronqué
+const GROUP_NAME_MAX = 40;
 const PAUSE_MAX_DAYS = 365;
 const YMD_OK = (v) => typeof v === 'string' && YMD.test(v);
 
@@ -30,7 +33,11 @@ const present = (v) => v !== undefined && v !== null && v !== '';
  *    que N ») ou `at_least` N (« il y en a de nouveau N ») ;
  *  - trajet : `arrival_station_*` + `arrival_threshold` ⇒ surveille aussi les places
  *    à la station d'arrivée (uniquement en mode vélos / at_most : alerte « problème ») ;
- *  - `valid_on` : alerte ponctuelle, valable ce jour-là seulement (YYYY-MM-DD).
+ *  - `valid_on` : alerte ponctuelle, valable ce jour-là seulement (YYYY-MM-DD) ;
+ *  - groupe : `group_stations` ([{ station_id, station_name }], 2 à 5) + `group_name`
+ *    facultatif ⇒ la règle s'applique à la meilleure station du groupe (« au plus N » :
+ *    toutes sont basses ; « au moins N » : une suffit). La 1re station est recopiée dans
+ *    `station_id` / `station_name`. Incompatible avec un trajet.
  *
  * `current` (PATCH) : l'alerte existante ; le payload est fusionné dessus puis tout
  * est revalidé (les règles croisées restent cohérentes). `today` : date du jour dans
@@ -42,6 +49,19 @@ function validateAlertPayload(body, { current = null, today = null } = {}) {
   if (body.threshold === undefined && body.min_count !== undefined) src.threshold = body.min_count;
   const fields = {};
   const errors = [];
+
+  const group = validateGroup(src.group_stations, errors);
+  if (group) {
+    fields.group_stations = group;
+    const name = typeof src.group_name === 'string' ? src.group_name.trim() : '';
+    if (name.length > GROUP_NAME_MAX) errors.push(`group_name (${GROUP_NAME_MAX} caractères max)`);
+    fields.group_name = name || null;
+    src.station_id = group[0].station_id;
+    src.station_name = group[0].station_name;
+  } else {
+    fields.group_stations = null;
+    fields.group_name = null;
+  }
 
   if (present(src.station_id) && String(src.station_id).length <= 64) fields.station_id = String(src.station_id);
   else errors.push('station_id');
@@ -75,6 +95,7 @@ function validateAlertPayload(body, { current = null, today = null } = {}) {
     if (fields.target !== 'bikes' || fields.comparison !== 'at_most') {
       errors.push('trajet : uniquement pour une alerte « vélos, au plus N »');
     }
+    if (group) errors.push('trajet : impossible pour un groupe de stations');
     const arr = src.arrival_threshold === undefined || src.arrival_threshold === null ? 1 : Number(src.arrival_threshold);
     if (isInt(arr, 0, MAX_COUNT)) fields.arrival_threshold = arr;
     else errors.push(`arrival_threshold (entier 0-${MAX_COUNT})`);
@@ -103,6 +124,30 @@ function validateAlertPayload(body, { current = null, today = null } = {}) {
   fields.active = src.active === undefined ? 1 : (src.active ? 1 : 0);
 
   return { fields, errors };
+}
+
+/**
+ * Stations d'un groupe : null si absent (alerte simple), sinon tableau normalisé
+ * [{ station_id, station_name }] de 2 à 5 stations distinctes (erreurs dans `errors`).
+ */
+function validateGroup(raw, errors) {
+  if (raw === undefined || raw === null) return null;
+  const label = `group_stations (${GROUP_MIN} à ${GROUP_MAX} stations distinctes)`;
+  if (!Array.isArray(raw) || raw.length < GROUP_MIN || raw.length > GROUP_MAX) {
+    errors.push(label);
+    return null;
+  }
+  const group = [];
+  for (const s of raw) {
+    const id = present(s?.station_id) ? String(s.station_id) : '';
+    const name = present(s?.station_name) ? String(s.station_name) : '';
+    if (!id || id.length > 64 || !name || name.length > 128 || group.some((g) => g.station_id === id)) {
+      errors.push(label);
+      return null;
+    }
+    group.push({ station_id: id, station_name: name });
+  }
+  return group;
 }
 
 // Identifiant d'alerte : entier positif, sinon 404 (évite un NaN envoyé à Postgres → 500).

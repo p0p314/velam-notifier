@@ -126,6 +126,33 @@ describe('alertes v1.1', () => {
     assert.equal(trip.body.alert.arrival_threshold, 1);
   });
 
+  test('groupe de stations : enregistré, relu, modifiable, repassé en simple', async () => {
+    const { token } = await registerUser(api);
+    const group_stations = [{ station_id: '1', station_name: 'Gare' }, { station_id: '2', station_name: 'Zoo' }];
+    const res = await api.post('/api/alerts', { token, body: { ...body, group_stations, group_name: 'Maison' } });
+    assert.equal(res.status, 201);
+    assert.deepEqual(res.body.alert.group_stations, group_stations);
+    assert.equal(res.body.alert.group_name, 'Maison');
+
+    const list = await api.get('/api/alerts', { token });
+    assert.deepEqual(list.body.alerts[0].group_stations, group_stations);
+
+    const paused = await api.patch(`/api/alerts/${res.body.alert.id}`, { token, body: { active: false } });
+    assert.deepEqual(paused.body.alert.group_stations, group_stations);
+
+    const single = await api.patch(`/api/alerts/${res.body.alert.id}`, { token, body: { group_stations: null } });
+    assert.equal(single.status, 200);
+    assert.equal(single.body.alert.group_stations, null);
+    assert.equal(single.body.alert.group_name, null);
+    assert.equal(single.body.alert.station_id, '1');
+  });
+
+  test('groupe invalide (1 station) → 400', async () => {
+    const { token } = await registerUser(api);
+    const res = await api.post('/api/alerts', { token, body: { ...body, group_stations: [{ station_id: '1', station_name: 'Gare' }] } });
+    assert.equal(res.status, 400);
+  });
+
   test('trajet incohérent → 400', async () => {
     const { token } = await registerUser(api);
     const res = await api.post('/api/alerts', { token, body: { ...body, target: 'docks', arrival_station_id: '2', arrival_station_name: 'Zoo' } });
