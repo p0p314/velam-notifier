@@ -14,15 +14,20 @@ describe("defaultForm", () => {
     expect(f.days).toEqual([1, 2, 3, 4, 5, 6, 7]);
   });
 
-  test("depuis une station : créneau qui démarre maintenant (quart d'heure) pour 1 h 30", () => {
-    const f = defaultForm({ station_id: "1", name: "Gare" }, new Date(2025, 8, 24, 7, 52));
+  test("créneau : de l'heure actuelle (à la minute) à +30 min", () => {
+    const f = defaultForm(null, new Date(2025, 8, 24, 7, 52));
+    expect([f.timeStart, f.timeEnd]).toEqual(["07:52", "08:22"]);
+  });
+
+  test("depuis une station : même créneau, station présélectionnée", () => {
+    const f = defaultForm({ station_id: "1", name: "Gare" }, new Date(2025, 8, 24, 13, 5));
     expect(f.stationId).toBe("1");
-    expect([f.timeStart, f.timeEnd]).toEqual(["07:45", "09:15"]);
+    expect([f.timeStart, f.timeEnd]).toEqual(["13:05", "13:35"]);
   });
 
   test("tard le soir : fin bornée à 23:59", () => {
-    const f = defaultForm({ station_id: "1" }, new Date(2025, 8, 24, 23, 10));
-    expect([f.timeStart, f.timeEnd]).toEqual(["23:00", "23:59"]);
+    const f = defaultForm(null, new Date(2025, 8, 24, 23, 40));
+    expect([f.timeStart, f.timeEnd]).toEqual(["23:40", "23:59"]);
   });
 });
 
@@ -48,14 +53,14 @@ describe("validateForm", () => {
 });
 
 describe("payloadFromForm", () => {
-  const base = { ...defaultForm(), stationId: "1", threshold: "2" };
+  const base = { ...defaultForm(null, new Date(2025, 8, 24, 8, 0)), stationId: "1", threshold: "2" };
 
   test("alerte vélos classique", () => {
     expect(payloadFromForm({ ...base, bikeType: "ebike", days: [1, 3] }, names, "2025-09-24")).toEqual({
       kind: "threshold", station_id: "1", station_name: "Gare", target: "bikes", comparison: "at_most", bike_type: "ebike",
       threshold: 2, arrival_station_id: null, arrival_station_name: null, arrival_threshold: null,
       group_stations: null, group_name: null,
-      time_start: "08:00", time_end: "10:00", days: "1,3", valid_on: null,
+      time_start: "08:00", time_end: "08:30", days: "1,3", valid_on: null,
     });
   });
 

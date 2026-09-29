@@ -24,12 +24,17 @@ export function addDaysYmd(ymd, n) {
 
 const hhmm = (d) => `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
 
+// Durée du créneau proposé à la création : de maintenant à +30 min.
+export const DEFAULT_WINDOW_MIN = 30;
+
 /**
- * Formulaire vierge. Avec `station` (création depuis un favori), propose un créneau
- * qui démarre maintenant (arrondi au quart d'heure) pour 1 h 30.
+ * Formulaire vierge (`station` : création depuis la fiche d'une station). Le créneau
+ * proposé démarre à l'heure actuelle et dure 30 min ; s'il déborderait après minuit,
+ * il s'arrête à 23:59.
  */
 export function defaultForm(station = null, now = new Date()) {
-  const form = {
+  const end = new Date(now.getTime() + DEFAULT_WINDOW_MIN * 60_000);
+  return {
     kind: "threshold",
     stationId: station?.station_id ?? "",
     group: false,
@@ -42,21 +47,12 @@ export function defaultForm(station = null, now = new Date()) {
     trip: false,
     arrivalId: "",
     arrivalThreshold: 1,
-    timeStart: "08:00",
-    timeEnd: "10:00",
+    timeStart: hhmm(now),
+    timeEnd: end.getDate() === now.getDate() ? hhmm(end) : "23:59",
     sendTime: "08:00",
     days: [...ALL_DAYS],
     oneShot: false,
   };
-  if (station) {
-    const start = new Date(now);
-    start.setMinutes(Math.floor(start.getMinutes() / 15) * 15, 0, 0);
-    const end = new Date(start.getTime() + 90 * 60_000);
-    // Créneau qui déborderait après minuit : on s'arrête à 23:59.
-    form.timeStart = hhmm(start);
-    form.timeEnd = end.getDate() === start.getDate() ? hhmm(end) : "23:59";
-  }
-  return form;
 }
 
 /** Alerte API → état du formulaire (édition). */

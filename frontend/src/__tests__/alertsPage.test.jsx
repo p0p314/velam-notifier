@@ -193,6 +193,21 @@ describe("résumé à heure fixe", () => {
   });
 });
 
+describe("créneau par défaut", () => {
+  test("nouvelle alerte : de l'heure actuelle à +30 min", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date(2025, 8, 24, 18, 7));
+    try {
+      await ready();
+      const f = within(form());
+      expect(f.getByLabelText("Début").value).toBe("18:07");
+      expect(f.getByLabelText("Fin").value).toBe("18:37");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
 describe("liste", () => {
   test("résumés : trajet, ponctuelle", async () => {
     alerts = [
