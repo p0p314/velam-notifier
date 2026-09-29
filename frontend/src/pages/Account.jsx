@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { useAuth } from "../auth";
@@ -7,8 +7,12 @@ import { usePushState, TestPushButton } from "../components/PushControls";
 import Icon from "../components/Icon";
 import { APP_VERSION } from "../theme";
 import { shareApp } from "../lib/share";
+import { fmtLastSeen, exportFileName, downloadJson } from "../lib/devices";
+import { BIKE_TYPES, LANDINGS, getBikePref, setBikePref, getLandingPref, setLandingPref } from "../lib/prefs";
+import { useTheme, THEME_MODES } from "../useTheme";
 
 const TABS = [
+  { value: "preferences",   label: "Préférences" },
   { value: "notifications", label: "Notifications" },
   { value: "securite",      label: "Sécurité" },
 ];
@@ -114,38 +118,150 @@ function DeleteAccount() {
   );
 }
 
-/** Déconnecte tous les autres appareils (cet appareil reste connecté). */
-function LogoutOthers() {
+/**
+ * Appareils connectés au compte : dernière activité, déconnexion d'un appareil
+ * précis ou de tous les autres (cet appareil reste connecté avec un jeton neuf).
+ */
+function Devices() {
   const { renewSession } = useAuth();
+  const [sessions, setSessions] = useState(null);
   const [msg, setMsg]   = useState(null); // { ok, text }
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState(null);  // id en cours, ou "all"
 
+  const load = useCallback(async () => {
+    try { setSessions((await api("/api/auth/sessions")).sessions ?? []); }
+    catch (err) { setMsg({ ok: false, text: err.message }); }
+  }, []);
+  useEffect(() => { load(); }, [load]);
+
+  const act = async (key, action, okText) => {
+    setMsg(null);
+    setBusy(key);
+    try {
+      await action();
+      setMsg({ ok: true, text: okText });
+      await load();
+    } catch (err) {
+      setMsg({ ok: false, text: err.message });
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const revokeOne = (s) => act(s.id,
+    () => api(`/api/auth/sessions/${encodeURIComponent(s.id)}`, { method: "DELETE" }),
+    `${s.label} a été déconnecté.`);
+  const revokeOthers = () => act("all", async () => {
+    const endpoint = await currentPushEndpoint();
+    renewSession(await api("/api/auth/logout-others", { method: "POST", body: endpoint ? { endpoint } : {} }));
+  }, "Tous vos autres appareils ont été déconnectés.");
+
+  const others = sessions?.filter((s) => !s.current).length ?? 0;
+  return (
+    <div className="account-card">
+      <div className="form-title">Appareils connectés</div>
+      <p className="account-text">Un appareil déconnecté doit se reconnecter et cesse de recevoir vos alertes.</p>
+      {sessions === null ? (
+        <p className="account-text">Chargement…</p>
+      ) : (
+        <ul className="device-list" aria-label="Appareils connectés">
+          {sessions.map((s) => (
+            <li key={s.id} className="device-row">
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div className="device-name">{s.label}{s.current && <span className="device-badge">Cet appareil</span>}</div>
+                <div className="device-meta">Dernière activité {fmtLastSeen(s.last_seen_at)}</div>
+              </div>
+              {!s.current && (
+                <button type="button" className="device-btn" disabled={busy !== null}
+                  aria-label={`Déconnecter ${s.label}`} onClick={() => revokeOne(s)}>
+                  {busy === s.id ? "…" : "Déconnecter"}
+                </button>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+      {msg && <div className={msg.ok ? "form-ok" : "form-error"} role="status">{msg.text}</div>}
+      {others > 0 && (
+        <button type="button" className="cancel-btn" disabled={busy !== null} onClick={revokeOthers}>
+          <Icon name="log-out" size={16} /> {busy === "all" ? "…" : "Déconnecter tous les autres appareils"}
+        </button>
+      )}
+    </div>
+  );
+}
+
+/** Export de toutes les données du compte en fichier JSON (droit à la portabilité). */
+function ExportData() {
+  const [msg, setMsg]   = useState(null);
+  const [busy, setBusy] = useState(false);
   const run = async () => {
     setMsg(null);
     setBusy(true);
     try {
-      const endpoint = await currentPushEndpoint();
-      const data = await api("/api/auth/logout-others", { method: "POST", body: endpoint ? { endpoint } : {} });
-      renewSession(data);
-      setMsg({ ok: true, text: "Tous vos autres appareils ont été déconnectés." });
+      const data = await api("/api/auth/export");
+      downloadJson(data.export, exportFileName());
+      setMsg({ ok: true, text: "Fichier téléchargé." });
     } catch (err) {
       setMsg({ ok: false, text: err.message });
     } finally {
       setBusy(false);
     }
   };
-
   return (
     <div className="account-card">
-      <div className="form-title">Appareils connectés</div>
-      <p className="account-text">
-        Déconnecte votre compte de tous vos autres téléphones et ordinateurs, qui cessent aussi
-        de recevoir vos alertes. Cet appareil reste connecté.
-      </p>
+      <div className="form-title">Mes données</div>
+      <p className="account-text">Téléchargez vos favoris, vos alertes et la liste de vos appareils dans un fichier (format JSON).</p>
       {msg && <div className={msg.ok ? "form-ok" : "form-error"} role="status">{msg.text}</div>}
       <button type="button" className="cancel-btn" disabled={busy} onClick={run}>
-        <Icon name="log-out" size={16} /> {busy ? "…" : "Déconnecter tous les autres appareils"}
+        <Icon name="download" size={16} /> {busy ? "…" : "Exporter mes données"}
       </button>
+    </div>
+  );
+}
+
+function Field({ label, hint, children }) {
+  return (
+    <div className="pref-field">
+      <span className="form-label">{label}</span>
+      {children}
+      {hint && <span className="form-hint">{hint}</span>}
+    </div>
+  );
+}
+
+/** Préférences de cet appareil : thème, type de vélo par défaut, page d'ouverture. */
+function PreferencesTab() {
+  const { mode, setMode } = useTheme();
+  const [bike, setBike] = useState(getBikePref);
+  const [landing, setLanding] = useState(getLandingPref);
+  return (
+    <div className="account-card">
+      <Field label="Thème" hint={mode === "system" ? "Suit le réglage clair / sombre de votre appareil." : null}>
+        <Seg label="Thème" options={THEME_MODES} value={mode} onChange={setMode} />
+      </Field>
+      <Field label="Type de vélo par défaut" hint="Pré-remplit les alertes et les filtres des pages Stations et Carte.">
+        <Seg label="Type de vélo par défaut" options={BIKE_TYPES} value={bike}
+          onChange={(v) => { setBike(v); setBikePref(v); }} />
+      </Field>
+      <Field label="Page d'ouverture" hint={landing === "auto" ? "Favoris sur téléphone, Stations sur ordinateur." : null}>
+        <Seg label="Page d'ouverture" options={LANDINGS} value={landing}
+          onChange={(v) => { setLanding(v); setLandingPref(v); }} />
+      </Field>
+      <p className="account-text">Ces préférences sont propres à cet appareil.</p>
+    </div>
+  );
+}
+
+function Seg({ options, value, onChange, label }) {
+  return (
+    <div className="seg" role="group" aria-label={label}>
+      {options.map((o) => (
+        <button key={o.value} type="button" aria-pressed={value === o.value}
+          className={value === o.value ? "active" : ""} onClick={() => onChange(o.value)}>
+          {o.label}
+        </button>
+      ))}
     </div>
   );
 }
@@ -199,7 +315,8 @@ function SecurityTab() {
   return (
     <>
       <PasswordForm />
-      <LogoutOthers />
+      <Devices />
+      <ExportData />
       <DeleteAccount />
     </>
   );
@@ -253,7 +370,7 @@ export default function Account() {
         ))}
       </div>
       <div role="tabpanel" aria-label={TABS.find((t) => t.value === tab).label} className="settings-panel">
-        {tab === "notifications" ? <NotificationsTab /> : <SecurityTab />}
+        {tab === "preferences" ? <PreferencesTab /> : tab === "notifications" ? <NotificationsTab /> : <SecurityTab />}
       </div>
 
       <ShareButton />

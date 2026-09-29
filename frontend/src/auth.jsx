@@ -34,9 +34,11 @@ export function AuthProvider({ children }) {
     setUser(null);
   }, []);
 
-  // Async : détache d'abord l'appareil (tant que le jeton est encore valide).
+  // Async : détache d'abord l'appareil et ferme sa session côté serveur (tant que le
+  // jeton est encore valide) — il disparaît de « Appareils connectés ». Best-effort.
   const logout = useCallback(async () => {
     await unlinkPush();
+    await api("/api/auth/logout", { method: "POST" }).catch(() => {});
     endSession();
   }, [endSession]);
 

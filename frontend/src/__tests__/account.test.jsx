@@ -7,6 +7,7 @@ import Account from "../pages/Account";
 import Privacy from "../pages/Privacy";
 import Login from "../pages/Login";
 import { jsonResponse } from "./setup";
+import { ThemeProvider } from "../useTheme";
 
 // Faux module de notifications : `push.state` pilote l'état de cet appareil.
 const push = vi.hoisted(() => ({ state: "on" }));
@@ -55,12 +56,20 @@ beforeEach(() => {
 });
 
 const SECU = "/compte?onglet=securite";
+const NOTIF = "/compte?onglet=notifications";
+const SESSIONS = [
+  { id: "s1", label: "iPhone · Safari", created_at: 1, last_seen_at: Date.now(), current: true },
+  { id: "s2", label: "Windows · Edge", created_at: 1, last_seen_at: Date.now() - 86_400_000 * 3, current: false },
+];
 
 describe("Paramètres — Sécurité", () => {
   test("déconnecter tous les autres appareils : cet appareil garde un jeton neuf", async () => {
-    mockApi({ "POST /api/auth/logout-others": () => jsonResponse({ ok: true, token: "jeton-neuf", user: { id: 1, username: "alice" }, devices: 2 }) });
+    mockApi({
+      "GET /api/auth/sessions": () => jsonResponse({ ok: true, sessions: SESSIONS }),
+      "POST /api/auth/logout-others": () => jsonResponse({ ok: true, token: "jeton-neuf", user: { id: 1, username: "alice" }, devices: 2 }),
+    });
     renderAt(SECU);
-    fireEvent.click(screen.getByRole("button", { name: "Déconnecter tous les autres appareils" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Déconnecter tous les autres appareils" }));
     expect(await screen.findByText("Tous vos autres appareils ont été déconnectés.")).toBeTruthy();
     expect(lastCall("POST", "/api/auth/logout-others").body).toEqual({ endpoint: "https://push.example.com/ici" });
     expect(getToken()).toBe("jeton-neuf");
@@ -68,9 +77,9 @@ describe("Paramètres — Sécurité", () => {
 
   test("déconnecter les autres appareils : sans notifications, aucun appareil conservé", async () => {
     push.state = "off";
-    mockApi();
+    mockApi({ "GET /api/auth/sessions": () => jsonResponse({ ok: true, sessions: SESSIONS }) });
     renderAt(SECU);
-    fireEvent.click(screen.getByRole("button", { name: "Déconnecter tous les autres appareils" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Déconnecter tous les autres appareils" }));
     await waitFor(() => expect(lastCall("POST", "/api/auth/logout-others")).toBeTruthy());
     expect(lastCall("POST", "/api/auth/logout-others").body).toEqual({});
     expect(getToken()).toBe("t"); // réponse sans jeton : session inchangée
@@ -138,24 +147,90 @@ describe("Paramètres — Sécurité", () => {
   });
 });
 
+describe("Paramètres — Appareils connectés", () => {
+  test("liste : appareil courant signalé, déconnexion d'un autre appareil puis rechargement", async () => {
+    let sessions = SESSIONS;
+    mockApi({
+      "GET /api/auth/sessions": () => jsonResponse({ ok: true, sessions }),
+      "DELETE /api/auth/sessions/s2": () => { sessions = SESSIONS.slice(0, 1); return jsonResponse({ ok: true }); },
+    });
+    renderAt(SECU);
+    const list = within(await screen.findByRole("list", { name: "Appareils connectés" }));
+    expect(list.getByText("Cet appareil")).toBeTruthy();
+    expect(list.getByText(/Dernière activité le /)).toBeTruthy();
+    expect(list.queryByRole("button", { name: "Déconnecter iPhone · Safari" })).toBeNull();
+
+    fireEvent.click(list.getByRole("button", { name: "Déconnecter Windows · Edge" }));
+    expect(await screen.findByText("Windows · Edge a été déconnecté.")).toBeTruthy();
+    expect(lastCall("DELETE", "/api/auth/sessions/s2")).toBeTruthy();
+    await waitFor(() => expect(screen.queryByText("Windows · Edge")).toBeNull());
+    // Plus aucun autre appareil : pas de bouton « tous les autres ».
+    expect(screen.queryByRole("button", { name: "Déconnecter tous les autres appareils" })).toBeNull();
+  });
+});
+
+describe("Paramètres — Mes données", () => {
+  test("export : fichier JSON téléchargé", async () => {
+    const created = [];
+    URL.createObjectURL = vi.fn((blob) => { created.push(blob); return "blob:x"; });
+    URL.revokeObjectURL = vi.fn();
+    const click = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+    mockApi({ "GET /api/auth/export": () => jsonResponse({ ok: true, export: { account: { username: "alice" }, favorites: [] } }) });
+    renderAt(SECU);
+    fireEvent.click(screen.getByRole("button", { name: "Exporter mes données" }));
+    expect(await screen.findByText("Fichier téléchargé.")).toBeTruthy();
+    expect(click).toHaveBeenCalledTimes(1);
+    const text = await new Promise((resolve) => {
+      const reader = new FileReader(); // Blob de jsdom : ni .text() ni lecture par Response
+      reader.onload = () => resolve(reader.result);
+      reader.readAsText(created[0]);
+    });
+    expect(JSON.parse(text)).toEqual({ account: { username: "alice" }, favorites: [] });
+    click.mockRestore();
+  });
+});
+
+describe("Paramètres — Préférences", () => {
+  test("thème, type de vélo et page d'ouverture mémorisés sur l'appareil", async () => {
+    mockApi();
+    render(
+      <MemoryRouter initialEntries={["/compte"]}>
+        <ThemeProvider><AuthProvider><Routes><Route path="/compte" element={<Account />} /></Routes></AuthProvider></ThemeProvider>
+      </MemoryRouter>
+    );
+    const theme = within(screen.getByRole("group", { name: "Thème" }));
+    fireEvent.click(theme.getByRole("button", { name: "Sombre" }));
+    expect(document.documentElement.dataset.theme).toBe("dark");
+    expect(localStorage.getItem("velopulse-theme")).toBe("dark");
+    fireEvent.click(theme.getByRole("button", { name: "Automatique" }));
+    expect(localStorage.getItem("velopulse-theme")).toBe("system");
+    expect(screen.getByText(/Suit le réglage clair \/ sombre/)).toBeTruthy();
+
+    fireEvent.click(within(screen.getByRole("group", { name: "Type de vélo par défaut" })).getByRole("button", { name: "Électrique" }));
+    expect(localStorage.getItem("velopulse-pref-bike")).toBe("ebike");
+    fireEvent.click(within(screen.getByRole("group", { name: "Page d'ouverture" })).getByRole("button", { name: "Carte" }));
+    expect(localStorage.getItem("velopulse-pref-landing")).toBe("carte");
+  });
+});
+
 describe("Paramètres — page et onglets", () => {
-  test("compte affiché, onglet Notifications par défaut, Sécurité accessible", async () => {
+  test("compte affiché, onglet Préférences par défaut, Sécurité accessible", async () => {
     mockApi();
     renderAt("/compte");
     expect(screen.getByRole("heading", { name: "Paramètres" })).toBeTruthy();
     expect(screen.getByText("alice")).toBeTruthy();
     expect(screen.getByText(/ne peut pas être récupéré/)).toBeTruthy();
-    expect(screen.getByRole("tab", { name: "Notifications" }).getAttribute("aria-selected")).toBe("true");
+    expect(screen.getByRole("tab", { name: "Préférences" }).getAttribute("aria-selected")).toBe("true");
     expect(screen.queryByRole("form", { name: "Changer le mot de passe" })).toBeNull();
     fireEvent.click(screen.getByRole("tab", { name: "Sécurité" }));
     expect(screen.getByRole("form", { name: "Changer le mot de passe" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Supprimer mon compte…" })).toBeTruthy();
   });
 
-  test("onglet inconnu dans l'URL → Notifications", () => {
+  test("onglet inconnu dans l'URL → Préférences", () => {
     mockApi();
     renderAt("/compte?onglet=xyz");
-    expect(screen.getByRole("tab", { name: "Notifications" }).getAttribute("aria-selected")).toBe("true");
+    expect(screen.getByRole("tab", { name: "Préférences" }).getAttribute("aria-selected")).toBe("true");
   });
 });
 
@@ -164,7 +239,7 @@ describe("Paramètres — Notifications", () => {
 
   test("désactiver puis réactiver les notifications de cet appareil", async () => {
     mockApi();
-    renderAt("/compte");
+    renderAt(NOTIF);
     expect(toggle().getAttribute("aria-checked")).toBe("true");
     expect(screen.getByRole("button", { name: "Tester" })).toBeTruthy();
 
@@ -180,7 +255,7 @@ describe("Paramètres — Notifications", () => {
   test("bloquées dans le navigateur : explication, pas d'interrupteur", () => {
     push.state = "denied";
     mockApi();
-    renderAt("/compte");
+    renderAt(NOTIF);
     expect(screen.getByText(/bloquées pour VéloPulse/)).toBeTruthy();
     expect(screen.queryByRole("switch")).toBeNull();
   });

@@ -45,7 +45,7 @@ function boot() {
 /** Vide toutes les tables métier (ordre compatible avec les clés étrangères). */
 async function resetDb() {
   await boot();
-  for (const t of ['alerts', 'push_subscriptions', 'favorites', 'users', 'stations', 'rental_apps']) {
+  for (const t of ['alerts', 'push_subscriptions', 'favorites', 'sessions', 'users', 'stations', 'rental_apps']) {
     await dbc.run(`DELETE FROM ${t}`);
   }
 }

@@ -1,6 +1,8 @@
 // Logique des alertes côté client : valeurs par défaut, conversion formulaire ↔ API,
 // résumés lisibles. Sans React → testable unitairement.
 
+import { getBikePref } from "./prefs";
+
 export const ALL_DAYS = [1, 2, 3, 4, 5, 6, 7];
 
 // Groupe de stations : bornes alignées sur le serveur (routes/alerts.js).
@@ -42,7 +44,7 @@ export function defaultForm(station = null, now = new Date()) {
     groupName: "",
     target: "bikes",
     comparison: "at_most",
-    bikeType: "any",
+    bikeType: getBikePref(),
     threshold: 1,
     trip: false,
     arrivalId: "",

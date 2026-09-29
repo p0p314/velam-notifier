@@ -106,13 +106,18 @@ Modules CommonJS, séparation nette des responsabilités :
   `favorites`, `push_subscriptions`, `alerts`, `rental_apps`. Toutes les fonctions sont `async`.
 - **auth.js** — bcrypt + JWT (`{ id, username }`, expiration `JWT_TTL` défaut 30 j, HS256 ;
   session glissante via `GET /api/auth/me` qui renvoie un jeton neuf au démarrage du client). Secret résolu une
-  fois au boot (`JWT_SECRET` env, sinon aléatoire persisté). `requireAuth` (async) lit
-  `Authorization: Bearer`, vérifie que le jeton porte la **version de session** courante du
-  compte (`tv` ↔ `users.token_version`, une lecture par clé primaire ; jeton sans `tv` = 0),
-  pose `req.user`, sinon 401. Incrémenter `token_version` révoque tous les jetons du compte :
-  `POST /api/auth/logout-others` et `PUT /api/auth/password` déconnectent les autres
-  appareils (et détachent leurs notifications, sauf l'`endpoint` courant) et renvoient un
-  jeton neuf pour l'appareil courant.
+  fois au boot (`JWT_SECRET` env, sinon aléatoire persisté). **Sessions** : chaque connexion
+  crée une ligne `sessions` (un appareil : user-agent, création, dernière activité) et le jeton
+  porte son `sid`. `requireAuth` (async, une lecture par clé primaire) exige que la session
+  existe — sinon 401 — et pose `req.user` + `req.sessionId`. Jetons d'avant les sessions
+  (sans `sid`) : acceptés si leur `tv` = `users.token_version` ; `GET /api/auth/me` leur ouvre
+  une session. Révocation : `DELETE /api/auth/sessions/:id` (un appareil, + ses notifications),
+  `POST /api/auth/logout` (cet appareil), `POST /api/auth/logout-others` et
+  `PUT /api/auth/password` (tous les autres : sessions supprimées, `token_version` incrémentée,
+  notifications détachées sauf l'`endpoint` courant ; l'appareil courant reçoit une **session
+  neuve**, donc un jeton volé ne survit pas). `GET /api/auth/sessions` liste les appareils
+  (`device.js` → « iPhone · Safari ») et purge les sessions inactives au-delà de `JWT_TTL`.
+  `GET /api/auth/export` : toutes les données du compte en JSON (RGPD, jamais le mot de passe).
 - **push.js** — clés VAPID (env ou générées), envoi `web-push` (`sendToUser` → `{ total, sent }`),
   et la **boucle d'alerte** (`startPolling` → cycle non concurrent toutes les 30 s) :
   `evaluateAlert` (pure), messages (`buildMessage`), stations de repli (`findFallback`).
@@ -157,7 +162,8 @@ Erreurs upstream/proxy → **HTTP 502** `{ ok:false, error }`. Toutes les répon
 enveloppe `ok` ; le client `api()` lève sur `!res.ok || data.ok === false`. Routes protégées
 (`/api/favorites` (+ `PATCH /:id` label, `PUT /order`), `/api/alerts` (+ `PUT /pause`),
 `/api/push/subscribe|unsubscribe|test`, `/api/auth/me` (GET ; DELETE = suppression du compte),
-`PUT /api/auth/password`, `POST /api/auth/logout-others`,
+`PUT /api/auth/password`, `POST /api/auth/logout|logout-others`, `/api/auth/sessions` (GET, DELETE `/:id`),
+`GET /api/auth/export`,
 `POST /api/stations/refresh`) : Bearer requis. Publiques : login/register,
 `GET /api/stations`, `GET /api/rental-apps`, `GET /api/push/vapid-public-key`.
 Cron (`CRON_SECRET`) : `/cron/sync-rental-apps`, `/cron/refresh-stations` (workflow
@@ -237,7 +243,7 @@ React + `react-router-dom`. `main.jsx` enregistre `/sw.js`, injecte le CSS globa
 (`ThemeProvider` → `AuthProvider` → `PwaInstallProvider`) et les routes ; les routes applicatives
 sont derrière `<Protected>` + `<Layout>` (header mobile / navbar desktop / bottom-nav). La **carte
 est lazy-loadée** (`React.lazy`) pour garder mapbox-gl hors du bundle principal. Landing
-différenciée : mobile → `/favoris`, desktop → `/stations`.
+différenciée (réglable dans Paramètres › Préférences) : par défaut mobile → `/favoris`, desktop → `/stations`.
 
 - **api.js** — client `api(path, {method, body, auth})` unique : injecte le Bearer, normalise
   les erreurs, gère token/user en `localStorage`. Base = `VITE_API_URL`. Rejoue les GET sur
@@ -245,7 +251,12 @@ différenciée : mobile → `/favoris`, desktop → `/stations`.
   `auth:expired` (écouté par `AuthProvider` → retour `/login`).
 - **auth.jsx** — `AuthContext` / `useAuth` (login/register/logout async, `isAuthenticated`).
   Au démarrage : `/api/auth/me` (ignoré si la session a changé entre-temps) puis `syncPush()`.
-- **useTheme.jsx** — thème clair/sombre via `data-theme` sur `<html>`, persisté.
+- **useTheme.jsx** — thème via `data-theme` sur `<html>` ; mode `light|dark|system` persisté
+  (`system`, défaut : suit `prefers-color-scheme` en direct) ; le bouton de l'en-tête fixe un
+  thème explicite. `public/theme-init.js` applique le même choix avant le rendu.
+- **lib/prefs.js** — préférences **de l'appareil** (localStorage) : type de vélo par défaut
+  (formulaire d'alerte, filtres Stations / Carte via `stationFilterFor`) et page d'ouverture
+  (`landingPath`, utilisé par `<Landing>`).
 - **hooks.js** — `useStations` (poll 60 s + au retour au premier plan ; `stale` / `staleReason` :
   `upstream` = verdict serveur, `server` = serveur injoignable), `useFavorites` (liste, toggle, `rename`, `reorder`
   optimiste ; modifications **mises en file**, seule la réponse de la dernière est appliquée),
@@ -281,8 +292,9 @@ différenciée : mobile → `/favoris`, desktop → `/stations`.
   affiché seulement si les deux types coexistent — et triable par heure / nom / récentes,
   désactivées en dernier, choix mémorisés en `localStorage` ; pré-rempli via
   `location.state.alertStation` depuis la fiche station), `Account` (`/compte`, « Paramètres » :
-  compte + onglets `?onglet=notifications|securite` — notifications de cet appareil ; mot de
-  passe, déconnexion des autres appareils, suppression du compte — puis partage de l'app
+  compte + onglets `?onglet=preferences|notifications|securite` — thème / type de vélo / page
+  d'ouverture ; notifications de cet appareil ; mot de passe, appareils connectés
+  (`lib/devices.js`), export des données, suppression du compte — puis partage de l'app
   via `lib/share.js` : feuille de partage, sinon presse-papiers), `Privacy` (`/confidentialite`, publique).
 - **components/** — `StationCard` (desktop), `StationListItem` (mobile, étoile favori optionnelle
   via `onToggleFav`), `StationDetailSheet`,
@@ -302,7 +314,8 @@ se fait dans `push.js` (`countForType`) et `routes/stations.js` (`extractCount`)
 
 Tables (créées/migrées par `database/migrations.js`, dialecte selon `DATABASE_URL`) :
 `stations` (référentiel statique), `config` (clé/valeur : secret JWT, clés VAPID),
-`users` (+ `alerts_paused_until`, `token_version`), `favorites` (unique `user_id+station_id`, `label`, `sort_order`
+`users` (+ `alerts_paused_until`, `token_version`), `sessions` (appareils connectés, horodatages
+en ms), `push_subscriptions.session_id` (appareil de rattachement), `favorites` (unique `user_id+station_id`, `label`, `sort_order`
 — NULL tant que l'utilisateur n'a jamais ordonné : ordre alphabétique), `push_subscriptions`
 (unique `endpoint`), `alerts` (cf. modèle ci-dessus ; `group_stations` stocké en JSON texte,
 parsé par `db.js` → tableau ; `threshold` a remplacé `min_count`,

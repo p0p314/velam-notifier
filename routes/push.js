@@ -31,7 +31,7 @@ router.post('/api/push/subscribe', requireAuth, async (req, res) => {
     if (!isValidEndpoint(subscription?.endpoint) || typeof subscription.keys !== 'object' || !subscription.keys) {
       return res.status(400).json({ ok: false, error: 'subscription invalide' });
     }
-    await addSubscription(req.user.id, subscription);
+    await addSubscription(req.user.id, subscription, req.sessionId);
     res.status(201).json({ ok: true });
   } catch (err) {
     console.error('[POST /api/push/subscribe]', err.message);
