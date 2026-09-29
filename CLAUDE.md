@@ -106,8 +106,13 @@ Modules CommonJS, séparation nette des responsabilités :
   `favorites`, `push_subscriptions`, `alerts`, `rental_apps`. Toutes les fonctions sont `async`.
 - **auth.js** — bcrypt + JWT (`{ id, username }`, expiration `JWT_TTL` défaut 30 j, HS256 ;
   session glissante via `GET /api/auth/me` qui renvoie un jeton neuf au démarrage du client). Secret résolu une
-  fois au boot (`JWT_SECRET` env, sinon aléatoire persisté). `requireAuth` lit
-  `Authorization: Bearer`, pose `req.user`, sinon 401.
+  fois au boot (`JWT_SECRET` env, sinon aléatoire persisté). `requireAuth` (async) lit
+  `Authorization: Bearer`, vérifie que le jeton porte la **version de session** courante du
+  compte (`tv` ↔ `users.token_version`, une lecture par clé primaire ; jeton sans `tv` = 0),
+  pose `req.user`, sinon 401. Incrémenter `token_version` révoque tous les jetons du compte :
+  `POST /api/auth/logout-others` et `PUT /api/auth/password` déconnectent les autres
+  appareils (et détachent leurs notifications, sauf l'`endpoint` courant) et renvoient un
+  jeton neuf pour l'appareil courant.
 - **push.js** — clés VAPID (env ou générées), envoi `web-push` (`sendToUser` → `{ total, sent }`),
   et la **boucle d'alerte** (`startPolling` → cycle non concurrent toutes les 30 s) :
   `evaluateAlert` (pure), messages (`buildMessage`), stations de repli (`findFallback`).
@@ -152,7 +157,7 @@ Erreurs upstream/proxy → **HTTP 502** `{ ok:false, error }`. Toutes les répon
 enveloppe `ok` ; le client `api()` lève sur `!res.ok || data.ok === false`. Routes protégées
 (`/api/favorites` (+ `PATCH /:id` label, `PUT /order`), `/api/alerts` (+ `PUT /pause`),
 `/api/push/subscribe|unsubscribe|test`, `/api/auth/me` (GET ; DELETE = suppression du compte),
-`PUT /api/auth/password`,
+`PUT /api/auth/password`, `POST /api/auth/logout-others`,
 `POST /api/stations/refresh`) : Bearer requis. Publiques : login/register,
 `GET /api/stations`, `GET /api/rental-apps`, `GET /api/push/vapid-public-key`.
 Cron (`CRON_SECRET`) : `/cron/sync-rental-apps`, `/cron/refresh-stations` (workflow
@@ -260,9 +265,14 @@ différenciée : mobile → `/favoris`, desktop → `/stations`.
 - **push.js** + **public/sw.js** — `PushManager` natif. `syncPush()` (démarrage + login) est
   **silencieux** : ne fait rien sans permission accordée, resouscrit si la clé VAPID a changé.
   `enablePush()` demande la permission, **uniquement sur clic** (bandeau de la page Alertes). Le SW gère `push` + `notificationclick`.
+  `disablePush()` (Paramètres › Notifications) coupe les notifications **de cet appareil** :
+  détache l'appareil, résilie la subscription et mémorise le choix (`velopulse-push-off`) pour
+  que `syncPush()` ne resouscrive plus ; `pushStatus()` → `unsupported|denied|default|off|on`,
+  partagé par `components/PushControls` (`usePushState`, `TestPushButton`) entre Alertes et Paramètres.
 - **usePwaInstallPrompt.js** + **components/PwaInstall*** — modal d'installation **réservée au
   mobile** (jamais desktop), réapparaît le lendemain si ignorée ; pas d'ouverture auto tant que
-  l'accueil est en attente.
+  l'accueil est en attente. Boutons « Installer » masqués quand l'app est déjà installée
+  (`display-mode: standalone` / `navigator.standalone`).
 - **components/Onboarding.jsx** — accueil au premier lancement (installer / notifications /
   favoris), uniquement les étapes encore utiles ; rien n'est monté une fois terminé.
 - **pages/** — `Login`, `Stations` (recherche/tri/filtre + détail), `Favorites` (swipe-to-delete,
@@ -270,8 +280,10 @@ différenciée : mobile → `/favoris`, desktop → `/stations`.
   `Alerts` (formulaire complet, pause, notification de test ; liste filtrable par type — filtre
   affiché seulement si les deux types coexistent — et triable par heure / nom / récentes,
   désactivées en dernier, choix mémorisés en `localStorage` ; pré-rempli via
-  `location.state.alertStation` depuis la fiche station), `Account` (`/compte` : mot de passe,
-  suppression du compte), `Privacy` (`/confidentialite`, publique).
+  `location.state.alertStation` depuis la fiche station), `Account` (`/compte`, « Paramètres » :
+  compte + onglets `?onglet=notifications|securite` — notifications de cet appareil ; mot de
+  passe, déconnexion des autres appareils, suppression du compte — puis partage de l'app
+  via `lib/share.js` : feuille de partage, sinon presse-papiers), `Privacy` (`/confidentialite`, publique).
 - **components/** — `StationCard` (desktop), `StationListItem` (mobile, étoile favori optionnelle
   via `onToggleFav`), `StationDetailSheet`,
   `BottomSheet`, `BottomNav` / `Navbar`, `Icon` (SVG inline style Lucide), `Logo`, `Offline`,
@@ -290,7 +302,7 @@ se fait dans `push.js` (`countForType`) et `routes/stations.js` (`extractCount`)
 
 Tables (créées/migrées par `database/migrations.js`, dialecte selon `DATABASE_URL`) :
 `stations` (référentiel statique), `config` (clé/valeur : secret JWT, clés VAPID),
-`users` (+ `alerts_paused_until`), `favorites` (unique `user_id+station_id`, `label`, `sort_order`
+`users` (+ `alerts_paused_until`, `token_version`), `favorites` (unique `user_id+station_id`, `label`, `sort_order`
 — NULL tant que l'utilisateur n'a jamais ordonné : ordre alphabétique), `push_subscriptions`
 (unique `endpoint`), `alerts` (cf. modèle ci-dessus ; `group_stations` stocké en JSON texte,
 parsé par `db.js` → tableau ; `threshold` a remplacé `min_count`,

@@ -1,12 +1,24 @@
 import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { useAuth } from "../auth";
+import { currentPushEndpoint } from "../push";
+import { usePushState, TestPushButton } from "../components/PushControls";
 import Icon from "../components/Icon";
 import { APP_VERSION } from "../theme";
+import { shareApp } from "../lib/share";
 
-/** Changement de mot de passe (mot de passe actuel exigé). */
+const TABS = [
+  { value: "notifications", label: "Notifications" },
+  { value: "securite",      label: "Sécurité" },
+];
+
+/**
+ * Changement de mot de passe (mot de passe actuel exigé). Le serveur déconnecte
+ * les autres appareils et renvoie un jeton neuf pour celui-ci.
+ */
 function PasswordForm() {
+  const { renewSession } = useAuth();
   const [current, setCurrent] = useState("");
   const [next, setNext]       = useState("");
   const [confirm, setConfirm] = useState("");
@@ -20,9 +32,14 @@ function PasswordForm() {
     if (next !== confirm) return setMsg({ ok: false, text: "Les deux nouveaux mots de passe ne correspondent pas" });
     setBusy(true);
     try {
-      await api("/api/auth/password", { method: "PUT", body: { current_password: current, new_password: next } });
+      const endpoint = await currentPushEndpoint();
+      const data = await api("/api/auth/password", {
+        method: "PUT",
+        body: { current_password: current, new_password: next, ...(endpoint ? { endpoint } : {}) },
+      });
+      renewSession(data);
       setCurrent(""); setNext(""); setConfirm("");
-      setMsg({ ok: true, text: "Mot de passe modifié." });
+      setMsg({ ok: true, text: "Mot de passe modifié. Vos autres appareils ont été déconnectés." });
     } catch (err) {
       setMsg({ ok: false, text: err.message });
     } finally {
@@ -33,6 +50,7 @@ function PasswordForm() {
   return (
     <form className="account-card" onSubmit={submit} aria-label="Changer le mot de passe">
       <div className="form-title">Changer le mot de passe</div>
+      <p className="account-text">Vos autres appareils seront déconnectés.</p>
       <label className="auth-field"><span>Mot de passe actuel</span>
         <input type="password" autoComplete="current-password" value={current} onChange={(e) => setCurrent(e.target.value)} required />
       </label>
@@ -96,12 +114,128 @@ function DeleteAccount() {
   );
 }
 
+/** Déconnecte tous les autres appareils (cet appareil reste connecté). */
+function LogoutOthers() {
+  const { renewSession } = useAuth();
+  const [msg, setMsg]   = useState(null); // { ok, text }
+  const [busy, setBusy] = useState(false);
+
+  const run = async () => {
+    setMsg(null);
+    setBusy(true);
+    try {
+      const endpoint = await currentPushEndpoint();
+      const data = await api("/api/auth/logout-others", { method: "POST", body: endpoint ? { endpoint } : {} });
+      renewSession(data);
+      setMsg({ ok: true, text: "Tous vos autres appareils ont été déconnectés." });
+    } catch (err) {
+      setMsg({ ok: false, text: err.message });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="account-card">
+      <div className="form-title">Appareils connectés</div>
+      <p className="account-text">
+        Déconnecte votre compte de tous vos autres téléphones et ordinateurs, qui cessent aussi
+        de recevoir vos alertes. Cet appareil reste connecté.
+      </p>
+      {msg && <div className={msg.ok ? "form-ok" : "form-error"} role="status">{msg.text}</div>}
+      <button type="button" className="cancel-btn" disabled={busy} onClick={run}>
+        <Icon name="log-out" size={16} /> {busy ? "…" : "Déconnecter tous les autres appareils"}
+      </button>
+    </div>
+  );
+}
+
+/** Notifications de cet appareil : activer / désactiver, tester. */
+function NotificationsTab() {
+  const { status, busy, enable, disable } = usePushState();
+  const [testMsg, setTestMsg] = useState(null);
+  const on = status === "on";
+
+  const hint = {
+    unsupported: "Ce navigateur ne permet pas les notifications. Sur iPhone, installez d'abord l'application sur l'écran d'accueil.",
+    denied: "Les notifications sont bloquées pour VéloPulse dans les réglages de votre appareil ou du navigateur : autorisez-les là-bas pour pouvoir les activer.",
+    default: "Les notifications n'ont pas encore été activées sur cet appareil.",
+    off: "Vous avez désactivé les notifications sur cet appareil : vos alertes ne s'y afficheront pas (vos autres appareils les reçoivent toujours).",
+    on: "Vos alertes et résumés s'affichent sur cet appareil.",
+  }[status];
+  const canToggle = status !== "unsupported" && status !== "denied";
+
+  return (
+    <>
+      <div className="account-card">
+        <div className="settings-row">
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div className="form-title">Notifications sur cet appareil</div>
+            <p className="account-text">{hint}</p>
+          </div>
+          {canToggle && (
+            <button role="switch" aria-checked={on} aria-label="Notifications sur cet appareil" disabled={busy}
+              className={"switch" + (on ? " on" : "")} onClick={on ? disable : enable}>
+              <span className="switch-knob" />
+            </button>
+          )}
+        </div>
+        {on && (
+          <div className="settings-row">
+            <span className="account-text" style={{ flex: 1 }}>{testMsg ?? "Vérifier que les notifications arrivent bien."}</span>
+            <TestPushButton onResult={setTestMsg} />
+          </div>
+        )}
+      </div>
+      <p className="account-text settings-note">
+        Pour suspendre toutes vos alertes quelques jours sur tous vos appareils, utilisez la pause
+        dans <Link to="/alertes">Alertes</Link>.
+      </p>
+    </>
+  );
+}
+
+function SecurityTab() {
+  return (
+    <>
+      <PasswordForm />
+      <LogoutOthers />
+      <DeleteAccount />
+    </>
+  );
+}
+
+/** Partage du lien de l'application (feuille de partage, sinon presse-papiers). */
+function ShareButton() {
+  const [msg, setMsg] = useState(null);
+  const share = async () => {
+    const result = await shareApp();
+    setMsg({
+      shared: null,
+      copied: "Lien copié dans le presse-papiers.",
+      failed: `Copiez ce lien : ${window.location.origin}`,
+    }[result]);
+  };
+  return (
+    <div className="share-block">
+      <button type="button" className="cancel-btn share-btn" onClick={share}>
+        <Icon name="share" size={16} /> Partager VéloPulse
+      </button>
+      {msg && <div className="form-ok" role="status">{msg}</div>}
+    </div>
+  );
+}
+
 export default function Account() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const [params, setParams] = useSearchParams();
+  const tab = TABS.some((t) => t.value === params.get("onglet")) ? params.get("onglet") : TABS[0].value;
+  const setTab = (value) => setParams({ onglet: value }, { replace: true });
+
   return (
     <div className="view-pad account-page">
-      <div className="page-head"><h2 className="page-title">Mon compte</h2></div>
+      <div className="page-head"><h2 className="page-title">Paramètres</h2></div>
       <div className="account-card">
         <div className="account-id"><Icon name="user" size={20} /> <b>{user?.username}</b></div>
         <p className="account-text">Aucune adresse e-mail n'est enregistrée : un mot de passe oublié ne peut pas être récupéré.</p>
@@ -109,8 +243,20 @@ export default function Account() {
           <Icon name="log-out" size={16} /> Se déconnecter
         </button>
       </div>
-      <PasswordForm />
-      <DeleteAccount />
+
+      <div className="seg" role="tablist" aria-label="Rubriques des paramètres">
+        {TABS.map((t) => (
+          <button key={t.value} type="button" role="tab" aria-selected={tab === t.value}
+            className={tab === t.value ? "active" : ""} onClick={() => setTab(t.value)}>
+            {t.label}
+          </button>
+        ))}
+      </div>
+      <div role="tabpanel" aria-label={TABS.find((t) => t.value === tab).label} className="settings-panel">
+        {tab === "notifications" ? <NotificationsTab /> : <SecurityTab />}
+      </div>
+
+      <ShareButton />
       <div className="account-links">
         <Link to="/confidentialite"><Icon name="shield" size={15} /> Confidentialité et mentions légales</Link>
         <span className="app-version">v{APP_VERSION}</span>

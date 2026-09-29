@@ -129,7 +129,19 @@ async function getUserByUsername(username) {
 
 /** Avec le hash du mot de passe : réservé aux vérifications d'identité. */
 async function getUserAuthById(id) {
-  return dbc.get('SELECT id, username, password_hash FROM users WHERE id = ?', [id]);
+  return dbc.get('SELECT id, username, password_hash, token_version FROM users WHERE id = ?', [id]);
+}
+
+/** Version de session du compte (null si le compte n'existe plus). */
+async function getTokenVersion(id) {
+  const row = await dbc.get('SELECT token_version FROM users WHERE id = ?', [id]);
+  return row ? Number(row.token_version ?? 0) : null;
+}
+
+/** Invalide tous les jetons émis pour ce compte. Renvoie la nouvelle version. */
+async function bumpTokenVersion(id) {
+  await dbc.run('UPDATE users SET token_version = token_version + 1 WHERE id = ?', [id]);
+  return getTokenVersion(id);
 }
 
 async function updatePasswordHash(id, hash) {
@@ -150,7 +162,7 @@ async function deleteUser(id) {
 }
 
 async function getUserById(id) {
-  return dbc.get('SELECT id, username, created_at FROM users WHERE id = ?', [id]);
+  return dbc.get('SELECT id, username, token_version, created_at FROM users WHERE id = ?', [id]);
 }
 
 // ── Favorites ────────────────────────────────────────────────────────────────
@@ -233,6 +245,17 @@ async function removeSubscriptionByEndpoint(userId, endpoint) {
     [userId, endpoint]
   );
   return changes > 0;
+}
+
+/**
+ * Détache du compte tous les appareils sauf `keepEndpoint` (l'appareil courant,
+ * facultatif) : un appareil déconnecté ne doit plus recevoir les alertes du compte.
+ */
+async function removeOtherSubscriptions(userId, keepEndpoint = null) {
+  const { changes } = keepEndpoint
+    ? await dbc.run('DELETE FROM push_subscriptions WHERE user_id = ? AND endpoint <> ?', [userId, keepEndpoint])
+    : await dbc.run('DELETE FROM push_subscriptions WHERE user_id = ?', [userId]);
+  return changes;
 }
 
 async function getSubscriptionsByUser(userId) {
@@ -388,10 +411,11 @@ module.exports = {
   getConfig, setConfig,
   // users
   createUser, getUserByUsername, getUserById, getUserAuthById, updatePasswordHash, deleteUser,
+  getTokenVersion, bumpTokenVersion,
   // favorites
   getFavorites, addFavorite, removeFavorite, setFavoriteLabel, reorderFavorites,
   // push
-  addSubscription, removeSubscriptionByEndpoint, getSubscriptionsByUser, removeSubscriptionById,
+  addSubscription, removeSubscriptionByEndpoint, removeOtherSubscriptions, getSubscriptionsByUser, removeSubscriptionById,
   // alerts
   getAlerts, getAlert, createAlert, updateAlert, deleteAlert,
   markAlertNotified, setAlertNotifiedKey, countActiveAlerts, getActiveAlerts, deleteExpiredAlerts,

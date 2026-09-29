@@ -10,7 +10,7 @@ import { APP_VERSION } from "../theme";
 export default function Navbar() {
   const { user, logout } = useAuth();
   const { theme, toggle } = useTheme();
-  const { open: openInstall, isMobile } = usePwaInstall();
+  const { open: openInstall, isMobile, isInstalled } = usePwaInstall();
   const navigate = useNavigate();
   const cls = ({ isActive }) => "nav-link" + (isActive ? " active" : "");
 
@@ -28,12 +28,12 @@ export default function Navbar() {
         <NavLink to="/alertes" className={cls}>Alertes</NavLink>
       </nav>
       <div className="nav-right">
-        {/* Installation PWA : pertinente uniquement sur mobile (jamais sur desktop). */}
-        {isMobile && <button className="nav-btn" onClick={openInstall}><Icon name="download" /> Installer</button>}
+        {/* Installation PWA : uniquement sur mobile (jamais sur desktop), et pas si déjà installée. */}
+        {isMobile && !isInstalled && <button className="nav-btn" onClick={openInstall}><Icon name="download" /> Installer</button>}
         <button className="icon-btn" aria-label="Changer de thème" onClick={toggle}>
           <Icon name={theme === "dark" ? "sun" : "moon"} />
         </button>
-        <NavLink to="/compte" className="nav-user" title="Mon compte"><Icon name="user" size={16} /> {user?.username}</NavLink>
+        <NavLink to="/compte" className="nav-user" title="Paramètres"><Icon name="user" size={16} /> {user?.username}</NavLink>
         <button className="nav-btn" onClick={async () => { await logout(); navigate("/login", { replace: true }); }}>
           <Icon name="log-out" /> Déconnexion
         </button>

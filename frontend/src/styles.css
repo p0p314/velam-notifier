@@ -489,6 +489,9 @@ select option { background: var(--surface); color: var(--text); }
 .alert-card.off { opacity: .6; }
 .push-banner { display: flex; align-items: center; gap: 10px; padding: 12px 14px; background: var(--inset); border: 1px solid var(--border); border-radius: var(--r-md); font-size: 13px; color: var(--text-2); }
 .push-banner > span { flex: 1; }
+.push-banner.warn { border-color: var(--warn); color: var(--text); }
+.push-banner.warn > .ic { color: var(--warn); }
+.push-banner a { color: var(--accent); font-weight: 600; }
 .push-banner-btn.ghost { background: var(--surface); color: var(--accent); border: 1px solid var(--border-strong); }
 .pause-banner { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 12px 14px; background: var(--inset); border: 1px solid var(--border); border-radius: var(--r-md); font-size: 13px; color: var(--text-2); }
 .pause-banner > span { flex: 1; }
@@ -772,3 +775,11 @@ select option { background: var(--surface); color: var(--text); }
 .item-fav { flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; margin: -10px -8px -10px -4px; border: none; background: none; color: var(--text-3); cursor: pointer; border-radius: var(--r-sm); }
 .item-fav.on { color: var(--accent); }
 .item-fav:focus-visible { box-shadow: var(--focus-ring); }
+
+/* Paramètres */
+.settings-panel { display: flex; flex-direction: column; gap: 14px; }
+.settings-row { display: flex; align-items: center; gap: 12px; }
+.settings-note { padding: 0 4px; }
+.settings-note a, .account-text a { color: var(--accent); font-weight: 600; }
+.share-block { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
+.share-btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; }

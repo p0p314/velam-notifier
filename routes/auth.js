@@ -1,7 +1,10 @@
 // Routes d'authentification (inscription / connexion) + rate limiting anti-bruteforce.
 const express   = require('express');
 const rateLimit = require('express-rate-limit');
-const { createUser, getUserByUsername, getUserById, getUserAuthById, updatePasswordHash, deleteUser } = require('../db');
+const {
+  createUser, getUserByUsername, getUserById, getUserAuthById, updatePasswordHash, deleteUser,
+  bumpTokenVersion, removeOtherSubscriptions,
+} = require('../db');
 const { hashPassword, verifyPassword, signToken, requireAuth } = require('../auth');
 
 const router = express.Router();
@@ -83,9 +86,28 @@ router.get('/api/auth/me', requireAuth, async (req, res) => {
 
 const PASSWORD_MIN = 8;
 
+/** Endpoint push de l'appareil courant (facultatif) : URL https:// fournie par le navigateur. */
+function parseEndpoint(raw) {
+  if (raw === undefined || raw === null || raw === '') return { ok: true, endpoint: null };
+  const ok = typeof raw === 'string' && raw.length <= 1024 && raw.startsWith('https://');
+  return { ok, endpoint: ok ? raw : null };
+}
+
 /**
- * PUT /api/auth/password — { current_password, new_password }.
+ * Déconnecte tous les appareils du compte sauf l'appareil courant : invalide tous
+ * les jetons émis, détache les autres appareils des notifications (sauf
+ * `keepEndpoint`), puis renvoie un jeton neuf pour l'appareil courant.
+ */
+async function revokeOtherSessions(user, keepEndpoint) {
+  const version = await bumpTokenVersion(user.id);
+  const devices = await removeOtherSubscriptions(user.id, keepEndpoint);
+  return { token: signToken({ ...user, token_version: version }), devices };
+}
+
+/**
+ * PUT /api/auth/password — { current_password, new_password, endpoint? }.
  * Le mot de passe actuel est exigé (limité comme la connexion, anti force brute).
+ * Les autres appareils sont déconnectés ; renvoie un jeton neuf pour celui-ci.
  */
 router.put('/api/auth/password', requireAuth, loginLimiter, async (req, res) => {
   try {
@@ -93,6 +115,8 @@ router.put('/api/auth/password', requireAuth, loginLimiter, async (req, res) => 
     if (typeof current !== 'string' || typeof next !== 'string') {
       return res.status(400).json({ ok: false, error: 'current_password et new_password requis' });
     }
+    const { ok: endpointOk, endpoint } = parseEndpoint(req.body.endpoint);
+    if (!endpointOk) return res.status(400).json({ ok: false, error: 'endpoint invalide' });
     if (next.length < PASSWORD_MIN) {
       return res.status(400).json({ ok: false, error: `Le nouveau mot de passe doit faire au moins ${PASSWORD_MIN} caractères` });
     }
@@ -102,9 +126,29 @@ router.put('/api/auth/password', requireAuth, loginLimiter, async (req, res) => 
       return res.status(403).json({ ok: false, error: 'Mot de passe actuel incorrect' });
     }
     await updatePasswordHash(user.id, await hashPassword(next));
-    res.json({ ok: true });
+    const { token } = await revokeOtherSessions(user, endpoint);
+    res.json({ ok: true, token, user: { id: user.id, username: user.username } });
   } catch (err) {
     console.error('[PUT /api/auth/password]', err.message);
+    res.status(500).json({ ok: false, error: 'Erreur serveur' });
+  }
+});
+
+/**
+ * POST /api/auth/logout-others — { endpoint? } : déconnecte tous les autres
+ * appareils (jetons révoqués, notifications détachées). L'appareil courant reste
+ * connecté avec le jeton neuf renvoyé. `devices` : appareils détachés des notifications.
+ */
+router.post('/api/auth/logout-others', requireAuth, async (req, res) => {
+  try {
+    const { ok: endpointOk, endpoint } = parseEndpoint(req.body?.endpoint);
+    if (!endpointOk) return res.status(400).json({ ok: false, error: 'endpoint invalide' });
+    const user = await getUserById(req.user.id);
+    if (!user) return res.status(401).json({ ok: false, error: 'Compte introuvable' });
+    const { token, devices } = await revokeOtherSessions(user, endpoint);
+    res.json({ ok: true, token, user: { id: user.id, username: user.username }, devices });
+  } catch (err) {
+    console.error('[POST /api/auth/logout-others]', err.message);
     res.status(500).json({ ok: false, error: 'Erreur serveur' });
   }
 });

@@ -63,7 +63,10 @@ export function AuthProvider({ children }) {
       .catch(() => { /* 401 → géré par AUTH_EXPIRED_EVENT ; réseau → on garde la session */ });
   }, [persist]);
 
-  const value = { user, token, login, register, logout, endSession, isAuthenticated: !!token };
+  // renewSession : jeton neuf renvoyé par le serveur (mot de passe changé, autres
+  // appareils déconnectés) — l'ancien jeton de cet appareil est révoqué.
+  const renewSession = useCallback((data) => { if (data?.token) persist(data); }, [persist]);
+  const value = { user, token, login, register, logout, endSession, renewSession, isAuthenticated: !!token };
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 

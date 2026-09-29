@@ -1,5 +1,5 @@
 // Intégration : inscription, connexion, session glissante (/me), middleware JWT.
-const { resetDb, startServer, client, registerUser } = require('./helpers');
+const { resetDb, startServer, client, registerUser, fakeSubscription, dbc } = require('./helpers');
 const { test, before, after, beforeEach } = require('node:test');
 const assert = require('node:assert/strict');
 const jwt = require('jsonwebtoken');
@@ -132,4 +132,68 @@ test('supprimer son compte : mot de passe requis, sans compte → 401', async ()
   const { token } = await registerUser(api, 'alice');
   assert.equal((await api.delete('/api/auth/me', { token, body: {} })).status, 400);
   assert.equal((await api.delete('/api/auth/me', { body: { password: 'x' } })).status, 401);
+});
+
+// ── Révocation des sessions ─────────────────────────────────────────────────
+
+/** Deuxième appareil connecté au même compte (+ son abonnement push). */
+async function secondDevice(name = 'tel2') {
+  const login = await api.post('/api/auth/login', { body: { username: 'alice', password: 'motdepasse1' } });
+  await api.post('/api/push/subscribe', { token: login.body.token, body: { subscription: fakeSubscription(name) } });
+  return login.body.token;
+}
+const endpoints = async () =>
+  (await dbc.query('SELECT endpoint FROM push_subscriptions ORDER BY endpoint')).rows.map((r) => r.endpoint);
+
+test('déconnecter les autres appareils : leurs jetons et notifications sont révoqués, pas ceux de cet appareil', async () => {
+  const { token } = await registerUser(api, 'alice');
+  const here = fakeSubscription('ici');
+  await api.post('/api/push/subscribe', { token, body: { subscription: here } });
+  const other = await secondDevice();
+
+  const res = await api.post('/api/auth/logout-others', { token, body: { endpoint: here.endpoint } });
+  assert.equal(res.status, 200);
+  assert.equal(res.body.devices, 1);
+  assert.ok(res.body.token && res.body.token !== token);
+
+  assert.equal((await api.get('/api/favorites', { token: other })).status, 401);
+  assert.equal((await api.get('/api/favorites', { token })).status, 401); // ancien jeton de cet appareil aussi
+  assert.equal((await api.get('/api/favorites', { token: res.body.token })).status, 200);
+  assert.deepEqual(await endpoints(), [here.endpoint]);
+
+  // Le jeton neuf est renouvelable (session glissante) et une reconnexion fonctionne.
+  assert.equal((await api.get('/api/auth/me', { token: res.body.token })).status, 200);
+  assert.equal((await api.post('/api/auth/login', { body: { username: 'alice', password: 'motdepasse1' } })).status, 200);
+});
+
+test('déconnecter les autres appareils sans endpoint : tous les appareils sont détachés des notifications', async () => {
+  const { token } = await registerUser(api, 'alice');
+  await secondDevice();
+  const res = await api.post('/api/auth/logout-others', { token, body: {} });
+  assert.equal(res.status, 200);
+  assert.deepEqual(await endpoints(), []);
+  assert.equal((await api.post('/api/auth/logout-others', { token, body: { endpoint: 'http://x' } })).status, 401); // jeton révoqué
+  assert.equal((await api.post('/api/auth/logout-others', { token: res.body.token, body: { endpoint: 'http://x' } })).status, 400);
+});
+
+test('changer de mot de passe déconnecte les autres appareils et renvoie un jeton neuf', async () => {
+  const { token } = await registerUser(api, 'alice');
+  const here = fakeSubscription('ici');
+  await api.post('/api/push/subscribe', { token, body: { subscription: here } });
+  const other = await secondDevice();
+
+  const res = await api.put('/api/auth/password', { token, body: {
+    current_password: 'motdepasse1', new_password: 'nouveau-mdp-42', endpoint: here.endpoint,
+  } });
+  assert.equal(res.status, 200);
+  assert.equal(res.body.user.username, 'alice');
+  assert.equal((await api.get('/api/favorites', { token: other })).status, 401);
+  assert.equal((await api.get('/api/favorites', { token: res.body.token })).status, 200);
+  assert.deepEqual(await endpoints(), [here.endpoint]);
+});
+
+test('jeton émis avant la révocation (sans version) : accepté tant qu\'aucune révocation n\'a eu lieu', async () => {
+  const { user } = await registerUser(api, 'alice');
+  const legacy = jwt.sign({ id: user.id, username: 'alice' }, process.env.JWT_SECRET, { expiresIn: '1h' });
+  assert.equal((await api.get('/api/favorites', { token: legacy })).status, 200);
 });

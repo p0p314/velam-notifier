@@ -33,7 +33,7 @@ export default function Privacy() {
       <p>Ces données servent uniquement à afficher vos favoris et à vous envoyer vos alertes. Elles sont conservées tant que votre compte existe. Les alertes « aujourd'hui seulement » sont supprimées automatiquement le lendemain.</p>
 
       <h2>Vos droits</h2>
-      <p>Depuis <b>Mon compte</b>, vous pouvez changer votre mot de passe et <b>supprimer votre compte</b> : toutes vos données (favoris, alertes, appareils) sont alors effacées immédiatement et définitivement.</p>
+      <p>Depuis <b>Paramètres › Sécurité</b>, vous pouvez changer votre mot de passe, déconnecter vos autres appareils et <b>supprimer votre compte</b> : toutes vos données (favoris, alertes, appareils) sont alors effacées immédiatement et définitivement.</p>
 
       <h2>Hébergement et sources</h2>
       <p>Application hébergée par Render ; base de données hébergée par Supabase. Les disponibilités des vélos proviennent du flux ouvert (GBFS) du service Vélam d'Amiens Métropole. VéloPulse est un projet indépendant, non affilié à Vélam ni à Amiens Métropole.</p>

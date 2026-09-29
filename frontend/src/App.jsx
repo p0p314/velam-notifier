@@ -32,9 +32,10 @@ function Landing() {
   return <Navigate to={isMobile ? "/favoris" : "/stations"} replace />;
 }
 
-function Layout() {
+export function Layout() {
   const { theme, toggle } = useTheme();
-  const { open: openInstall } = usePwaInstall();
+  // Déjà installée (lancée depuis l'écran d'accueil) : plus rien à proposer.
+  const { open: openInstall, isInstalled } = usePwaInstall();
   const navigate = useNavigate();
   return (
     <div className="app-shell">
@@ -48,10 +49,12 @@ function Layout() {
           <button className="icon-btn" aria-label="Changer de thème" onClick={toggle}>
             <Icon name={theme === "dark" ? "sun" : "moon"} />
           </button>
-          <button className="icon-btn" aria-label="Installer l'app" onClick={openInstall}>
-            <Icon name="download" />
-          </button>
-          <button className="icon-btn" aria-label="Mon compte" onClick={() => navigate("/compte")}>
+          {!isInstalled && (
+            <button className="icon-btn" aria-label="Installer l'app" onClick={openInstall}>
+              <Icon name="download" />
+            </button>
+          )}
+          <button className="icon-btn" aria-label="Paramètres" onClick={() => navigate("/compte")}>
             <Icon name="user" />
           </button>
         </div>
