@@ -9,6 +9,12 @@ Toutes les évolutions notables de VéloPulse. Format inspiré de
 section `## [x.y.z] - AAAA-MM-JJ` ci-dessous, puis merger sur `main` : le workflow
 `release.yml` crée le tag `vx.y.z` et la release GitHub à partir de cette section.
 
+## [1.3.1] - 2026-09-29
+
+### Amélioration
+- Création d'une alerte : le créneau proposé va de **l'heure actuelle à +30 min**
+  (au lieu de 08:00–10:00, ou d'1 h 30 depuis une fiche station).
+
 ## [1.3.0] - 2026-09-29
 
 ### Alertes
