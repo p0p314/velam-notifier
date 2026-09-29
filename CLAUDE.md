@@ -182,6 +182,16 @@ Modèle d'alerte (`routes/alerts.js` → `validateAlertPayload`, PATCH = fusion 
   suffit. Une seule notification (détail par station), clé anti-spam = `n1|n2|…`, pas de
   station de repli ni de trajet. La 1re station est recopiée dans `station_id` / `station_name`.
 
+**Résumé à heure fixe** (`kind = 'summary'`, défaut `threshold` = alerte de disponibilité) :
+1 à 5 stations (`group_stations`, nom facultatif), `bike_type`, heure d'envoi `time_start`
+(`time_end` = même valeur) et `days` ; seuil / trajet / ponctuelle neutralisés par
+`validateSummary`. La boucle l'envoie **une fois par jour** (`last_notified_date`), entre
+l'heure choisie et +15 min (`isSummaryDue`, `SUMMARY_GRACE_MIN`) : au-delà (boucle arrêtée,
+flux périmé), il est abandonné plutôt qu'envoyé avec du retard. Contenu : une ligne par station
+(`Gare : 2 méca · 1 élec`, ou le seul type choisi ; `indisponible` si fermée) —
+`buildSummaryPayload`. Dans le formulaire, type choisi en tête (« Alerte de disponibilité » /
+« Résumé à heure fixe ») : seuls les champs utiles sont affichés.
+
 Station fermée : `is_renting=false` ⇒ 0 vélo, `is_returning=false` ⇒ 0 place.
 Anti-spam par jour, générique : `evaluateAlert` renvoie `{ triggered, key }` (clé = compte, ou
 `départ|arrivée` pour un trajet). Notifie à la première atteinte du jour (`last_notified_date`),

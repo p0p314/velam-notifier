@@ -30,6 +30,7 @@ const hhmm = (d) => `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinu
  */
 export function defaultForm(station = null, now = new Date()) {
   const form = {
+    kind: "threshold",
     stationId: station?.station_id ?? "",
     group: false,
     groupIds: [],
@@ -43,6 +44,7 @@ export function defaultForm(station = null, now = new Date()) {
     arrivalThreshold: 1,
     timeStart: "08:00",
     timeEnd: "10:00",
+    sendTime: "08:00",
     days: [...ALL_DAYS],
     oneShot: false,
   };
@@ -59,9 +61,12 @@ export function defaultForm(station = null, now = new Date()) {
 
 /** Alerte API → état du formulaire (édition). */
 export function formFromAlert(a) {
+  const summary = a.kind === "summary";
   return {
+    kind: summary ? "summary" : "threshold",
     stationId: a.station_id,
-    group: !!a.group_stations?.length,
+    // Un résumé repassé en alerte part d'une station unique (sa 1re station).
+    group: !summary && !!a.group_stations?.length,
     groupIds: a.group_stations?.map((s) => s.station_id) ?? [],
     groupName: a.group_name ?? "",
     target: a.target ?? "bikes",
@@ -73,6 +78,7 @@ export function formFromAlert(a) {
     arrivalThreshold: a.arrival_threshold ?? 1,
     timeStart: a.time_start,
     timeEnd: a.time_end,
+    sendTime: a.time_start,
     days: a.days ? a.days.split(",").map(Number) : [...ALL_DAYS],
     oneShot: !!a.valid_on,
     validOn: a.valid_on ?? null,
@@ -98,6 +104,12 @@ export function groupRuleText(form) {
  * Contrôles côté client (le serveur revalide tout). Renvoie un message ou null.
  */
 export function validateForm(form) {
+  if (form.kind === "summary") {
+    if (form.groupIds.length < 1 || form.groupIds.length > GROUP_MAX) return `Choisissez de 1 à ${GROUP_MAX} stations`;
+    if (form.groupName.trim().length > GROUP_NAME_MAX) return `Nom du groupe : ${GROUP_NAME_MAX} caractères maximum`;
+    if (!form.sendTime) return "Choisissez l'heure d'envoi";
+    return null;
+  }
   if (form.group) {
     if (form.groupIds.length < GROUP_MIN || form.groupIds.length > GROUP_MAX) {
       return `Choisissez de ${GROUP_MIN} à ${GROUP_MAX} stations`;
@@ -124,15 +136,15 @@ export function validateForm(form) {
  * Une alerte ponctuelle déjà datée garde sa date ; une nouvelle prend `today`.
  */
 export function payloadFromForm(form, names, today = localYmd()) {
+  if (form.kind === "summary") return summaryPayload(form, names);
   const trip = form.trip && tripAllowed(form);
   const stationId = form.group ? form.groupIds[0] : form.stationId;
   return {
+    kind: "threshold",
     station_id: stationId,
     station_name: names[stationId] ?? stationId,
     // Toujours envoyés (null en mode simple) : un PATCH repasse ainsi un groupe en simple.
-    group_stations: form.group
-      ? form.groupIds.map((id) => ({ station_id: id, station_name: names[id] ?? id }))
-      : null,
+    group_stations: form.group ? namedStations(form.groupIds, names) : null,
     group_name: form.group ? (form.groupName.trim() || null) : null,
     target: form.target,
     comparison: form.comparison,
@@ -148,6 +160,31 @@ export function payloadFromForm(form, names, today = localYmd()) {
   };
 }
 
+const namedStations = (ids, names) => ids.map((id) => ({ station_id: id, station_name: names[id] ?? id }));
+
+/** Résumé à heure fixe : champs de seuil / trajet neutres (le serveur les force aussi). */
+function summaryPayload(form, names) {
+  const id = form.groupIds[0];
+  return {
+    kind: "summary",
+    station_id: id,
+    station_name: names[id] ?? id,
+    group_stations: namedStations(form.groupIds, names),
+    group_name: form.groupName.trim() || null,
+    target: "bikes",
+    comparison: "at_most",
+    bike_type: form.bikeType,
+    threshold: 0,
+    arrival_station_id: null,
+    arrival_station_name: null,
+    arrival_threshold: null,
+    time_start: form.sendTime,
+    time_end: form.sendTime,
+    days: form.days.join(","),
+    valid_on: null,
+  };
+}
+
 const bikesWord = (type, n) => `vélo${n > 1 ? "s" : ""}${BIKE_WORD[type] ?? ""}${type !== "any" && n > 1 ? "s" : ""}`;
 const docksWord = (n) => `place${n > 1 ? "s" : ""}`;
 
@@ -157,6 +194,14 @@ export function describeAlert(a) {
   const n = a.threshold ?? 0;
   const what = a.target === "docks" ? docksWord(n) : bikesWord(a.bike_type, n);
   const window = `${a.time_start}–${a.time_end}`;
+  if (a.kind === "summary") {
+    const list = (a.group_stations ?? []).map((s) => s.station_name).join(", ");
+    const kind = a.bike_type === "any" ? "vélos" : bikesWord(a.bike_type, 2);
+    const rule = `Résumé à ${a.time_start} · ${kind}`;
+    return a.group_name
+      ? { title: a.group_name, detail: `${list} · ${rule}` }
+      : { title: list, detail: rule };
+  }
   if (a.group_stations?.length) {
     const list = a.group_stations.map((s) => s.station_name).join(", ");
     const rule = a.comparison === "at_least" ? `l'une ≥ ${n} ${what}` : `toutes ≤ ${n} ${what}`;

@@ -51,7 +51,7 @@ describe("payloadFromForm", () => {
 
   test("alerte vélos classique", () => {
     expect(payloadFromForm({ ...base, bikeType: "ebike", days: [1, 3] }, names, "2025-09-24")).toEqual({
-      station_id: "1", station_name: "Gare", target: "bikes", comparison: "at_most", bike_type: "ebike",
+      kind: "threshold", station_id: "1", station_name: "Gare", target: "bikes", comparison: "at_most", bike_type: "ebike",
       threshold: 2, arrival_station_id: null, arrival_station_name: null, arrival_threshold: null,
       group_stations: null, group_name: null,
       time_start: "08:00", time_end: "10:00", days: "1,3", valid_on: null,
@@ -81,7 +81,7 @@ describe("payloadFromForm", () => {
 describe("formFromAlert ↔ payloadFromForm", () => {
   test("aller-retour sans perte", () => {
     const alert = {
-      id: 3, station_id: "1", station_name: "Gare", target: "bikes", comparison: "at_most", bike_type: "mechanical",
+      id: 3, kind: "threshold", station_id: "1", station_name: "Gare", target: "bikes", comparison: "at_most", bike_type: "mechanical",
       threshold: 1, arrival_station_id: "2", arrival_station_name: "Zoo", arrival_threshold: 2,
       group_stations: null, group_name: null,
       time_start: "07:30", time_end: "08:30", days: "1,2,3,4,5", valid_on: null,
@@ -92,13 +92,47 @@ describe("formFromAlert ↔ payloadFromForm", () => {
 
   test("aller-retour d'un groupe", () => {
     const alert = {
-      id: 4, station_id: "2", station_name: "Zoo", target: "docks", comparison: "at_least", bike_type: "any",
+      id: 4, kind: "threshold", station_id: "2", station_name: "Zoo", target: "docks", comparison: "at_least", bike_type: "any",
       threshold: 3, arrival_station_id: null, arrival_station_name: null, arrival_threshold: null,
       group_stations: [{ station_id: "2", station_name: "Zoo" }, { station_id: "1", station_name: "Gare" }],
       group_name: "Maison", time_start: "07:30", time_end: "08:30", days: "1,2,3,4,5", valid_on: null,
     };
     const { id, ...rest } = alert;
     expect(payloadFromForm(formFromAlert(alert), names)).toEqual(rest);
+  });
+});
+
+describe("résumé à heure fixe", () => {
+  const summary = { ...defaultForm(), kind: "summary", groupIds: ["1"], sendTime: "07:45", bikeType: "ebike", days: [1, 2] };
+
+  test("validation : 1 à 5 stations, heure requise", () => {
+    expect(validateForm(summary)).toBeNull();
+    expect(validateForm({ ...summary, groupIds: [] })).toMatch(/de 1 à 5 stations/);
+    expect(validateForm({ ...summary, sendTime: "" })).toMatch(/heure d'envoi/);
+    // Le seuil et le créneau d'une alerte ne s'appliquent pas.
+    expect(validateForm({ ...summary, threshold: "abc", timeEnd: "00:00" })).toBeNull();
+  });
+  test("payload : heure d'envoi, champs de seuil neutres", () => {
+    expect(payloadFromForm({ ...summary, groupIds: ["2", "1"], groupName: " Maison " }, names)).toEqual({
+      kind: "summary", station_id: "2", station_name: "Zoo", group_name: "Maison",
+      group_stations: [{ station_id: "2", station_name: "Zoo" }, { station_id: "1", station_name: "Gare" }],
+      target: "bikes", comparison: "at_most", bike_type: "ebike", threshold: 0,
+      arrival_station_id: null, arrival_station_name: null, arrival_threshold: null,
+      time_start: "07:45", time_end: "07:45", days: "1,2", valid_on: null,
+    });
+  });
+  test("aller-retour d'un résumé ; repassé en alerte : station unique", () => {
+    const alert = payloadFromForm(summary, names);
+    const form = formFromAlert(alert);
+    expect(payloadFromForm(form, names)).toEqual(alert);
+    expect(form.group).toBe(false);
+    expect(payloadFromForm({ ...form, kind: "threshold" }, names)).toMatchObject({ kind: "threshold", station_id: "1", group_stations: null });
+  });
+  test("résumé de la carte", () => {
+    const a = payloadFromForm(summary, names);
+    expect(describeAlert(a)).toEqual({ title: "Gare", detail: "Résumé à 07:45 · vélos électriques" });
+    expect(describeAlert({ ...a, bike_type: "any", group_name: "Maison" }))
+      .toEqual({ title: "Maison", detail: "Gare · Résumé à 07:45 · vélos" });
   });
 });
 

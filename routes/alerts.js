@@ -13,6 +13,7 @@ const DAYS_RE    = /^[1-7](,[1-7])*$/;
 const BIKE_TYPES = ['mechanical', 'ebike', 'any'];
 const TARGETS    = ['bikes', 'docks'];
 const COMPARISONS = ['at_most', 'at_least'];
+const KINDS      = ['threshold', 'summary'];
 const MAX_COUNT  = 50;
 const GROUP_MIN  = 2;
 const GROUP_MAX  = 5;   // au-delà, le corps de la notification est tronqué
@@ -39,6 +40,10 @@ const present = (v) => v !== undefined && v !== null && v !== '';
  *    toutes sont basses ; « au moins N » : une suffit). La 1re station est recopiée dans
  *    `station_id` / `station_name`. Incompatible avec un trajet.
  *
+ * `kind` : `threshold` (défaut, tout ce qui précède) ou `summary` — résumé envoyé chaque
+ * jour choisi à `time_start` : 1 à 5 stations (`group_stations`), `bike_type`, `days`.
+ * Les champs de seuil / trajet / créneau sont alors neutralisés (voir validateSummary).
+ *
  * `current` (PATCH) : l'alerte existante ; le payload est fusionné dessus puis tout
  * est revalidé (les règles croisées restent cohérentes). `today` : date du jour dans
  * le fuseau des alertes, pour refuser une alerte ponctuelle dans le passé.
@@ -50,18 +55,14 @@ function validateAlertPayload(body, { current = null, today = null } = {}) {
   const fields = {};
   const errors = [];
 
-  const group = validateGroup(src.group_stations, errors);
-  if (group) {
-    fields.group_stations = group;
-    const name = typeof src.group_name === 'string' ? src.group_name.trim() : '';
-    if (name.length > GROUP_NAME_MAX) errors.push(`group_name (${GROUP_NAME_MAX} caractères max)`);
-    fields.group_name = name || null;
-    src.station_id = group[0].station_id;
-    src.station_name = group[0].station_name;
-  } else {
-    fields.group_stations = null;
-    fields.group_name = null;
+  fields.kind = src.kind ?? 'threshold';
+  if (!KINDS.includes(fields.kind)) {
+    errors.push('kind (threshold|summary)');
+    return { fields, errors };
   }
+  if (fields.kind === 'summary') return validateSummary(src, fields, errors);
+
+  const group = applyGroup(src, fields, errors, GROUP_MIN);
 
   if (present(src.station_id) && String(src.station_id).length <= 64) fields.station_id = String(src.station_id);
   else errors.push('station_id');
@@ -110,10 +111,7 @@ function validateAlertPayload(body, { current = null, today = null } = {}) {
   if (HHMM.test(src.time_end ?? '')) fields.time_end = src.time_end;
   else errors.push('time_end (HH:MM)');
 
-  if (src.days === undefined) fields.days = DAYS_ALL;
-  else if (typeof src.days === 'string' && DAYS_RE.test(src.days)) {
-    fields.days = [...new Set(src.days.split(',').map(Number))].sort((a, b) => a - b).join(',');
-  } else errors.push('days (ex: "1,2,3" — chiffres 1-7)');
+  applyDays(src, fields, errors);
 
   if (!present(src.valid_on)) fields.valid_on = null;
   else if (!YMD.test(src.valid_on)) errors.push('valid_on (AAAA-MM-JJ)');
@@ -127,13 +125,72 @@ function validateAlertPayload(body, { current = null, today = null } = {}) {
 }
 
 /**
- * Stations d'un groupe : null si absent (alerte simple), sinon tableau normalisé
- * [{ station_id, station_name }] de 2 à 5 stations distinctes (erreurs dans `errors`).
+ * Résumé à heure fixe : stations (1 à 5), type de vélo, heure d'envoi, jours.
+ * Seuil, trajet et alerte ponctuelle n'ont pas de sens : valeurs neutres forcées,
+ * et `time_end` = `time_start` (colonne obligatoire, sans usage ici).
  */
-function validateGroup(raw, errors) {
+function validateSummary(src, fields, errors) {
+  if (!applyGroup(src, fields, errors, 1)) {
+    if (!errors.length) errors.push(`group_stations (1 à ${GROUP_MAX} stations distinctes)`);
+  }
+  fields.station_id = src.station_id ?? null;
+  fields.station_name = src.station_name ?? null;
+
+  fields.target = 'bikes';
+  fields.comparison = 'at_most';
+  fields.threshold = 0;
+  if (src.bike_type === undefined) fields.bike_type = 'any';
+  else if (BIKE_TYPES.includes(src.bike_type)) fields.bike_type = src.bike_type;
+  else errors.push('bike_type (mechanical|ebike|any)');
+
+  fields.arrival_station_id = null;
+  fields.arrival_station_name = null;
+  fields.arrival_threshold = null;
+  fields.valid_on = null;
+
+  if (HHMM.test(src.time_start ?? '')) fields.time_start = fields.time_end = src.time_start;
+  else errors.push('time_start (HH:MM)');
+  applyDays(src, fields, errors);
+  fields.active = src.active === undefined ? 1 : (src.active ? 1 : 0);
+
+  return { fields, errors };
+}
+
+/**
+ * Stations du groupe (`min` à GROUP_MAX) + nom facultatif ; la 1re station est recopiée
+ * dans `src.station_*`. Renvoie le groupe, ou null (absent ou invalide).
+ */
+function applyGroup(src, fields, errors, min) {
+  const group = validateGroup(src.group_stations, errors, min);
+  if (!group) {
+    fields.group_stations = null;
+    fields.group_name = null;
+    return null;
+  }
+  fields.group_stations = group;
+  const name = typeof src.group_name === 'string' ? src.group_name.trim() : '';
+  if (name.length > GROUP_NAME_MAX) errors.push(`group_name (${GROUP_NAME_MAX} caractères max)`);
+  fields.group_name = name || null;
+  src.station_id = group[0].station_id;
+  src.station_name = group[0].station_name;
+  return group;
+}
+
+function applyDays(src, fields, errors) {
+  if (src.days === undefined) fields.days = DAYS_ALL;
+  else if (typeof src.days === 'string' && DAYS_RE.test(src.days)) {
+    fields.days = [...new Set(src.days.split(',').map(Number))].sort((a, b) => a - b).join(',');
+  } else errors.push('days (ex: "1,2,3" — chiffres 1-7)');
+}
+
+/**
+ * Stations d'un groupe : null si absent (alerte simple), sinon tableau normalisé
+ * [{ station_id, station_name }] de `min` à 5 stations distinctes (erreurs dans `errors`).
+ */
+function validateGroup(raw, errors, min) {
   if (raw === undefined || raw === null) return null;
-  const label = `group_stations (${GROUP_MIN} à ${GROUP_MAX} stations distinctes)`;
-  if (!Array.isArray(raw) || raw.length < GROUP_MIN || raw.length > GROUP_MAX) {
+  const label = `group_stations (${min} à ${GROUP_MAX} stations distinctes)`;
+  if (!Array.isArray(raw) || raw.length < min || raw.length > GROUP_MAX) {
     errors.push(label);
     return null;
   }

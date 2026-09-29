@@ -92,11 +92,13 @@ async function migrateAlertsV11(db) {
 }
 
 /**
- * v1.3 — alertes de groupe : plusieurs stations surveillées ensemble.
- * `group_stations` : JSON [{ station_id, station_name }] (2 à 5 stations, lu avec
- * l'alerte, jamais filtré en SQL) ; `group_name` : nom libre (« Maison »).
+ * v1.3 — alertes de groupe et résumés à heure fixe.
+ * `group_stations` : JSON [{ station_id, station_name }] (lu avec l'alerte, jamais
+ * filtré en SQL) ; `group_name` : nom libre (« Maison ») ; `kind` : `threshold`
+ * (alerte de disponibilité) ou `summary` (résumé envoyé à `time_start`).
  */
 async function migrateAlertGroups(db) {
+  await addColumn(db, 'alerts', 'kind', "TEXT NOT NULL DEFAULT 'threshold'");
   await addColumn(db, 'alerts', 'group_name', 'TEXT DEFAULT NULL');
   await addColumn(db, 'alerts', 'group_stations', 'TEXT DEFAULT NULL');
 }
@@ -149,6 +151,7 @@ async function runMigrations(db) {
       arrival_station_id   TEXT DEFAULT NULL,
       arrival_station_name TEXT DEFAULT NULL,
       arrival_threshold    INTEGER DEFAULT NULL,
+      kind               TEXT NOT NULL DEFAULT 'threshold',
       group_name         TEXT DEFAULT NULL,
       group_stations     TEXT DEFAULT NULL,
       valid_on           TEXT DEFAULT NULL,
@@ -220,6 +223,7 @@ async function runMigrations(db) {
     arrival_station_id   TEXT DEFAULT NULL,
     arrival_station_name TEXT DEFAULT NULL,
     arrival_threshold    INTEGER DEFAULT NULL,
+    kind         TEXT NOT NULL DEFAULT 'threshold',
     group_name   TEXT DEFAULT NULL,
     group_stations TEXT DEFAULT NULL,
     valid_on     TEXT DEFAULT NULL,

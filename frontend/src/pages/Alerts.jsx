@@ -5,7 +5,7 @@ import { useFavorites, useIsMobile } from "../hooks";
 import { pushPermission, enablePush } from "../push";
 import {
   ALL_DAYS, defaultForm, formFromAlert, validateForm, payloadFromForm, describeAlert,
-  tripAllowed, groupRuleText, localYmd, addDaysYmd, fmtDay, GROUP_MAX, GROUP_NAME_MAX,
+  tripAllowed, groupRuleText, localYmd, addDaysYmd, fmtDay, GROUP_MIN, GROUP_MAX, GROUP_NAME_MAX,
 } from "../lib/alerts";
 import BottomSheet from "../components/BottomSheet";
 import Icon from "../components/Icon";
@@ -20,6 +20,14 @@ const TARGET_OPTIONS = [
   { value: "bikes", label: "Vélos" },
   { value: "docks", label: "Places libres" },
 ];
+const KIND_OPTIONS = [
+  { value: "threshold", label: "Alerte de disponibilité" },
+  { value: "summary",   label: "Résumé à heure fixe" },
+];
+const KIND_HINT = {
+  threshold: "Une notification seulement quand la disponibilité franchit votre seuil.",
+  summary:   "Chaque jour choisi, à l'heure dite, le nombre de vélos de vos stations.",
+};
 const MODE_OPTIONS = [
   { value: "single", label: "Une station" },
   { value: "group",  label: "Plusieurs stations" },
@@ -173,7 +181,7 @@ function PauseControl({ pausedUntil, onChange }) {
 
 function AlertCard({ a, onToggle, onDelete, onEdit, paused }) {
   const { title, detail } = describeAlert(a);
-  const icon = a.group_stations?.length ? "map-pin"
+  const icon = a.kind === "summary" ? "clock" : a.group_stations?.length ? "map-pin"
     : a.arrival_station_id ? "route" : a.target === "docks" ? "parking" : BIKE_ICON[a.bike_type];
   return (
     <div className={"alert-card" + (a.active && !paused ? "" : " off")}>
@@ -205,6 +213,37 @@ function AlertCard({ a, onToggle, onDelete, onEdit, paused }) {
   );
 }
 
+/** Cases à cocher des stations (groupe d'alerte ou résumé) + nom facultatif. */
+function StationPicker({ stations, form, setField, min }) {
+  const toggle = (id) => {
+    const ids = form.groupIds.includes(id) ? form.groupIds.filter((x) => x !== id) : [...form.groupIds, id];
+    setField("groupIds", ids);
+  };
+  return (
+    <div className="trip-box">
+      <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+        <span className="form-label">Nom du groupe (facultatif)</span>
+        <input type="text" className="field" value={form.groupName} maxLength={GROUP_NAME_MAX}
+          placeholder="ex. Maison, Travail" aria-label="Nom du groupe"
+          onChange={(e) => setField("groupName", e.target.value)} />
+      </label>
+      <span className="form-label">Stations ({form.groupIds.length}/{GROUP_MAX})</span>
+      {stations.length < min && <div className="form-hint">Ajoutez au moins deux stations en favoris.</div>}
+      {stations.map((f) => {
+        const checked = form.groupIds.includes(f.station_id);
+        return (
+          <label key={f.station_id} className="check-row">
+            <input type="checkbox" checked={checked}
+              disabled={!checked && form.groupIds.length >= GROUP_MAX}
+              onChange={() => toggle(f.station_id)} />
+            <span>{f.station_name}</span>
+          </label>
+        );
+      })}
+    </div>
+  );
+}
+
 function AlertForm({ stations, form, setField, error, onSubmit, onCancel, editing }) {
   if (stations.length === 0) {
     return <div style={{ fontSize: 14, color: "var(--text-3)" }}>Ajoutez d'abord des stations en favoris.</div>;
@@ -212,44 +251,47 @@ function AlertForm({ stations, form, setField, error, onSubmit, onCancel, editin
   const unit = form.target === "docks" ? "places libres" : "vélos disponibles";
   const arrivals = stations.filter((s) => s.station_id !== form.stationId);
 
+  const summary = form.kind === "summary";
+  // Premier passage à plusieurs stations : on part de la station déjà choisie.
+  const seedGroup = () => {
+    if (form.groupIds.length === 0 && form.stationId) setField("groupIds", [form.stationId]);
+  };
   const setMode = (mode) => {
     setField("group", mode === "group");
-    // Premier passage en groupe : on part de la station déjà choisie.
-    if (mode === "group" && form.groupIds.length === 0 && form.stationId) setField("groupIds", [form.stationId]);
+    if (mode === "group") seedGroup();
   };
-  const toggleGroupStation = (id) => {
-    const ids = form.groupIds.includes(id) ? form.groupIds.filter((x) => x !== id) : [...form.groupIds, id];
-    setField("groupIds", ids);
+  const setKind = (kind) => {
+    setField("kind", kind);
+    if (kind === "summary") seedGroup();
   };
 
   return (
     <form onSubmit={onSubmit} style={{ display: "flex", flexDirection: "column", gap: 16 }} aria-label="Formulaire d'alerte">
       <div className="form-title">{editing ? "Modifier l'alerte" : "Nouvelle alerte"}</div>
 
+      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+        <Seg label="Type d'alerte" options={KIND_OPTIONS} value={form.kind} onChange={setKind} />
+        <span className="form-hint">{KIND_HINT[form.kind]}</span>
+      </div>
+
+      {summary ? (
+        <>
+          <StationPicker stations={stations} form={form} setField={setField} min={1} />
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            <span className="form-label">Type de vélo</span>
+            <Seg label="Type de vélo" options={BIKE_OPTIONS} value={form.bikeType} onChange={(v) => setField("bikeType", v)} />
+          </div>
+          <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            <span className="form-label">Heure d'envoi</span>
+            <input type="time" value={form.sendTime} onChange={(e) => setField("sendTime", e.target.value)}
+              className="field mono" aria-label="Heure d'envoi" style={{ maxWidth: 160 }} />
+          </label>
+        </>
+      ) : (<>
       <Seg label="Stations surveillées" options={MODE_OPTIONS} value={form.group ? "group" : "single"} onChange={setMode} />
 
       {form.group ? (
-        <div className="trip-box">
-          <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-            <span className="form-label">Nom du groupe (facultatif)</span>
-            <input type="text" className="field" value={form.groupName} maxLength={GROUP_NAME_MAX}
-              placeholder="ex. Maison, Travail" aria-label="Nom du groupe"
-              onChange={(e) => setField("groupName", e.target.value)} />
-          </label>
-          <span className="form-label">Stations ({form.groupIds.length}/{GROUP_MAX})</span>
-          {stations.length < 2 && <div className="form-hint">Ajoutez au moins deux stations en favoris.</div>}
-          {stations.map((f) => {
-            const checked = form.groupIds.includes(f.station_id);
-            return (
-              <label key={f.station_id} className="check-row">
-                <input type="checkbox" checked={checked}
-                  disabled={!checked && form.groupIds.length >= GROUP_MAX}
-                  onChange={() => toggleGroupStation(f.station_id)} />
-                <span>{f.station_name}</span>
-              </label>
-            );
-          })}
-        </div>
+        <StationPicker stations={stations} form={form} setField={setField} min={GROUP_MIN} />
       ) : (
         <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
           <span className="form-label">{form.trip && tripAllowed(form) ? "Station de départ" : "Station"}</span>
@@ -336,8 +378,9 @@ function AlertForm({ stations, form, setField, error, onSubmit, onCancel, editin
         <input type="checkbox" checked={form.oneShot} onChange={(e) => setField("oneShot", e.target.checked)} />
         <span>{form.validOn ? `Uniquement le ${fmtDay(form.validOn)}` : "Aujourd'hui seulement"} (supprimée ensuite)</span>
       </label>
+      </>)}
 
-      {!form.oneShot && (
+      {(summary || !form.oneShot) && (
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           <span className="form-label">Jours</span>
           <DayPicker value={form.days} onChange={(d) => setField("days", d)} />
@@ -349,7 +392,7 @@ function AlertForm({ stations, form, setField, error, onSubmit, onCancel, editin
       <div className="form-submit-row">
         {editing && <button type="button" className="cancel-btn" onClick={onCancel}>Annuler</button>}
         <button type="submit" data-autofocus className="submit-btn">
-          {editing ? "Enregistrer" : "Créer l'alerte"}
+          {editing ? "Enregistrer" : summary ? "Créer le résumé" : "Créer l'alerte"}
         </button>
       </div>
     </form>

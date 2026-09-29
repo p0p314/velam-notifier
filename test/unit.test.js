@@ -5,7 +5,10 @@ const assert = require('node:assert/strict');
 
 const { validateAlertPayload } = require('../routes/alerts');
 const { mergeWithStatus } = require('../routes/stations');
-const { countForType, docksOf, evaluateAlert, buildMessage, buildPayload, findFallback, fallbacksFor, inWindow, nowInTz } = require('../push');
+const {
+  countForType, docksOf, evaluateAlert, buildMessage, buildPayload, buildSummaryPayload, isSummaryDue,
+  findFallback, fallbacksFor, inWindow, nowInTz,
+} = require('../push');
 const { distanceKm, fmtDistance } = require('../geo');
 const { addDays } = require('../time');
 const { normalizeRentalApps } = require('../rentalApps');
@@ -25,7 +28,7 @@ describe('validateAlertPayload — création', () => {
     assert.deepEqual(fields, {
       ...validAlert, target: 'bikes', comparison: 'at_most', valid_on: null, active: 1,
       arrival_station_id: null, arrival_station_name: null, arrival_threshold: null,
-      group_name: null, group_stations: null,
+      group_name: null, group_stations: null, kind: 'threshold',
     });
   });
 
@@ -162,6 +165,79 @@ describe('validateAlertPayload — groupe de stations', () => {
     assert.equal(single.group_stations, null);
     assert.equal(single.group_name, null);
     assert.equal(single.station_id, '9');
+  });
+});
+
+describe('validateAlertPayload — résumé à heure fixe', () => {
+  const gare = { station_id: '1', station_name: 'Gare' };
+  const summary = { kind: 'summary', group_stations: [gare], bike_type: 'ebike', time_start: '08:00', days: '1,2,3,4,5' };
+
+  test('résumé valide : une seule station suffit, champs de seuil neutralisés', () => {
+    const { fields, errors } = v({ ...summary, threshold: 9, comparison: 'at_least', target: 'docks', time_end: '12:00',
+      arrival_station_id: '2', arrival_station_name: 'Zoo', valid_on: TODAY });
+    assert.deepEqual(errors, []);
+    assert.deepEqual(fields, {
+      kind: 'summary', group_stations: [gare], group_name: null, station_id: '1', station_name: 'Gare',
+      target: 'bikes', comparison: 'at_most', threshold: 0, bike_type: 'ebike',
+      arrival_station_id: null, arrival_station_name: null, arrival_threshold: null, valid_on: null,
+      time_start: '08:00', time_end: '08:00', days: '1,2,3,4,5', active: 1,
+    });
+  });
+  test('stations obligatoires (1 à 5)', () => {
+    assert.ok(v({ ...summary, group_stations: undefined, station_id: '1', station_name: 'Gare' }).errors.length);
+    assert.ok(v({ ...summary, group_stations: [] }).errors.length);
+  });
+  test('heure et type de vélo validés', () => {
+    assert.ok(v({ ...summary, time_start: '8h' }).errors.includes('time_start (HH:MM)'));
+    assert.ok(v({ ...summary, bike_type: 'tandem' }).errors.length);
+  });
+  test('type inconnu refusé', () => {
+    assert.deepEqual(v({ ...validAlert, kind: 'hebdo' }).errors, ['kind (threshold|summary)']);
+  });
+  test('PATCH : un résumé repasse en alerte (règles de l\'alerte revalidées)', () => {
+    const current = { ...v(summary).fields, id: 1 };
+    assert.equal(v({ active: false }, { current }).fields.kind, 'summary');
+    // Retour en alerte avec 1 seule station dans le groupe : refusé (il en faut 2).
+    assert.ok(v({ kind: 'threshold' }, { current }).errors.length);
+    const back = v({ kind: 'threshold', group_stations: null, time_end: '09:00' }, { current });
+    assert.deepEqual(back.errors, []);
+    assert.equal(back.fields.station_id, '1');
+  });
+});
+
+describe('résumé : échéance et contenu', () => {
+  const alert = { kind: 'summary', time_start: '08:00', days: '1,2,3', last_notified_date: null };
+  const at = (hhmm, isoDay = 3, date = '2025-09-24') => ({ hhmm, isoDay, date });
+
+  test('envoyé de l\'heure choisie à +15 min, une fois par jour, les bons jours', () => {
+    assert.equal(isSummaryDue(alert, at('07:59')), false);
+    assert.equal(isSummaryDue(alert, at('08:00')), true);
+    assert.equal(isSummaryDue(alert, at('08:15')), true);
+    assert.equal(isSummaryDue(alert, at('08:16')), false);
+    assert.equal(isSummaryDue(alert, at('08:00', 4)), false);
+    assert.equal(isSummaryDue({ ...alert, last_notified_date: '2025-09-24' }, at('08:05')), false);
+    assert.equal(isSummaryDue({ ...alert, last_notified_date: '2025-09-23' }, at('08:05')), true);
+  });
+
+  const statusMap = {
+    '1': { num_bikes_available: 3, vehicle_types_available: [{ vehicle_type_id: 'mechanical', count: 2 }, { vehicle_type_id: 'electrical', count: 1 }] },
+    '2': { num_bikes_available: 4, is_renting: false },
+  };
+  const summary = {
+    kind: 'summary', station_id: '1', bike_type: 'any', group_name: 'Maison',
+    group_stations: [{ station_id: '1', station_name: 'Gare' }, { station_id: '2', station_name: 'Zoo' }, { station_id: '3', station_name: 'Cirque' }],
+  };
+
+  test('les deux types : détail méca / élec, stations fermées signalées', () => {
+    const p = buildSummaryPayload(summary, statusMap);
+    assert.equal(p.title, '📊 Maison — vélos');
+    assert.equal(p.body, 'Gare : 2 méca · 1 élec\nZoo : indisponible\nCirque : indisponible');
+    assert.match(p.url, /^https:\/\/.+\/open\?url=/);
+  });
+  test('un seul type, sans nom de groupe', () => {
+    const p = buildSummaryPayload({ ...summary, group_name: null, bike_type: 'ebike', group_stations: summary.group_stations.slice(0, 1) }, statusMap);
+    assert.equal(p.title, '📊 Vos stations — vélos électriques');
+    assert.equal(p.body, 'Gare : 1');
   });
 });
 

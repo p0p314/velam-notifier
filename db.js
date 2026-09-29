@@ -282,14 +282,14 @@ async function getAlert(userId, id) {
 
 // Champs d'alerte modifiables par l'utilisateur (whitelist SQL).
 const ALERT_FIELDS = [
-  'station_id', 'station_name', 'bike_type', 'target', 'comparison', 'threshold',
+  'kind', 'station_id', 'station_name', 'bike_type', 'target', 'comparison', 'threshold',
   'arrival_station_id', 'arrival_station_name', 'arrival_threshold', 'valid_on',
   'group_name', 'group_stations', 'time_start', 'time_end', 'days', 'active',
 ];
 
 async function createAlert(userId, a) {
   const row = {
-    bike_type: 'any', target: 'bikes', comparison: 'at_most', threshold: 1,
+    kind: 'threshold', bike_type: 'any', target: 'bikes', comparison: 'at_most', threshold: 1,
     arrival_station_id: null, arrival_station_name: null, arrival_threshold: null,
     group_name: null, group_stations: null,
     valid_on: null, days: '1,2,3,4,5,6,7', active: 1,

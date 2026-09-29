@@ -147,6 +147,19 @@ describe('alertes v1.1', () => {
     assert.equal(single.body.alert.station_id, '1');
   });
 
+  test('résumé à heure fixe : enregistré avec une station, champs de seuil neutralisés', async () => {
+    const { token } = await registerUser(api);
+    const res = await api.post('/api/alerts', { token, body: {
+      kind: 'summary', group_stations: [{ station_id: '1', station_name: 'Gare' }], bike_type: 'ebike',
+      time_start: '07:45', days: '1,2,3,4,5', threshold: 12,
+    } });
+    assert.equal(res.status, 201);
+    assert.equal(res.body.alert.kind, 'summary');
+    assert.equal(res.body.alert.time_end, '07:45');
+    assert.equal(res.body.alert.threshold, 0);
+    assert.equal(res.body.alert.station_id, '1');
+  });
+
   test('groupe invalide (1 station) → 400', async () => {
     const { token } = await registerUser(api);
     const res = await api.post('/api/alerts', { token, body: { ...body, group_stations: [{ station_id: '1', station_name: 'Gare' }] } });

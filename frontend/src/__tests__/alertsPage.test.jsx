@@ -159,6 +159,40 @@ describe("groupe de stations", () => {
   });
 });
 
+describe("résumé à heure fixe", () => {
+  test("création : type séparé, seuls les champs utiles, payload correct", async () => {
+    await ready();
+    const f = within(form());
+    fireEvent.click(f.getByRole("button", { name: "Résumé à heure fixe" }));
+    expect(f.getByText(/le nombre de vélos de vos stations/)).toBeTruthy();
+    // Champs propres aux alertes de disponibilité masqués.
+    for (const name of ["Surveiller", "Me prévenir quand", "Stations surveillées"]) expect(f.queryByRole("group", { name })).toBeNull();
+    expect(f.queryByLabelText("Seuil")).toBeNull();
+    expect(f.queryByLabelText("Début")).toBeNull();
+    expect(f.queryByLabelText(/Aujourd'hui seulement/)).toBeNull();
+    // Une seule station (pré-cochée) suffit.
+    expect(f.getByRole("checkbox", { name: "Gare" }).checked).toBe(true);
+
+    fireEvent.click(f.getByRole("button", { name: "Électrique" }));
+    fireEvent.change(f.getByLabelText("Heure d'envoi"), { target: { value: "07:40" } });
+    fireEvent.click(f.getByRole("button", { name: "Créer le résumé" }));
+    await waitFor(() => expect(lastPost()).toBeTruthy());
+    expect(lastPost()).toMatchObject({
+      kind: "summary", bike_type: "ebike", time_start: "07:40", time_end: "07:40",
+      group_stations: [{ station_id: "1", station_name: "Gare" }],
+    });
+  });
+
+  test("carte d'un résumé", async () => {
+    alerts = [{ id: 8, active: 1, kind: "summary", station_id: "1", station_name: "Gare", target: "bikes", comparison: "at_most",
+      bike_type: "any", threshold: 0, time_start: "07:40", time_end: "07:40", days: "1,2,3,4,5", valid_on: null,
+      group_name: null, group_stations: [{ station_id: "1", station_name: "Gare" }, { station_id: "2", station_name: "Zoo" }] }];
+    renderPage();
+    expect(await screen.findByText("Gare, Zoo")).toBeTruthy();
+    expect(screen.getByText("Résumé à 07:40 · vélos")).toBeTruthy();
+  });
+});
+
 describe("liste", () => {
   test("résumés : trajet, ponctuelle", async () => {
     alerts = [
