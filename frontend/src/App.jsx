@@ -4,6 +4,7 @@ import { AuthProvider, useAuth } from "./auth";
 import { useIsMobile } from "./hooks";
 import { ThemeProvider, useTheme } from "./useTheme";
 import { PwaInstallProvider, usePwaInstall } from "./components/PwaInstallContext";
+import { getLandingPref, landingPath } from "./lib/prefs";
 import BottomNav from "./components/BottomNav";
 import Navbar from "./components/Navbar";
 import Icon from "./components/Icon";
@@ -25,16 +26,17 @@ function Protected() {
   return isAuthenticated ? <Outlet /> : <Navigate to="/login" replace />;
 }
 
-// Landing différenciée : mobile → Favoris (expérience centrée favoris),
-// desktop → Stations (tableau de bord complet).
+// Page d'ouverture : choisie dans Paramètres › Préférences ; par défaut, mobile →
+// Favoris (expérience centrée favoris), desktop → Stations (tableau de bord complet).
 function Landing() {
   const isMobile = useIsMobile();
-  return <Navigate to={isMobile ? "/favoris" : "/stations"} replace />;
+  return <Navigate to={landingPath(getLandingPref(), isMobile)} replace />;
 }
 
-function Layout() {
+export function Layout() {
   const { theme, toggle } = useTheme();
-  const { open: openInstall } = usePwaInstall();
+  // Déjà installée (lancée depuis l'écran d'accueil) : plus rien à proposer.
+  const { open: openInstall, isInstalled } = usePwaInstall();
   const navigate = useNavigate();
   return (
     <div className="app-shell">
@@ -48,10 +50,12 @@ function Layout() {
           <button className="icon-btn" aria-label="Changer de thème" onClick={toggle}>
             <Icon name={theme === "dark" ? "sun" : "moon"} />
           </button>
-          <button className="icon-btn" aria-label="Installer l'app" onClick={openInstall}>
-            <Icon name="download" />
-          </button>
-          <button className="icon-btn" aria-label="Mon compte" onClick={() => navigate("/compte")}>
+          {!isInstalled && (
+            <button className="icon-btn" aria-label="Installer l'app" onClick={openInstall}>
+              <Icon name="download" />
+            </button>
+          )}
+          <button className="icon-btn" aria-label="Paramètres" onClick={() => navigate("/compte")}>
             <Icon name="user" />
           </button>
         </div>

@@ -1,5 +1,7 @@
 import { describe, test, expect, vi, beforeEach } from "vitest";
-import { syncPush, enablePush, unlinkPush, pushPermission } from "../push";
+import {
+  syncPush, enablePush, unlinkPush, pushPermission, pushStatus, disablePush, isPushTurnedOff, currentPushEndpoint,
+} from "../push";
 import { setToken } from "../api";
 import { jsonResponse } from "./setup";
 
@@ -137,5 +139,48 @@ describe("unlinkPush (déconnexion)", () => {
     fetch.mockRejectedValue(new TypeError("Failed to fetch"));
     Object.defineProperty(navigator, "onLine", { configurable: true, get: () => false });
     await expect(unlinkPush()).resolves.toBeUndefined();
+  });
+});
+
+describe("désactivation par l'utilisateur (Paramètres)", () => {
+  test("disablePush : détache l'appareil, résilie la subscription, choix mémorisé", async () => {
+    existingSub = makeSub(KEY_BYTES);
+    expect(pushStatus()).toBe("on");
+    expect(await disablePush()).toBe("off");
+    expect(existingSub.unsubscribe).toHaveBeenCalled();
+    expect(JSON.parse(posted("/api/push/unsubscribe")[0][1].body)).toEqual({ endpoint: existingSub.endpoint });
+    expect(isPushTurnedOff()).toBe(true);
+    expect(pushStatus()).toBe("off");
+  });
+
+  test("désactivées : syncPush ne resouscrit plus au démarrage", async () => {
+    await disablePush();
+    fetch.mockClear();
+    expect(await syncPush()).toBe(false);
+    expect(pushManager.subscribe).not.toHaveBeenCalled();
+    expect(posted("/api/push/subscribe")).toHaveLength(0);
+  });
+
+  test("enablePush lève le choix et resouscrit", async () => {
+    await disablePush();
+    expect(await enablePush()).toBe("granted");
+    expect(isPushTurnedOff()).toBe(false);
+    expect(pushStatus()).toBe("on");
+    expect(posted("/api/push/subscribe")).toHaveLength(1);
+  });
+
+  test("pushStatus : la permission du navigateur prime", () => {
+    permission = "default";
+    expect(pushStatus()).toBe("default");
+    permission = "denied";
+    expect(pushStatus()).toBe("denied");
+  });
+
+  test("currentPushEndpoint", async () => {
+    expect(await currentPushEndpoint()).toBeNull();
+    existingSub = makeSub(KEY_BYTES, "https://push.example.com/ici");
+    expect(await currentPushEndpoint()).toBe("https://push.example.com/ici");
+    permission = "default";
+    expect(await currentPushEndpoint()).toBeNull();
   });
 });

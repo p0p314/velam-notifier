@@ -6,6 +6,7 @@ import BottomSheet from "../components/BottomSheet";
 import Icon from "../components/Icon";
 import { OfflineBanner } from "../components/Offline";
 import LocateHint from "../components/LocateHint";
+import { getBikePref, stationFilterFor } from "../lib/prefs";
 import { useStations, useFavorites, useGeolocation, distanceKm } from "../hooks";
 
 const FILTERS = [
@@ -37,7 +38,9 @@ export default function Stations() {
   const { coords, status: geoStatus, locate } = useGeolocation();
 
   const [search, setSearch] = useState("");
-  const [filter, setFilter] = useState("all");
+  // Filtre initial = type de vélo préféré (Paramètres › Préférences).
+  const [defaultFilter] = useState(() => stationFilterFor(getBikePref()));
+  const [filter, setFilter] = useState(defaultFilter);
   const [sort,   setSortState] = useState("distance"); // proximité par défaut
   const setSort = (v) => {
     setSortState(v);
@@ -77,7 +80,7 @@ export default function Stations() {
   const totMeca = stations.reduce((a, s) => a + (s.mechanical ?? 0), 0);
   const activeCount = stations.filter((s) => s.is_renting !== false).length;
 
-  const filtersActive = filter !== "all" || sort !== "distance";
+  const filtersActive = filter !== defaultFilter || sort !== "distance";
 
   const ErrorBox = (
     <div className="view-pad">

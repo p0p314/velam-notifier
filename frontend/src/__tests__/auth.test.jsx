@@ -90,4 +90,31 @@ describe("AuthProvider", () => {
     expect(tokenDuringUnlink).toBe("t");
     expect(getToken()).toBeNull();
   });
+
+  test("logout : ferme la session de l'appareil côté serveur (avec le jeton encore valide)", async () => {
+    setToken("t");
+    setStoredUser({ id: 1, username: "alice" });
+    const seen = [];
+    fetch.mockImplementation(async (url, init = {}) => {
+      seen.push({ path: String(url).replace(/^https?:\/\/[^/]+/, ""), method: init.method ?? "GET", auth: init.headers?.Authorization });
+      return jsonResponse({ ok: true, token: "t", user: { id: 1, username: "alice" } });
+    });
+    renderApp();
+    await act(async () => { screen.getByText("sortir").click(); });
+    await screen.findByText("Page de connexion");
+    expect(seen.find((c) => c.path === "/api/auth/logout")).toMatchObject({ method: "POST", auth: "Bearer t" });
+  });
+
+  test("logout : serveur injoignable → déconnexion locale quand même", async () => {
+    setToken("t");
+    setStoredUser({ id: 1, username: "alice" });
+    fetch.mockImplementation(async (url) => {
+      if (String(url).endsWith("/api/auth/logout")) throw new TypeError("réseau");
+      return jsonResponse({ ok: true, token: "t", user: { id: 1, username: "alice" } });
+    });
+    renderApp();
+    await act(async () => { screen.getByText("sortir").click(); });
+    await screen.findByText("Page de connexion");
+    expect(getToken()).toBeNull();
+  });
 });

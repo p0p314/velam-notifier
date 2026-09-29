@@ -162,6 +162,37 @@ describe('rental_apps et cron', () => {
     assert.ok(!res.text.includes('</script><script>alert(1)'));
     assert.match(res.headers.get('content-type'), /text\/html/);
   });
+
+  test('/open : aucun script inline (CSP), site Vélam hors de l\'app, retour à VéloPulse', async () => {
+    await dbc.run(
+      'INSERT INTO rental_apps (platform, name, discovery_uri, store_uri, updated_at) VALUES (?, ?, ?, ?, ?)',
+      ['ios', 'Vélam', 'velam://home', 'https://apps.apple.com/app/velam', 0]
+    );
+    const res = await api.get('/open');
+    // Tous les scripts sont externes : la CSP script-src 'self' les autorise.
+    const scripts = res.text.match(/<script[^>]*>/g);
+    assert.deepEqual(scripts, ['<script src="/open.js">']);
+    assert.match(res.text, /data-deep="velam:\/\/home"/);
+    assert.match(res.text, /data-store-ios="https:\/\/apps\.apple\.com\/app\/velam"/);
+    // Le site Vélam s'ouvre dans le navigateur, jamais dans la fenêtre de l'app.
+    assert.match(res.text, /href="https:\/\/velam\.amiens\.fr\/fr\/home" target="_blank" rel="noopener"/);
+    assert.match(res.text, /id="back" href="\/"/);
+    assert.match(res.text, /id="open-app" href="velam:\/\/home"/);
+  });
+
+  test('/open sans deep link synchronisé : pas de bouton d\'app, retour toujours présent', async () => {
+    const res = await api.get('/open');
+    assert.doesNotMatch(res.text, /id="open-app"/);
+    assert.match(res.text, /Retour à VéloPulse/);
+  });
+
+  test('/open.js : script servi en JavaScript, ne navigue jamais vers une page externe', async () => {
+    const res = await api.get('/open.js');
+    assert.equal(res.status, 200);
+    assert.match(res.headers.get('content-type'), /javascript/);
+    assert.match(res.text, /location\.replace\("\/"\)/);
+    assert.doesNotMatch(res.text, /velam\.amiens\.fr|location\.(href|replace)\s*=?\s*\(?\s*(web|store)/);
+  });
 });
 
 describe('sécurité HTTP', () => {

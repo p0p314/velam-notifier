@@ -6,10 +6,11 @@ import { OfflineBanner } from "../components/Offline";
 import { useStations, fmtDistance, requestPosition } from "../hooks";
 import { useTheme } from "../useTheme";
 import { bikeCountForType, nearestWithBikes } from "../lib/mapConfig";
+import { getBikePref, stationFilterFor } from "../lib/prefs";
 
 export default function MapPage() {
   const { stations, loading, error, stale, staleReason, lastUpd, reload } = useStations();
-  const [type, setType] = useState("all");
+  const [type, setType] = useState(() => stationFilterFor(getBikePref()));
   const [minBikes, setMinBikes] = useState(0);
   const { theme } = useTheme();
   // « Autour de moi » : { coords, stations } transmis à la carte + liste affichée.

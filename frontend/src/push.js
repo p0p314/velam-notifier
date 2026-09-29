@@ -17,6 +17,41 @@ export function pushPermission() {
   return pushSupported() ? Notification.permission : "unsupported";
 }
 
+// Choix de l'utilisateur, propre à cet appareil : notifications coupées dans les
+// paramètres (la permission du navigateur, elle, ne peut pas être retirée en JS).
+const PUSH_OFF_KEY = "velopulse-push-off";
+export function isPushTurnedOff() {
+  try { return localStorage.getItem(PUSH_OFF_KEY) === "1"; } catch { return false; }
+}
+function setPushTurnedOff(off) {
+  try {
+    if (off) localStorage.setItem(PUSH_OFF_KEY, "1");
+    else localStorage.removeItem(PUSH_OFF_KEY);
+  } catch { /* facultatif */ }
+}
+
+/**
+ * État des notifications sur cet appareil :
+ * "unsupported" | "denied" (bloquées dans le navigateur) | "default" (jamais activées)
+ * | "off" (coupées par l'utilisateur dans les paramètres) | "on".
+ */
+export function pushStatus() {
+  const perm = pushPermission();
+  if (perm !== "granted") return perm;
+  return isPushTurnedOff() ? "off" : "on";
+}
+
+/** Endpoint push de cet appareil (pour le garder lors d'une déconnexion des autres), ou null. */
+export async function currentPushEndpoint() {
+  if (pushPermission() !== "granted") return null;
+  try {
+    const reg = await navigator.serviceWorker.getRegistration();
+    return (await reg?.pushManager.getSubscription())?.endpoint ?? null;
+  } catch {
+    return null;
+  }
+}
+
 /** Vrai si la subscription existante a été créée avec la clé VAPID courante. */
 function sameKey(sub, key) {
   const cur = sub.options?.applicationServerKey;
@@ -40,7 +75,7 @@ const swReady = () => Promise.race([
 ]);
 
 export async function syncPush() {
-  if (pushPermission() !== "granted") return false;
+  if (pushPermission() !== "granted" || isPushTurnedOff()) return false;
 
   try {
     const reg = await swReady();
@@ -72,9 +107,30 @@ export async function syncPush() {
  */
 export async function enablePush() {
   if (!pushSupported()) return "unsupported";
+  setPushTurnedOff(false);
   const permission = await Notification.requestPermission();
   if (permission === "granted") await syncPush();
   return permission;
+}
+
+/**
+ * Coupe les notifications sur cet appareil (choix mémorisé : syncPush ne
+ * resouscrit plus au démarrage) : détache l'appareil du compte côté serveur et
+ * résilie la subscription du navigateur. Renvoie le nouvel état ("off").
+ */
+export async function disablePush() {
+  setPushTurnedOff(true);
+  try {
+    const reg = await navigator.serviceWorker.getRegistration();
+    const sub = await reg?.pushManager.getSubscription();
+    if (sub) {
+      await api("/api/push/unsubscribe", { method: "POST", body: { endpoint: sub.endpoint } }).catch(() => {});
+      await sub.unsubscribe();
+    }
+  } catch (err) {
+    console.warn("[push] désactivation incomplète :", err.message);
+  }
+  return pushStatus();
 }
 
 /**

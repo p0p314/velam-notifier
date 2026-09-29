@@ -103,6 +103,18 @@ async function migrateAlertGroups(db) {
   await addColumn(db, 'alerts', 'group_stations', 'TEXT DEFAULT NULL');
 }
 
+/**
+ * v1.4 — révocation des sessions : chaque jeton porte la `token_version` de son
+ * compte ; l'incrémenter invalide d'un coup tous les jetons émis (déconnexion
+ * des autres appareils, changement de mot de passe).
+ */
+async function migrateSessions(db) {
+  await addColumn(db, 'users', 'token_version', 'INTEGER NOT NULL DEFAULT 0');
+  // Appareil (session) auquel la subscription push est rattachée : déconnecter un
+  // appareil coupe aussi ses notifications.
+  await addColumn(db, 'push_subscriptions', 'session_id', 'TEXT DEFAULT NULL');
+}
+
 async function runMigrations(db) {
   const isPostgres = !!process.env.DATABASE_URL;
 
@@ -124,6 +136,7 @@ async function runMigrations(db) {
       id            SERIAL PRIMARY KEY,
       username      TEXT UNIQUE NOT NULL,
       password_hash TEXT NOT NULL,
+      token_version INTEGER NOT NULL DEFAULT 0,
       created_at    TIMESTAMPTZ DEFAULT NOW()
     )`);
     await db.run(`CREATE TABLE IF NOT EXISTS favorites (
@@ -167,6 +180,17 @@ async function runMigrations(db) {
     await migratePushEndpoint(db);
     await migrateAlertsV11(db);
     await migrateAlertGroups(db);
+    // v1.4 — une ligne par appareil connecté (liste « Appareils connectés »).
+    // Horodatages en millisecondes epoch.
+    await db.run(`CREATE TABLE IF NOT EXISTS sessions (
+      id           TEXT PRIMARY KEY,
+      user_id      INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      user_agent   TEXT DEFAULT NULL,
+      created_at   BIGINT NOT NULL,
+      last_seen_at BIGINT NOT NULL
+    )`);
+    await db.run('CREATE INDEX IF NOT EXISTS sessions_user_idx ON sessions (user_id)');
+    await migrateSessions(db);
     await db.run(`CREATE TABLE IF NOT EXISTS rental_apps (
       platform      TEXT PRIMARY KEY,
       name          TEXT NOT NULL,
@@ -196,6 +220,7 @@ async function runMigrations(db) {
     id            INTEGER PRIMARY KEY AUTOINCREMENT,
     username      TEXT UNIQUE NOT NULL,
     password_hash TEXT NOT NULL,
+    token_version INTEGER NOT NULL DEFAULT 0,
     created_at    DATETIME DEFAULT CURRENT_TIMESTAMP
   )`);
   await db.run(`CREATE TABLE IF NOT EXISTS favorites (
@@ -252,6 +277,15 @@ async function runMigrations(db) {
   await migratePushEndpoint(db);
   await migrateAlertsV11(db);
   await migrateAlertGroups(db);
+  await db.run(`CREATE TABLE IF NOT EXISTS sessions (
+    id           TEXT PRIMARY KEY,
+    user_id      INTEGER NOT NULL REFERENCES users(id),
+    user_agent   TEXT DEFAULT NULL,
+    created_at   INTEGER NOT NULL,
+    last_seen_at INTEGER NOT NULL
+  )`);
+  await db.run('CREATE INDEX IF NOT EXISTS sessions_user_idx ON sessions (user_id)');
+  await migrateSessions(db);
 
   console.log('[db] migrations SQLite appliquées');
 }

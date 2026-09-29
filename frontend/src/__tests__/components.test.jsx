@@ -86,6 +86,18 @@ describe("Alerts — bandeau notifications", () => {
     expect(screen.queryByRole("button", { name: "Activer" })).toBeNull();
   });
 
+  test("désactivées dans les Paramètres : avertissement, lien et réactivation", async () => {
+    setupNotification("granted");
+    localStorage.setItem("velopulse-push-off", "1");
+    wrap(<Alerts />);
+    await waitFor(() => expect(fetch).toHaveBeenCalled());
+    expect(screen.getByText(/Notifications désactivées sur cet appareil/)).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Paramètres" }).getAttribute("href")).toBe("/compte?onglet=notifications");
+    expect(screen.queryByRole("button", { name: "Tester" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Réactiver" }));
+    await waitFor(() => expect(localStorage.getItem("velopulse-push-off")).toBeNull());
+  });
+
   test("permission refusée : explication, pas de bouton", async () => {
     setupNotification("denied");
     wrap(<Alerts />);

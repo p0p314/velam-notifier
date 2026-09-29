@@ -69,19 +69,27 @@ router.get('/api/rental-apps', async (req, res) => {
   }
 });
 
+/** Échappement pour un attribut HTML (liens venant du flux Vélam : non fiables). */
+const attr = (v) => String(v ?? '')
+  .replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
 /**
  * GET /open — cible des notifications push vers l'app Vélam.
  * Page HTML autonome (hors SPA React) servie same-origin pour satisfaire
- * iOS clients.openWindow() : tente le deep link natif, puis le store, puis le web.
+ * iOS clients.openWindow(). Elle s'ouvre dans la fenêtre de VéloPulse : elle ne doit
+ * donc JAMAIS y charger un site externe (une PWA installée n'a ni barre d'adresse
+ * ni bouton retour). Elle tente le deep link Vélam, propose le store, ouvre le site
+ * Vélam dans le navigateur (nouvel onglet) et garde toujours « Retour à VéloPulse ».
+ * Script externe (/open.js) : la CSP (script-src 'self') bloque les scripts inline ;
+ * les liens lui sont passés en attributs data-*.
  */
 router.get('/open', async (req, res) => {
   let apps = {};
   try { apps = await getRentalAppsMap(); } catch (_) { /* dégrade vers web seul */ }
 
-  const safe = (v) => JSON.stringify(v ?? null).replace(/<\//g, '<\\/');
-  const deepLink     = apps.ios?.discovery_uri || apps.android?.discovery_uri || null;
-  const storeIos     = apps.ios?.store_uri     || null;
-  const storeAndroid = apps.android?.store_uri || null;
+  const deepLink     = apps.ios?.discovery_uri || apps.android?.discovery_uri || '';
+  const storeIos     = apps.ios?.store_uri     || '';
+  const storeAndroid = apps.android?.store_uri || '';
 
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
   res.setHeader('Cache-Control', 'no-store');
@@ -91,43 +99,78 @@ router.get('/open', async (req, res) => {
   <meta charset="utf-8">
   <meta name="robots" content="noindex">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Ouverture Vélam…</title>
+  <title>Ouvrir Vélam — VéloPulse</title>
   <style>
-    body{font-family:sans-serif;display:flex;flex-direction:column;
-         align-items:center;justify-content:center;height:100vh;
-         margin:0;gap:16px;color:#374151}
-    a{color:#2563eb;font-size:14px}
+    :root{--bg:#FBFBFA;--text:#1B1B19;--muted:#6B6B66;--accent:#2C66E0;--on:#fff;--line:#E3E3DE;--surface:#fff}
+    @media (prefers-color-scheme: dark){:root{--bg:#0B0B0D;--text:#ECECEE;--muted:#9A9AA2;--accent:#4F8BFF;--line:#2A2A2E;--surface:#151517}}
+    body{font-family:system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--text);margin:0;
+         min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;
+         gap:14px;padding:24px;box-sizing:border-box;text-align:center}
+    p{margin:0;color:var(--muted);font-size:15px;max-width:320px}
+    .actions{display:flex;flex-direction:column;gap:10px;width:100%;max-width:320px;margin-top:8px}
+    .btn{display:block;padding:14px 16px;border-radius:12px;font-size:15px;font-weight:600;text-decoration:none;
+         border:1px solid var(--line);background:var(--surface);color:var(--accent)}
+    .btn.primary{background:var(--accent);border-color:var(--accent);color:var(--on)}
+    .btn.back{color:var(--text)}
+    [hidden]{display:none!important}
   </style>
 </head>
-<body>
-  <img src="/icon-192.png" alt="VéloPulse" width="64" height="64">
-  <p id="msg">Ouverture de l'application Vélam…</p>
-  <a href="${OFFICIAL_WEB}">Ouvrir le site web</a>
-  <script>
-    var deep        = ${safe(deepLink)};
-    var storeIos    = ${safe(storeIos)};
-    var storeAndroid= ${safe(storeAndroid)};
-    var web         = ${safe(OFFICIAL_WEB)};
-    var isIOS     = /iphone|ipad|ipod/i.test(navigator.userAgent);
-    var isAndroid = /android/i.test(navigator.userAgent);
-    var store = isIOS ? storeIos : isAndroid ? storeAndroid : null;
-    if (!deep) {
-      window.location.replace(web);
-    } else {
-      window.location.href = deep;
-      setTimeout(function() {
-        if (store) {
-          document.getElementById('msg').textContent = 'Redirection vers le store…';
-          window.location.href = store;
-          setTimeout(function() { window.location.replace(web); }, 2000);
-        } else {
-          window.location.replace(web);
-        }
-      }, 2000);
-    }
-  </script>
+<body data-deep="${attr(deepLink)}" data-store-ios="${attr(storeIos)}" data-store-android="${attr(storeAndroid)}">
+  <img src="/icon-192.png" alt="" width="64" height="64">
+  <p id="msg">${deepLink ? 'Ouverture de l\'application Vélam…' : 'Réservez votre vélo avec Vélam.'}</p>
+  <div class="actions">
+    ${deepLink ? `<a class="btn primary" id="open-app" href="${attr(deepLink)}">Ouvrir l'app Vélam</a>` : ''}
+    <a class="btn" id="store" href="#" hidden target="_blank" rel="noopener">Installer l'app Vélam</a>
+    <a class="btn" href="${attr(OFFICIAL_WEB)}" target="_blank" rel="noopener">Site Vélam (navigateur)</a>
+    <a class="btn back" id="back" href="/">← Retour à VéloPulse</a>
+  </div>
+  <script src="/open.js"></script>
 </body>
 </html>`);
+});
+
+/**
+ * Script de /open : tente l'app Vélam une fois ; si elle s'ouvre (la page passe en
+ * arrière-plan), revenir dans VéloPulse ramène à l'application et non plus sur
+ * /open ; sinon, propose le store. Ne navigue jamais vers une page externe.
+ */
+const OPEN_JS = `(function () {
+  var body = document.body;
+  var deep = body.dataset.deep;
+  var isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent) ||
+    (/Macintosh/.test(navigator.userAgent) && navigator.maxTouchPoints > 1);
+  var isAndroid = /android/i.test(navigator.userAgent);
+  var store = isIOS ? body.dataset.storeIos : isAndroid ? body.dataset.storeAndroid : "";
+  var msg = document.getElementById("msg");
+  var storeLink = document.getElementById("store");
+  var left = false;
+
+  function showStore() {
+    if (store) { storeLink.href = store; storeLink.hidden = false; }
+  }
+  // Retour dans VéloPulse : remplace /open dans l'historique (pas de nouvel essai d'ouverture).
+  function backToApp() { window.location.replace("/"); }
+  document.getElementById("back").addEventListener("click", function (e) { e.preventDefault(); backToApp(); });
+
+  document.addEventListener("visibilitychange", function () {
+    if (document.hidden) { left = true; return; }
+    if (left) backToApp(); // l'app Vélam s'est ouverte, l'utilisateur revient
+  });
+
+  if (!deep) { showStore(); return; }
+  window.location.href = deep;
+  setTimeout(function () {
+    if (left) return;
+    msg.textContent = "L'application Vélam ne s'est pas ouverte ? Installez-la ou utilisez le site.";
+    showStore();
+  }, 2500);
+})();
+`;
+
+router.get('/open.js', (req, res) => {
+  res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
+  res.setHeader('Cache-Control', 'public, max-age=300');
+  res.send(OPEN_JS);
 });
 
 module.exports = router;

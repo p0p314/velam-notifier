@@ -1,28 +1,57 @@
-import { createContext, useContext, useState, useEffect } from "react";
+import { createContext, useContext, useState, useEffect, useCallback } from "react";
 
 const KEY = "velopulse-theme";
+export const THEME_MODES = [
+  { value: "light",  label: "Clair" },
+  { value: "dark",   label: "Sombre" },
+  { value: "system", label: "Automatique" },
+];
 
-function initialTheme() {
-  const saved = localStorage.getItem(KEY);
-  if (saved === "light" || saved === "dark") return saved;
-  return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+const DARK_QUERY = "(prefers-color-scheme: dark)";
+const systemTheme = () => (window.matchMedia?.(DARK_QUERY).matches ? "dark" : "light");
+
+/** Mode choisi : "light" | "dark" | "system" (suit le réglage de l'appareil, par défaut). */
+function initialMode() {
+  try {
+    const saved = localStorage.getItem(KEY);
+    if (saved === "light" || saved === "dark" || saved === "system") return saved;
+  } catch { /* stockage indisponible */ }
+  return "system";
 }
 
 const ThemeCtx = createContext(null);
 
-/** Applique data-theme sur <html>, persiste, et partage l'état à toute l'app. */
+/**
+ * Applique data-theme sur <html>, persiste le mode, et partage l'état à toute l'app.
+ * En mode automatique, suit en direct le réglage clair/sombre de l'appareil.
+ */
 export function ThemeProvider({ children }) {
-  const [theme, setTheme] = useState(initialTheme);
+  const [mode, setMode] = useState(initialMode);
+  const [system, setSystem] = useState(systemTheme);
+  const theme = mode === "system" ? system : mode;
+
+  useEffect(() => {
+    if (mode !== "system" || !window.matchMedia) return undefined;
+    const mq = window.matchMedia(DARK_QUERY);
+    const onChange = () => setSystem(mq.matches ? "dark" : "light");
+    onChange();
+    mq.addEventListener?.("change", onChange);
+    return () => mq.removeEventListener?.("change", onChange);
+  }, [mode]);
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
-    localStorage.setItem(KEY, theme);
   }, [theme]);
 
-  const toggle = () => setTheme((t) => (t === "dark" ? "light" : "dark"));
-  return <ThemeCtx.Provider value={{ theme, toggle }}>{children}</ThemeCtx.Provider>;
+  useEffect(() => {
+    try { localStorage.setItem(KEY, mode); } catch { /* facultatif */ }
+  }, [mode]);
+
+  // Bouton de l'en-tête : bascule vers le thème opposé à celui affiché (choix explicite).
+  const toggle = useCallback(() => setMode(theme === "dark" ? "light" : "dark"), [theme]);
+  return <ThemeCtx.Provider value={{ theme, mode, setMode, toggle }}>{children}</ThemeCtx.Provider>;
 }
 
 export function useTheme() {
-  return useContext(ThemeCtx) ?? { theme: "light", toggle: () => {} };
+  return useContext(ThemeCtx) ?? { theme: "light", mode: "light", setMode: () => {}, toggle: () => {} };
 }

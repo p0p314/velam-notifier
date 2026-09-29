@@ -129,7 +129,80 @@ async function getUserByUsername(username) {
 
 /** Avec le hash du mot de passe : réservé aux vérifications d'identité. */
 async function getUserAuthById(id) {
-  return dbc.get('SELECT id, username, password_hash FROM users WHERE id = ?', [id]);
+  return dbc.get('SELECT id, username, password_hash, token_version FROM users WHERE id = ?', [id]);
+}
+
+/** Version de session du compte (null si le compte n'existe plus). */
+async function getTokenVersion(id) {
+  const row = await dbc.get('SELECT token_version FROM users WHERE id = ?', [id]);
+  return row ? Number(row.token_version ?? 0) : null;
+}
+
+// ── Sessions (un appareil connecté = une ligne) ─────────────────────────────
+
+const toSession = (row) => row && {
+  ...row,
+  created_at: Number(row.created_at),
+  last_seen_at: Number(row.last_seen_at),
+};
+
+async function createSession(id, userId, userAgent, now = Date.now()) {
+  await dbc.run(
+    'INSERT INTO sessions (id, user_id, user_agent, created_at, last_seen_at) VALUES (?, ?, ?, ?, ?)',
+    [id, userId, userAgent, now, now]
+  );
+}
+
+/** Session + version de session du compte, en une lecture (vérification de chaque requête). */
+async function getSessionAuth(id) {
+  return dbc.get(
+    `SELECT s.id, s.user_id, u.token_version FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.id = ?`,
+    [id]
+  );
+}
+
+async function touchSession(id, userAgent, now = Date.now()) {
+  await dbc.run('UPDATE sessions SET last_seen_at = ?, user_agent = COALESCE(?, user_agent) WHERE id = ?', [now, userAgent, id]);
+}
+
+async function listSessions(userId) {
+  const { rows } = await dbc.query(
+    'SELECT id, user_agent, created_at, last_seen_at FROM sessions WHERE user_id = ? ORDER BY last_seen_at DESC',
+    [userId]
+  );
+  return rows.map(toSession);
+}
+
+/** Supprime une session du compte et détache les notifications de cet appareil. */
+async function deleteSession(userId, id) {
+  await dbc.run('DELETE FROM push_subscriptions WHERE user_id = ? AND session_id = ?', [userId, id]);
+  const { changes } = await dbc.run('DELETE FROM sessions WHERE user_id = ? AND id = ?', [userId, id]);
+  return changes > 0;
+}
+
+/** Rattache l'abonnement push de cet appareil à sa nouvelle session. */
+async function setSubscriptionSession(userId, endpoint, sessionId) {
+  await dbc.run('UPDATE push_subscriptions SET session_id = ? WHERE user_id = ? AND endpoint = ?', [sessionId, userId, endpoint]);
+}
+
+/** Supprime toutes les sessions du compte sauf `keepId`. */
+async function deleteOtherSessions(userId, keepId = null) {
+  const { changes } = keepId
+    ? await dbc.run('DELETE FROM sessions WHERE user_id = ? AND id <> ?', [userId, keepId])
+    : await dbc.run('DELETE FROM sessions WHERE user_id = ?', [userId]);
+  return changes;
+}
+
+/** Sessions inactives depuis `before` (ms) : leur jeton a expiré, l'appareil n'est plus connecté. */
+async function pruneSessions(before) {
+  const { changes } = await dbc.run('DELETE FROM sessions WHERE last_seen_at < ?', [before]);
+  return changes;
+}
+
+/** Invalide tous les jetons émis pour ce compte. Renvoie la nouvelle version. */
+async function bumpTokenVersion(id) {
+  await dbc.run('UPDATE users SET token_version = token_version + 1 WHERE id = ?', [id]);
+  return getTokenVersion(id);
 }
 
 async function updatePasswordHash(id, hash) {
@@ -142,7 +215,7 @@ async function updatePasswordHash(id, hash) {
  * n'ont pas d'ON DELETE CASCADE.
  */
 async function deleteUser(id) {
-  for (const table of ['alerts', 'favorites', 'push_subscriptions']) {
+  for (const table of ['alerts', 'favorites', 'push_subscriptions', 'sessions']) {
     await dbc.run(`DELETE FROM ${table} WHERE user_id = ?`, [id]);
   }
   const { changes } = await dbc.run('DELETE FROM users WHERE id = ?', [id]);
@@ -150,7 +223,7 @@ async function deleteUser(id) {
 }
 
 async function getUserById(id) {
-  return dbc.get('SELECT id, username, created_at FROM users WHERE id = ?', [id]);
+  return dbc.get('SELECT id, username, token_version, created_at FROM users WHERE id = ?', [id]);
 }
 
 // ── Favorites ────────────────────────────────────────────────────────────────
@@ -217,11 +290,12 @@ async function reorderFavorites(userId, stationIds) {
  * si l'appareil était lié à un autre compte, il passe au compte courant, ce qui
  * évite qu'un téléphone partagé reçoive les alertes de plusieurs utilisateurs.
  */
-async function addSubscription(userId, subscription) {
+async function addSubscription(userId, subscription, sessionId = null) {
   const { id } = await dbc.run(
-    `INSERT INTO push_subscriptions (user_id, endpoint, subscription) VALUES (?, ?, ?)
-     ON CONFLICT(endpoint) DO UPDATE SET user_id = excluded.user_id, subscription = excluded.subscription`,
-    [userId, subscription.endpoint, JSON.stringify(subscription)]
+    `INSERT INTO push_subscriptions (user_id, endpoint, subscription, session_id) VALUES (?, ?, ?, ?)
+     ON CONFLICT(endpoint) DO UPDATE SET user_id = excluded.user_id, subscription = excluded.subscription,
+       session_id = excluded.session_id`,
+    [userId, subscription.endpoint, JSON.stringify(subscription), sessionId]
   );
   return id;
 }
@@ -233,6 +307,17 @@ async function removeSubscriptionByEndpoint(userId, endpoint) {
     [userId, endpoint]
   );
   return changes > 0;
+}
+
+/**
+ * Détache du compte tous les appareils sauf `keepEndpoint` (l'appareil courant,
+ * facultatif) : un appareil déconnecté ne doit plus recevoir les alertes du compte.
+ */
+async function removeOtherSubscriptions(userId, keepEndpoint = null) {
+  const { changes } = keepEndpoint
+    ? await dbc.run('DELETE FROM push_subscriptions WHERE user_id = ? AND endpoint <> ?', [userId, keepEndpoint])
+    : await dbc.run('DELETE FROM push_subscriptions WHERE user_id = ?', [userId]);
+  return changes;
 }
 
 async function getSubscriptionsByUser(userId) {
@@ -388,10 +473,12 @@ module.exports = {
   getConfig, setConfig,
   // users
   createUser, getUserByUsername, getUserById, getUserAuthById, updatePasswordHash, deleteUser,
+  getTokenVersion, bumpTokenVersion,
+  createSession, getSessionAuth, setSubscriptionSession, touchSession, listSessions, deleteSession, deleteOtherSessions, pruneSessions,
   // favorites
   getFavorites, addFavorite, removeFavorite, setFavoriteLabel, reorderFavorites,
   // push
-  addSubscription, removeSubscriptionByEndpoint, getSubscriptionsByUser, removeSubscriptionById,
+  addSubscription, removeSubscriptionByEndpoint, removeOtherSubscriptions, getSubscriptionsByUser, removeSubscriptionById,
   // alerts
   getAlerts, getAlert, createAlert, updateAlert, deleteAlert,
   markAlertNotified, setAlertNotifiedKey, countActiveAlerts, getActiveAlerts, deleteExpiredAlerts,

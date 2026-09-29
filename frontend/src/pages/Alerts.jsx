@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { api } from "../api";
 import { useFavorites, useIsMobile } from "../hooks";
-import { pushPermission, enablePush } from "../push";
+import { usePushState, TestPushButton } from "../components/PushControls";
 import {
   ALL_DAYS, defaultForm, formFromAlert, validateForm, payloadFromForm, describeAlert,
   tripAllowed, groupRuleText, LIST_FILTERS, LIST_SORTS, loadListPrefs, saveListPrefs, visibleAlerts, hasBothKinds, localYmd, addDaysYmd, fmtDay, GROUP_MIN, GROUP_MAX, GROUP_NAME_MAX,
@@ -76,16 +76,16 @@ function Seg({ options, value, onChange, label }) {
 }
 
 /**
- * Notifications : activation sur clic (exigé par iOS, jamais automatique) ;
- * une fois accordées, bouton d'envoi d'une notification de test.
+ * Notifications de cet appareil : activation sur clic (exigé par iOS, jamais
+ * automatique) ; coupées dans les Paramètres ⇒ avertissement + réactivation ;
+ * actives ⇒ bouton d'envoi d'une notification de test.
  */
 function PushBanner() {
-  const [perm, setPerm] = useState(pushPermission);
-  const [busy, setBusy] = useState(false);
+  const { status, busy, enable } = usePushState();
   const [testMsg, setTestMsg] = useState(null);
-  if (perm === "unsupported") return null;
+  if (status === "unsupported") return null;
 
-  if (perm === "denied") {
+  if (status === "denied") {
     return (
       <div className="push-banner">
         <Icon name="bell" size={18} />
@@ -93,39 +93,26 @@ function PushBanner() {
       </div>
     );
   }
-  if (perm === "granted") {
-    const test = async () => {
-      setBusy(true);
-      setTestMsg(null);
-      try {
-        const { sent } = await api("/api/push/test", { method: "POST" });
-        setTestMsg(`Notification envoyée à ${sent} appareil${sent > 1 ? "s" : ""}.`);
-      } catch (e) {
-        setTestMsg(e.message);
-      } finally {
-        setBusy(false);
-      }
-    };
+  if (status === "on") {
     return (
       <div className="push-banner">
         <Icon name="bell" size={18} />
         <span>{testMsg ?? "Notifications activées sur cet appareil."}</span>
-        <button type="button" className="push-banner-btn ghost" disabled={busy} onClick={test}>
-          {busy ? "…" : "Tester"}
-        </button>
+        <TestPushButton onResult={setTestMsg} />
       </div>
     );
   }
-  const activate = async () => {
-    setBusy(true);
-    try { setPerm(await enablePush()); } finally { setBusy(false); }
-  };
+  const off = status === "off";
   return (
-    <div className="push-banner">
+    <div className={"push-banner" + (off ? " warn" : "")} role={off ? "status" : undefined}>
       <Icon name="bell" size={18} />
-      <span>Activez les notifications pour être prévenu de vos alertes.</span>
-      <button type="button" className="push-banner-btn" disabled={busy} onClick={activate}>
-        {busy ? "…" : "Activer"}
+      <span>
+        {off
+          ? <>Notifications désactivées sur cet appareil : vos alertes ne s'afficheront pas ici. <Link to="/compte?onglet=notifications">Paramètres</Link></>
+          : "Activez les notifications pour être prévenu de vos alertes."}
+      </span>
+      <button type="button" className="push-banner-btn" disabled={busy} onClick={enable}>
+        {busy ? "…" : off ? "Réactiver" : "Activer"}
       </button>
     </div>
   );

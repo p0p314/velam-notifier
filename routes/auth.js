@@ -1,8 +1,16 @@
 // Routes d'authentification (inscription / connexion) + rate limiting anti-bruteforce.
 const express   = require('express');
 const rateLimit = require('express-rate-limit');
-const { createUser, getUserByUsername, getUserById, getUserAuthById, updatePasswordHash, deleteUser } = require('../db');
-const { hashPassword, verifyPassword, signToken, requireAuth } = require('../auth');
+const {
+  createUser, getUserByUsername, getUserById, getUserAuthById, updatePasswordHash, deleteUser,
+  bumpTokenVersion, removeOtherSubscriptions,
+  touchSession, listSessions, deleteSession, deleteOtherSessions, pruneSessions, setSubscriptionSession,
+  getFavorites, getAlerts, getAlertsPause, getSubscriptionsByUser,
+} = require('../db');
+const {
+  hashPassword, verifyPassword, signToken, requireAuth, startSession, userAgentOf, SESSION_TTL_MS,
+} = require('../auth');
+const { describeDevice } = require('../device');
 
 const router = express.Router();
 
@@ -37,7 +45,7 @@ router.post('/api/auth/register', registerLimiter, async (req, res) => {
     }
 
     const user  = await createUser(username.trim(), await hashPassword(password));
-    const token = signToken(user);
+    const token = await startSession(user, req);
     res.status(201).json({ ok: true, token, user: { id: user.id, username: user.username } });
   } catch (err) {
     console.error('[POST /api/auth/register]', err.message);
@@ -57,7 +65,7 @@ router.post('/api/auth/login', loginLimiter, async (req, res) => {
       return res.status(401).json({ ok: false, error: 'Identifiants incorrects' });
     }
 
-    const token = signToken(user);
+    const token = await startSession(user, req);
     res.json({ ok: true, token, user: { id: user.id, username: user.username } });
   } catch (err) {
     console.error('[POST /api/auth/login]', err.message);
@@ -69,12 +77,21 @@ router.post('/api/auth/login', loginLimiter, async (req, res) => {
  * GET /api/auth/me — valide la session et renvoie un jeton neuf (session glissante).
  * Appelé au démarrage de l'app : tant que l'utilisateur ouvre l'app au moins une
  * fois par TOKEN_TTL, il n'a jamais à se reconnecter. 401 si le compte n'existe plus.
+ * Met à jour la dernière activité de l'appareil ; un jeton d'avant les sessions
+ * (sans `sid`) reçoit ici sa session, et apparaît dès lors dans « Appareils connectés ».
  */
 router.get('/api/auth/me', requireAuth, async (req, res) => {
   try {
     const user = await getUserById(req.user.id);
     if (!user) return res.status(401).json({ ok: false, error: 'Compte introuvable' });
-    res.json({ ok: true, token: signToken(user), user: { id: user.id, username: user.username } });
+    let token;
+    if (req.sessionId) {
+      await touchSession(req.sessionId, userAgentOf(req));
+      token = signToken(user, req.sessionId);
+    } else {
+      token = await startSession(user, req);
+    }
+    res.json({ ok: true, token, user: { id: user.id, username: user.username } });
   } catch (err) {
     console.error('[GET /api/auth/me]', err.message);
     res.status(500).json({ ok: false, error: 'Erreur serveur' });
@@ -83,9 +100,32 @@ router.get('/api/auth/me', requireAuth, async (req, res) => {
 
 const PASSWORD_MIN = 8;
 
+/** Endpoint push de l'appareil courant (facultatif) : URL https:// fournie par le navigateur. */
+function parseEndpoint(raw) {
+  if (raw === undefined || raw === null || raw === '') return { ok: true, endpoint: null };
+  const ok = typeof raw === 'string' && raw.length <= 1024 && raw.startsWith('https://');
+  return { ok, endpoint: ok ? raw : null };
+}
+
 /**
- * PUT /api/auth/password — { current_password, new_password }.
+ * Déconnecte tous les autres appareils du compte : supprime toutes les sessions,
+ * invalide les jetons d'avant les sessions (version), détache les autres appareils
+ * des notifications (sauf `keepEndpoint`). L'appareil courant reçoit une session
+ * **neuve** : même une copie volée de son ancien jeton cesse de fonctionner.
+ */
+async function revokeOtherSessions(user, keepEndpoint, req) {
+  const version = await bumpTokenVersion(user.id);
+  await deleteOtherSessions(user.id, null);
+  const devices = await removeOtherSubscriptions(user.id, keepEndpoint);
+  const { token, sid } = await startSession({ ...user, token_version: version }, req, { withId: true });
+  if (keepEndpoint) await setSubscriptionSession(user.id, keepEndpoint, sid);
+  return { token, devices };
+}
+
+/**
+ * PUT /api/auth/password — { current_password, new_password, endpoint? }.
  * Le mot de passe actuel est exigé (limité comme la connexion, anti force brute).
+ * Les autres appareils sont déconnectés ; renvoie un jeton neuf pour celui-ci.
  */
 router.put('/api/auth/password', requireAuth, loginLimiter, async (req, res) => {
   try {
@@ -93,6 +133,8 @@ router.put('/api/auth/password', requireAuth, loginLimiter, async (req, res) => 
     if (typeof current !== 'string' || typeof next !== 'string') {
       return res.status(400).json({ ok: false, error: 'current_password et new_password requis' });
     }
+    const { ok: endpointOk, endpoint } = parseEndpoint(req.body.endpoint);
+    if (!endpointOk) return res.status(400).json({ ok: false, error: 'endpoint invalide' });
     if (next.length < PASSWORD_MIN) {
       return res.status(400).json({ ok: false, error: `Le nouveau mot de passe doit faire au moins ${PASSWORD_MIN} caractères` });
     }
@@ -102,9 +144,114 @@ router.put('/api/auth/password', requireAuth, loginLimiter, async (req, res) => 
       return res.status(403).json({ ok: false, error: 'Mot de passe actuel incorrect' });
     }
     await updatePasswordHash(user.id, await hashPassword(next));
-    res.json({ ok: true });
+    const { token } = await revokeOtherSessions(user, endpoint, req);
+    res.json({ ok: true, token, user: { id: user.id, username: user.username } });
   } catch (err) {
     console.error('[PUT /api/auth/password]', err.message);
+    res.status(500).json({ ok: false, error: 'Erreur serveur' });
+  }
+});
+
+/**
+ * POST /api/auth/logout-others — { endpoint? } : déconnecte tous les autres
+ * appareils (jetons révoqués, notifications détachées). L'appareil courant reste
+ * connecté avec le jeton neuf renvoyé. `devices` : appareils détachés des notifications.
+ */
+router.post('/api/auth/logout-others', requireAuth, async (req, res) => {
+  try {
+    const { ok: endpointOk, endpoint } = parseEndpoint(req.body?.endpoint);
+    if (!endpointOk) return res.status(400).json({ ok: false, error: 'endpoint invalide' });
+    const user = await getUserById(req.user.id);
+    if (!user) return res.status(401).json({ ok: false, error: 'Compte introuvable' });
+    const { token, devices } = await revokeOtherSessions(user, endpoint, req);
+    res.json({ ok: true, token, user: { id: user.id, username: user.username }, devices });
+  } catch (err) {
+    console.error('[POST /api/auth/logout-others]', err.message);
+    res.status(500).json({ ok: false, error: 'Erreur serveur' });
+  }
+});
+
+/** POST /api/auth/logout — ferme la session de cet appareil (il disparaît de la liste). */
+router.post('/api/auth/logout', requireAuth, async (req, res) => {
+  try {
+    if (req.sessionId) await deleteSession(req.user.id, req.sessionId);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[POST /api/auth/logout]', err.message);
+    res.status(500).json({ ok: false, error: 'Erreur serveur' });
+  }
+});
+
+/**
+ * GET /api/auth/sessions — appareils connectés au compte (le plus récent d'abord) :
+ * { id, label (« iPhone · Safari »), created_at, last_seen_at (ms), current }.
+ * Les sessions dont le jeton a forcément expiré sont purgées au passage.
+ */
+router.get('/api/auth/sessions', requireAuth, async (req, res) => {
+  try {
+    await pruneSessions(Date.now() - SESSION_TTL_MS);
+    const sessions = (await listSessions(req.user.id)).map((s) => ({
+      id: s.id,
+      label: describeDevice(s.user_agent),
+      created_at: s.created_at,
+      last_seen_at: s.last_seen_at,
+      current: s.id === req.sessionId,
+    }));
+    res.json({ ok: true, sessions });
+  } catch (err) {
+    console.error('[GET /api/auth/sessions]', err.message);
+    res.status(500).json({ ok: false, error: 'Erreur serveur' });
+  }
+});
+
+/** DELETE /api/auth/sessions/:id — déconnecte un autre appareil (et coupe ses notifications). */
+router.delete('/api/auth/sessions/:id', requireAuth, async (req, res) => {
+  try {
+    const id = String(req.params.id);
+    if (id === req.sessionId) {
+      return res.status(400).json({ ok: false, error: 'Pour cet appareil, utilisez « Se déconnecter ».' });
+    }
+    if (!(await deleteSession(req.user.id, id))) {
+      return res.status(404).json({ ok: false, error: 'Appareil introuvable' });
+    }
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[DELETE /api/auth/sessions]', err.message);
+    res.status(500).json({ ok: false, error: 'Erreur serveur' });
+  }
+});
+
+/**
+ * GET /api/auth/export — toutes les données du compte en JSON (droit à la
+ * portabilité, RGPD). Jamais le mot de passe (même haché) ni les clés techniques
+ * des notifications.
+ */
+router.get('/api/auth/export', requireAuth, async (req, res) => {
+  try {
+    const user = await getUserById(req.user.id);
+    if (!user) return res.status(401).json({ ok: false, error: 'Compte introuvable' });
+    const [favorites, alerts, pausedUntil, sessions, subscriptions] = await Promise.all([
+      getFavorites(user.id), getAlerts(user.id), getAlertsPause(user.id),
+      listSessions(user.id), getSubscriptionsByUser(user.id),
+    ]);
+    const iso = (ms) => new Date(ms).toISOString();
+    res.json({
+      ok: true,
+      export: {
+        application: 'VéloPulse',
+        exported_at: new Date().toISOString(),
+        account: { username: user.username, created_at: user.created_at, alerts_paused_until: pausedUntil },
+        favorites: favorites.map(({ user_id, id, ...f }) => f),
+        alerts: alerts.map(({ user_id, ...a }) => a),
+        devices: sessions.map((s) => ({
+          device: describeDevice(s.user_agent), user_agent: s.user_agent,
+          connected_at: iso(s.created_at), last_seen_at: iso(s.last_seen_at),
+        })),
+        notification_devices: subscriptions.length,
+      },
+    });
+  } catch (err) {
+    console.error('[GET /api/auth/export]', err.message);
     res.status(500).json({ ok: false, error: 'Erreur serveur' });
   }
 });
