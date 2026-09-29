@@ -337,6 +337,116 @@ describe('station de repli dans la notification', () => {
   });
 });
 
+describe('groupe de stations', () => {
+  const group = {
+    ...alertBase, threshold: 1, group_name: 'Maison',
+    group_stations: [
+      { station_id: '1', station_name: 'Gare' },
+      { station_id: '2', station_name: 'Cathédrale' },
+      { station_id: '3', station_name: 'Beffroi' },
+    ],
+  };
+
+  test('une seule notification quand toutes les stations sont basses', async () => {
+    await createAlert(userId, group);
+    await setStatus({ 1: { bikes: 0 }, 2: { bikes: 1 }, 3: { bikes: 0 } });
+    await checkAlerts(WED_0830);
+    assert.equal(sent.length, 1);
+    assert.equal(sent[0].payload.title, 'Maison : peu de vélos');
+    assert.equal(sent[0].payload.body, 'Gare : 0 · Cathédrale : 1 · Beffroi : 0');
+  });
+
+  test('pas d\'alerte tant qu\'une station du groupe a des vélos (et pas de repli)', async () => {
+    await saveStations([
+      { station_id: '1', name: 'Gare', lat: 49.8900, lon: 2.3000, capacity: 20 },
+      { station_id: '9', name: 'Zoo', lat: 49.8910, lon: 2.3000, capacity: 20 },
+    ]);
+    await createAlert(userId, group);
+    await setStatus({ 1: { bikes: 0 }, 2: { bikes: 0 }, 3: { bikes: 6 }, 9: { bikes: 8 } });
+    await checkAlerts(WED_0830);
+    assert.equal(sent.length, 0);
+
+    await setStatus({ 1: { bikes: 0 }, 2: { bikes: 0 }, 3: { bikes: 0 }, 9: { bikes: 8 } });
+    await checkAlerts(WED_0831);
+    assert.equal(sent.length, 1);
+    assert.equal(sent[0].payload.body, 'Gare : 0 · Cathédrale : 0 · Beffroi : 0');
+  });
+
+  test('anti-spam : re-notifie seulement si le détail change', async () => {
+    await createAlert(userId, group);
+    await setStatus({ 1: { bikes: 0 }, 2: { bikes: 1 }, 3: { bikes: 0 } });
+    await checkAlerts(WED_0830);
+    await expireCache();
+    await checkAlerts(WED_0831);
+    assert.equal(sent.length, 1);
+    await setStatus({ 1: { bikes: 1 }, 2: { bikes: 0 }, 3: { bikes: 0 } });
+    await checkAlerts(WED_0831);
+    assert.equal(sent.length, 2);
+  });
+});
+
+describe('résumé à heure fixe', () => {
+  const summary = {
+    kind: 'summary', station_id: '1', station_name: 'Gare', bike_type: 'any', group_name: 'Maison',
+    group_stations: [{ station_id: '1', station_name: 'Gare' }, { station_id: '2', station_name: 'Zoo' }],
+    time_start: '08:30', time_end: '08:30', days: '1,2,3,4,5', threshold: 0,
+  };
+  const WED_0829 = new Date('2025-09-24T06:29:00Z');
+  const WED_0850 = new Date('2025-09-24T06:50:00Z');
+
+  test('envoyé à l\'heure, une seule fois dans la journée, quels que soient les chiffres', async () => {
+    await createAlert(userId, summary);
+    await setStatus({ 1: { bikes: 7 }, 2: { bikes: 0 } });
+    await checkAlerts(WED_0829);
+    assert.equal(gbfs.calls.status, 0); // pas encore l'heure → aucun appel Vélam
+    await checkAlerts(WED_0830);
+    assert.equal(sent.length, 1);
+    assert.equal(sent[0].payload.title, '📊 Maison — vélos');
+    assert.equal(sent[0].payload.body, 'Gare : 7 méca · 0 élec\nZoo : 0 méca · 0 élec');
+    await expireCache();
+    await checkAlerts(WED_0831);
+    assert.equal(sent.length, 1);
+  });
+
+  test('renvoyé le jour suivant', async () => {
+    await createAlert(userId, summary);
+    await setStatus({ 1: { bikes: 1 }, 2: { bikes: 1 } });
+    await checkAlerts(WED_0830);
+    await expireCache();
+    await checkAlerts(THU_0830);
+    assert.equal(sent.length, 2);
+  });
+
+  test('trop tard (> 15 min) ou jour non choisi → rien', async () => {
+    await createAlert(userId, summary);
+    await createAlert(userId, { ...summary, days: '6,7' });
+    await setStatus({ 1: { bikes: 1 }, 2: { bikes: 1 } });
+    await checkAlerts(WED_0850);
+    await checkAlerts(WED_0830 /* 2e alerte : samedi-dimanche seulement */);
+    assert.equal(sent.length, 1);
+  });
+
+  test('données périmées : pas d\'envoi, retenté au cycle suivant', async () => {
+    await createAlert(userId, summary);
+    await setStatus({ 1: { bikes: 2 }, 2: { bikes: 3 } });
+    gbfs.lastUpdated = Math.floor(Date.now() / 1000) - 6 * 60;
+    await checkAlerts(WED_0830);
+    assert.equal(sent.length, 0);
+    await setStatus({ 1: { bikes: 2 }, 2: { bikes: 3 } });
+    gbfs.lastUpdated = Math.floor(Date.now() / 1000);
+    await checkAlerts(WED_0831);
+    assert.equal(sent.length, 1);
+  });
+
+  test('coexiste avec une alerte de disponibilité', async () => {
+    await createAlert(userId, summary);
+    await createAlert(userId, alertBase);
+    await setStatus({ 1: { bikes: 0 }, 2: { bikes: 5 } });
+    await checkAlerts(WED_0830);
+    assert.deepEqual(sent.map((n) => n.payload.title).sort(), ['⚠️ VéloPulse — Gare', '📊 Maison — vélos']);
+  });
+});
+
 describe('flux Vélam défaillant : pas d\'alerte sur des données périmées', () => {
   test('flux figé depuis 5 min → aucune notification', async () => {
     await createAlert(userId, alertBase);

@@ -3,6 +3,11 @@
 
 export const ALL_DAYS = [1, 2, 3, 4, 5, 6, 7];
 
+// Groupe de stations : bornes alignées sur le serveur (routes/alerts.js).
+export const GROUP_MIN = 2;
+export const GROUP_MAX = 5;
+export const GROUP_NAME_MAX = 40;
+
 const BIKE_WORD = { mechanical: " mécanique", ebike: " électrique", any: "" };
 
 /** Date locale de l'appareil au format YYYY-MM-DD (l'API compare en heure de Paris). */
@@ -25,7 +30,11 @@ const hhmm = (d) => `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinu
  */
 export function defaultForm(station = null, now = new Date()) {
   const form = {
+    kind: "threshold",
     stationId: station?.station_id ?? "",
+    group: false,
+    groupIds: [],
+    groupName: "",
     target: "bikes",
     comparison: "at_most",
     bikeType: "any",
@@ -35,6 +44,7 @@ export function defaultForm(station = null, now = new Date()) {
     arrivalThreshold: 1,
     timeStart: "08:00",
     timeEnd: "10:00",
+    sendTime: "08:00",
     days: [...ALL_DAYS],
     oneShot: false,
   };
@@ -51,8 +61,14 @@ export function defaultForm(station = null, now = new Date()) {
 
 /** Alerte API → état du formulaire (édition). */
 export function formFromAlert(a) {
+  const summary = a.kind === "summary";
   return {
+    kind: summary ? "summary" : "threshold",
     stationId: a.station_id,
+    // Un résumé repassé en alerte part d'une station unique (sa 1re station).
+    group: !summary && !!a.group_stations?.length,
+    groupIds: a.group_stations?.map((s) => s.station_id) ?? [],
+    groupName: a.group_name ?? "",
     target: a.target ?? "bikes",
     comparison: a.comparison ?? "at_most",
     bikeType: a.bike_type ?? "any",
@@ -62,20 +78,44 @@ export function formFromAlert(a) {
     arrivalThreshold: a.arrival_threshold ?? 1,
     timeStart: a.time_start,
     timeEnd: a.time_end,
+    sendTime: a.time_start,
     days: a.days ? a.days.split(",").map(Number) : [...ALL_DAYS],
     oneShot: !!a.valid_on,
     validOn: a.valid_on ?? null,
   };
 }
 
-/** Le trajet n'a de sens que pour « vélos, il en reste peu ». */
-export const tripAllowed = (form) => form.target === "bikes" && form.comparison === "at_most";
+/** Le trajet n'a de sens que pour « vélos, il en reste peu », sur une seule station. */
+export const tripAllowed = (form) => !form.group && form.target === "bikes" && form.comparison === "at_most";
+
+/**
+ * Règle d'un groupe en toutes lettres (sous le seuil du formulaire) :
+ * « au plus N » ⇒ toutes les stations ; « au moins N » ⇒ une seule suffit.
+ */
+export function groupRuleText(form) {
+  const n = Number(form.threshold) || 0;
+  const what = form.target === "docks" ? `${n} ${docksWord(n)} libre${n > 1 ? "s" : ""}` : `${n} ${bikesWord(form.bikeType, n)}`;
+  return form.comparison === "at_least"
+    ? `Alerte dès qu'une des stations a au moins ${what}.`
+    : `Alerte seulement quand toutes les stations ont au plus ${what}.`;
+}
 
 /**
  * Contrôles côté client (le serveur revalide tout). Renvoie un message ou null.
  */
 export function validateForm(form) {
-  if (!form.stationId) return "Choisissez une station";
+  if (form.kind === "summary") {
+    if (form.groupIds.length < 1 || form.groupIds.length > GROUP_MAX) return `Choisissez de 1 à ${GROUP_MAX} stations`;
+    if (form.groupName.trim().length > GROUP_NAME_MAX) return `Nom du groupe : ${GROUP_NAME_MAX} caractères maximum`;
+    if (!form.sendTime) return "Choisissez l'heure d'envoi";
+    return null;
+  }
+  if (form.group) {
+    if (form.groupIds.length < GROUP_MIN || form.groupIds.length > GROUP_MAX) {
+      return `Choisissez de ${GROUP_MIN} à ${GROUP_MAX} stations`;
+    }
+    if (form.groupName.trim().length > GROUP_NAME_MAX) return `Nom du groupe : ${GROUP_NAME_MAX} caractères maximum`;
+  } else if (!form.stationId) return "Choisissez une station";
   if (!form.timeStart || !form.timeEnd || form.timeEnd <= form.timeStart) {
     return "L'heure de fin doit être postérieure à l'heure de début";
   }
@@ -96,10 +136,16 @@ export function validateForm(form) {
  * Une alerte ponctuelle déjà datée garde sa date ; une nouvelle prend `today`.
  */
 export function payloadFromForm(form, names, today = localYmd()) {
+  if (form.kind === "summary") return summaryPayload(form, names);
   const trip = form.trip && tripAllowed(form);
+  const stationId = form.group ? form.groupIds[0] : form.stationId;
   return {
-    station_id: form.stationId,
-    station_name: names[form.stationId] ?? form.stationId,
+    kind: "threshold",
+    station_id: stationId,
+    station_name: names[stationId] ?? stationId,
+    // Toujours envoyés (null en mode simple) : un PATCH repasse ainsi un groupe en simple.
+    group_stations: form.group ? namedStations(form.groupIds, names) : null,
+    group_name: form.group ? (form.groupName.trim() || null) : null,
     target: form.target,
     comparison: form.comparison,
     bike_type: form.target === "bikes" ? form.bikeType : "any",
@@ -114,6 +160,31 @@ export function payloadFromForm(form, names, today = localYmd()) {
   };
 }
 
+const namedStations = (ids, names) => ids.map((id) => ({ station_id: id, station_name: names[id] ?? id }));
+
+/** Résumé à heure fixe : champs de seuil / trajet neutres (le serveur les force aussi). */
+function summaryPayload(form, names) {
+  const id = form.groupIds[0];
+  return {
+    kind: "summary",
+    station_id: id,
+    station_name: names[id] ?? id,
+    group_stations: namedStations(form.groupIds, names),
+    group_name: form.groupName.trim() || null,
+    target: "bikes",
+    comparison: "at_most",
+    bike_type: form.bikeType,
+    threshold: 0,
+    arrival_station_id: null,
+    arrival_station_name: null,
+    arrival_threshold: null,
+    time_start: form.sendTime,
+    time_end: form.sendTime,
+    days: form.days.join(","),
+    valid_on: null,
+  };
+}
+
 const bikesWord = (type, n) => `vélo${n > 1 ? "s" : ""}${BIKE_WORD[type] ?? ""}${type !== "any" && n > 1 ? "s" : ""}`;
 const docksWord = (n) => `place${n > 1 ? "s" : ""}`;
 
@@ -123,6 +194,21 @@ export function describeAlert(a) {
   const n = a.threshold ?? 0;
   const what = a.target === "docks" ? docksWord(n) : bikesWord(a.bike_type, n);
   const window = `${a.time_start}–${a.time_end}`;
+  if (a.kind === "summary") {
+    const list = (a.group_stations ?? []).map((s) => s.station_name).join(", ");
+    const kind = a.bike_type === "any" ? "vélos" : bikesWord(a.bike_type, 2);
+    const rule = `Résumé à ${a.time_start} · ${kind}`;
+    return a.group_name
+      ? { title: a.group_name, detail: `${list} · ${rule}` }
+      : { title: list, detail: rule };
+  }
+  if (a.group_stations?.length) {
+    const list = a.group_stations.map((s) => s.station_name).join(", ");
+    const rule = a.comparison === "at_least" ? `l'une ≥ ${n} ${what}` : `toutes ≤ ${n} ${what}`;
+    return a.group_name
+      ? { title: a.group_name, detail: `${list} · ${rule} · ${window}` }
+      : { title: list, detail: `${rule[0].toUpperCase()}${rule.slice(1)} · ${window}` };
+  }
   if (a.arrival_station_id) {
     const arr = a.arrival_threshold ?? 0;
     return {
@@ -132,6 +218,57 @@ export function describeAlert(a) {
   }
   return { title: a.station_name, detail: `${cmp} ${n} ${what} · ${window}` };
 }
+
+// ── Liste : filtre et tri ─────────────────────────────────────────────────────
+
+export const LIST_FILTERS = [
+  { value: "all",       label: "Toutes" },
+  { value: "threshold", label: "Disponibilité" },
+  { value: "summary",   label: "Résumés" },
+];
+export const LIST_SORTS = [
+  { value: "time",   label: "Par heure" },
+  { value: "name",   label: "Par nom" },
+  { value: "recent", label: "Plus récentes" },
+];
+const LIST_PREFS_KEY = "velopulse-alerts-list";
+
+/** Préférences de liste mémorisées sur l'appareil (confort : défaut si absentes/illisibles). */
+export function loadListPrefs() {
+  const def = { filter: "all", sort: "time" };
+  try {
+    const p = JSON.parse(localStorage.getItem(LIST_PREFS_KEY)) ?? {};
+    return {
+      filter: LIST_FILTERS.some((f) => f.value === p.filter) ? p.filter : def.filter,
+      sort: LIST_SORTS.some((o) => o.value === p.sort) ? p.sort : def.sort,
+    };
+  } catch { return def; }
+}
+export function saveListPrefs(prefs) {
+  try { localStorage.setItem(LIST_PREFS_KEY, JSON.stringify(prefs)); } catch { /* facultatif */ }
+}
+
+const kindOf = (a) => (a.kind === "summary" ? "summary" : "threshold");
+
+/**
+ * Alertes à afficher : filtrées par type, triées (heure de début / d'envoi, nom affiché,
+ * ou création la plus récente). Les alertes désactivées passent toujours en fin de liste.
+ */
+export function visibleAlerts(alerts, { filter = "all", sort = "time" } = {}) {
+  const title = (a) => describeAlert(a).title;
+  const byName = (a, b) => title(a).localeCompare(title(b), "fr");
+  const cmp = {
+    time:   (a, b) => a.time_start.localeCompare(b.time_start) || byName(a, b),
+    name:   (a, b) => byName(a, b) || a.time_start.localeCompare(b.time_start),
+    recent: (a, b) => b.id - a.id,
+  }[sort] ?? (() => 0);
+  return alerts
+    .filter((a) => filter === "all" || kindOf(a) === filter)
+    .sort((a, b) => (b.active ? 1 : 0) - (a.active ? 1 : 0) || cmp(a, b));
+}
+
+/** Le filtre par type n'a d'intérêt que si les deux types coexistent. */
+export const hasBothKinds = (alerts) => new Set(alerts.map(kindOf)).size > 1;
 
 /** « 30/09 » pour les bandeaux (pause, alerte ponctuelle). */
 export function fmtDay(ymd) {

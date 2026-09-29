@@ -175,7 +175,22 @@ Modèle d'alerte (`routes/alerts.js` → `validateAlertPayload`, PATCH = fusion 
   (« il y en a de nouveau ») ;
 - trajet : `arrival_station_*` + `arrival_threshold` (uniquement `bikes`/`at_most`) ⇒
   déclenche si peu de vélos au départ **ou** peu de places à l'arrivée ;
-- `valid_on` (YYYY-MM-DD) : alerte ponctuelle.
+- `valid_on` (YYYY-MM-DD) : alerte ponctuelle ;
+- groupe : `group_stations` (JSON `[{ station_id, station_name }]`, 2 à 5 stations) +
+  `group_name` facultatif (« Maison ») ⇒ la règle porte sur la **meilleure** station du
+  groupe : « au plus N » déclenche quand **toutes** sont basses, « au moins N » dès qu'**une**
+  suffit. Une seule notification (détail par station), clé anti-spam = `n1|n2|…`, pas de
+  station de repli ni de trajet. La 1re station est recopiée dans `station_id` / `station_name`.
+
+**Résumé à heure fixe** (`kind = 'summary'`, défaut `threshold` = alerte de disponibilité) :
+1 à 5 stations (`group_stations`, nom facultatif), `bike_type`, heure d'envoi `time_start`
+(`time_end` = même valeur) et `days` ; seuil / trajet / ponctuelle neutralisés par
+`validateSummary`. La boucle l'envoie **une fois par jour** (`last_notified_date`), entre
+l'heure choisie et +15 min (`isSummaryDue`, `SUMMARY_GRACE_MIN`) : au-delà (boucle arrêtée,
+flux périmé), il est abandonné plutôt qu'envoyé avec du retard. Contenu : une ligne par station
+(`Gare : 2 méca · 1 élec`, ou le seul type choisi ; `indisponible` si fermée) —
+`buildSummaryPayload`. Dans le formulaire, type choisi en tête (« Alerte de disponibilité » /
+« Résumé à heure fixe ») : seuls les champs utiles sont affichés.
 
 Station fermée : `is_renting=false` ⇒ 0 vélo, `is_returning=false` ⇒ 0 place.
 Anti-spam par jour, générique : `evaluateAlert` renvoie `{ triggered, key }` (clé = compte, ou
@@ -252,7 +267,9 @@ différenciée : mobile → `/favoris`, desktop → `/stations`.
   favoris), uniquement les étapes encore utiles ; rien n'est monté une fois terminé.
 - **pages/** — `Login`, `Stations` (recherche/tri/filtre + détail), `Favorites` (swipe-to-delete,
   tri proximité / ordre choisi, mode « Organiser »), `MapPage` (carte + filtres + « Autour de moi »),
-  `Alerts` (formulaire complet, pause, notification de test ; pré-rempli via
+  `Alerts` (formulaire complet, pause, notification de test ; liste filtrable par type — filtre
+  affiché seulement si les deux types coexistent — et triable par heure / nom / récentes,
+  désactivées en dernier, choix mémorisés en `localStorage` ; pré-rempli via
   `location.state.alertStation` depuis la fiche station), `Account` (`/compte` : mot de passe,
   suppression du compte), `Privacy` (`/confidentialite`, publique).
 - **components/** — `StationCard` (desktop), `StationListItem` (mobile, étoile favori optionnelle
@@ -275,7 +292,8 @@ Tables (créées/migrées par `database/migrations.js`, dialecte selon `DATABASE
 `stations` (référentiel statique), `config` (clé/valeur : secret JWT, clés VAPID),
 `users` (+ `alerts_paused_until`), `favorites` (unique `user_id+station_id`, `label`, `sort_order`
 — NULL tant que l'utilisateur n'a jamais ordonné : ordre alphabétique), `push_subscriptions`
-(unique `endpoint`), `alerts` (cf. modèle ci-dessus ; `threshold` a remplacé `min_count`,
+(unique `endpoint`), `alerts` (cf. modèle ci-dessus ; `group_stations` stocké en JSON texte,
+parsé par `db.js` → tableau ; `threshold` a remplacé `min_count`,
 `last_notified_key` a remplacé `last_notified_count`), `rental_apps` (deep links par plateforme).
 Helpers de migration portables : `columnsOf` / `addColumn` / `dropColumn` (`migrations.js`).
 

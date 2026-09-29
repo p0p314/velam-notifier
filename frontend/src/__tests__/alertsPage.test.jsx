@@ -111,6 +111,88 @@ describe("création d'alertes", () => {
   });
 });
 
+describe("groupe de stations", () => {
+  test("création : stations cochées, nom, règle expliquée, pas de trajet", async () => {
+    await ready();
+    const f = within(form());
+    fireEvent.click(f.getByRole("button", { name: "Plusieurs stations" }));
+    expect(f.queryByLabelText("Station")).toBeNull();
+    expect(f.queryByLabelText(/Trajet/)).toBeNull();
+    // La station déjà choisie (1er favori) est pré-cochée.
+    expect(f.getByRole("checkbox", { name: "Gare" }).checked).toBe(true);
+    expect(f.getByText("Alerte seulement quand toutes les stations ont au plus 1 vélo.")).toBeTruthy();
+
+    // Une seule station → refus côté client.
+    fireEvent.click(f.getByRole("button", { name: "Créer l'alerte" }));
+    expect((await f.findByRole("alert")).textContent).toMatch(/de 2 à 5 stations/);
+    expect(lastPost()).toBeUndefined();
+
+    fireEvent.click(f.getByRole("checkbox", { name: "Zoo" }));
+    fireEvent.change(f.getByLabelText("Nom du groupe"), { target: { value: "Maison" } });
+    fireEvent.click(f.getByRole("button", { name: "Créer l'alerte" }));
+    await waitFor(() => expect(lastPost()).toBeTruthy());
+    expect(lastPost()).toMatchObject({
+      station_id: "1", group_name: "Maison", arrival_station_id: null,
+      group_stations: [{ station_id: "1", station_name: "Gare" }, { station_id: "2", station_name: "Zoo" }],
+    });
+  });
+
+  test("carte et édition d'un groupe", async () => {
+    alerts = [{ id: 5, active: 1, station_id: "1", station_name: "Gare", target: "bikes", comparison: "at_most",
+      bike_type: "any", threshold: 0, time_start: "08:00", time_end: "09:00", days: "1,2,3,4,5", valid_on: null,
+      group_name: "Maison", group_stations: [{ station_id: "1", station_name: "Gare" }, { station_id: "9", station_name: "Cirque" }] }];
+    renderPage();
+    expect(await screen.findByText("Maison")).toBeTruthy();
+    expect(screen.getByText("Gare, Cirque · toutes ≤ 0 vélo · 08:00–09:00")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Modifier" }));
+    const f = within(form());
+    // Station du groupe hors favoris quand même proposée et cochée.
+    expect(f.getByRole("checkbox", { name: "Cirque" }).checked).toBe(true);
+    expect(f.getByLabelText("Nom du groupe").value).toBe("Maison");
+
+    // Repasser en « Une station » : le PATCH efface le groupe.
+    fireEvent.click(f.getByRole("button", { name: "Une station" }));
+    fireEvent.click(f.getByRole("button", { name: "Enregistrer" }));
+    await waitFor(() => expect(calls.some((c) => c.method === "PATCH")).toBe(true));
+    expect(calls.find((c) => c.method === "PATCH").body).toMatchObject({ station_id: "1", group_stations: null, group_name: null });
+  });
+});
+
+describe("résumé à heure fixe", () => {
+  test("création : type séparé, seuls les champs utiles, payload correct", async () => {
+    await ready();
+    const f = within(form());
+    fireEvent.click(f.getByRole("button", { name: "Résumé à heure fixe" }));
+    expect(f.getByText(/le nombre de vélos de vos stations/)).toBeTruthy();
+    // Champs propres aux alertes de disponibilité masqués.
+    for (const name of ["Surveiller", "Me prévenir quand", "Stations surveillées"]) expect(f.queryByRole("group", { name })).toBeNull();
+    expect(f.queryByLabelText("Seuil")).toBeNull();
+    expect(f.queryByLabelText("Début")).toBeNull();
+    expect(f.queryByLabelText(/Aujourd'hui seulement/)).toBeNull();
+    // Une seule station (pré-cochée) suffit.
+    expect(f.getByRole("checkbox", { name: "Gare" }).checked).toBe(true);
+
+    fireEvent.click(f.getByRole("button", { name: "Électrique" }));
+    fireEvent.change(f.getByLabelText("Heure d'envoi"), { target: { value: "07:40" } });
+    fireEvent.click(f.getByRole("button", { name: "Créer le résumé" }));
+    await waitFor(() => expect(lastPost()).toBeTruthy());
+    expect(lastPost()).toMatchObject({
+      kind: "summary", bike_type: "ebike", time_start: "07:40", time_end: "07:40",
+      group_stations: [{ station_id: "1", station_name: "Gare" }],
+    });
+  });
+
+  test("carte d'un résumé", async () => {
+    alerts = [{ id: 8, active: 1, kind: "summary", station_id: "1", station_name: "Gare", target: "bikes", comparison: "at_most",
+      bike_type: "any", threshold: 0, time_start: "07:40", time_end: "07:40", days: "1,2,3,4,5", valid_on: null,
+      group_name: null, group_stations: [{ station_id: "1", station_name: "Gare" }, { station_id: "2", station_name: "Zoo" }] }];
+    renderPage();
+    expect(await screen.findByText("Gare, Zoo")).toBeTruthy();
+    expect(screen.getByText("Résumé à 07:40 · vélos")).toBeTruthy();
+  });
+});
+
 describe("liste", () => {
   test("résumés : trajet, ponctuelle", async () => {
     alerts = [
@@ -140,6 +222,54 @@ describe("liste", () => {
     const patch = calls.find((c) => c.method === "PATCH");
     expect(patch.path).toBe("/api/alerts/7");
     expect(patch.body).toMatchObject({ station_id: "2", target: "docks", threshold: 4, days: "1,2" });
+  });
+});
+
+describe("filtre et tri de la liste", () => {
+  const base = { active: 1, target: "bikes", comparison: "at_most", bike_type: "any", threshold: 1, days: "1,2,3,4,5", valid_on: null };
+  const names = () => [...document.querySelectorAll(".alertes-list .alert-card-name")].map((n) => n.textContent);
+
+  test("tri par heure, puis par nom ; filtre par type ; choix mémorisés", async () => {
+    alerts = [
+      { ...base, id: 1, station_id: "2", station_name: "Zoo", time_start: "08:00", time_end: "09:00" },
+      { ...base, id: 2, station_id: "1", station_name: "Gare", time_start: "17:00", time_end: "18:00" },
+      { ...base, id: 3, kind: "summary", station_id: "1", station_name: "Gare", time_start: "07:00", time_end: "07:00",
+        group_name: "Matin", group_stations: [{ station_id: "1", station_name: "Gare" }] },
+    ];
+    const { unmount } = renderPage();
+    await screen.findByText("Matin");
+    expect(names()).toEqual(["Matin", "Zoo", "Gare"]);
+
+    fireEvent.change(screen.getByLabelText("Trier les alertes"), { target: { value: "name" } });
+    expect(names()).toEqual(["Gare", "Matin", "Zoo"]);
+
+    const filters = within(screen.getByRole("group", { name: "Filtrer les alertes" }));
+    fireEvent.click(filters.getByRole("button", { name: "Résumés" }));
+    expect(names()).toEqual(["Matin"]);
+
+    unmount();
+    renderPage();
+    await screen.findByText("Matin");
+    expect(names()).toEqual(["Matin"]);
+    expect(screen.getByLabelText("Trier les alertes").value).toBe("name");
+  });
+
+  test("un seul type : pas de filtre (et filtre mémorisé ignoré) ; une seule alerte : aucun contrôle", async () => {
+    localStorage.setItem("velopulse-alerts-list", JSON.stringify({ filter: "summary", sort: "time" }));
+    alerts = [
+      { ...base, id: 1, station_id: "2", station_name: "Zoo", time_start: "08:00", time_end: "09:00" },
+      { ...base, id: 2, station_id: "1", station_name: "Gare", time_start: "07:00", time_end: "09:00" },
+    ];
+    const { unmount } = renderPage();
+    await screen.findByText("Zoo", { selector: ".alert-card-name" });
+    expect(screen.queryByRole("group", { name: "Filtrer les alertes" })).toBeNull();
+    expect(names()).toEqual(["Gare", "Zoo"]);
+
+    unmount();
+    alerts = alerts.slice(0, 1);
+    renderPage();
+    await screen.findByText("Zoo", { selector: ".alert-card-name" });
+    expect(screen.queryByLabelText("Trier les alertes")).toBeNull();
   });
 });
 

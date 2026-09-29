@@ -75,8 +75,18 @@ const compare = (count, comparison, threshold) =>
  * l'anti-spam re-notifie seulement quand cette clé change.
  */
 function evaluateAlert(alert, statusMap) {
-  const status = statusMap[alert.station_id];
-  const count = alert.target === 'docks' ? docksOf(status) : countForType(status, alert.bike_type);
+  const measure = (status) => (alert.target === 'docks' ? docksOf(status) : countForType(status, alert.bike_type));
+
+  if (alert.group_stations?.length) {
+    // Groupe : la règle porte sur la meilleure station (« au plus N » ⇒ toutes sont
+    // basses ; « au moins N » ⇒ une suffit). La clé = le détail de chaque station.
+    const counts = alert.group_stations.map((s) => measure(statusMap[s.station_id]));
+    const count = Math.max(...counts);
+    const departureHit = compare(count, alert.comparison, alert.threshold);
+    return { triggered: departureHit, key: counts.join('|'), count, counts, departureHit };
+  }
+
+  const count = measure(statusMap[alert.station_id]);
   const departureHit = compare(count, alert.comparison, alert.threshold);
 
   if (!alert.arrival_station_id) {
@@ -123,7 +133,8 @@ function findFallback(stationId, stations, statusMap, measure, threshold) {
  * station surveillée) manque de places. Aucune pour les alertes « au moins N ».
  */
 function fallbacksFor(alert, ev, stations, statusMap) {
-  if (alert.comparison !== 'at_most' || !stations?.length) return {};
+  // Un groupe couvre déjà les stations alternatives choisies par l'utilisateur.
+  if (alert.comparison !== 'at_most' || alert.group_stations?.length || !stations?.length) return {};
   const bikes = (st) => countForType(st, alert.bike_type);
   const out = {};
   if (ev.departureHit) {
@@ -194,6 +205,8 @@ function describeDeparture(alerte, n) {
 function buildMessage(alerte, ev) {
   const n = ev.count;
 
+  if (alerte.group_stations?.length) return buildGroupMessage(alerte, ev);
+
   if (alerte.arrival_station_id) {
     const parts = [
       `Départ ${alerte.station_name} : ${bikesLabel(alerte.bike_type, n)}`,
@@ -229,6 +242,28 @@ function buildMessage(alerte, ev) {
   };
 }
 
+/**
+ * Groupe : « Maison : peu de vélos » + le détail « Gare : 0 · Cathédrale : 1 ».
+ * `ev.count` = meilleure station du groupe, `ev.counts` = une valeur par station.
+ */
+function buildGroupMessage(alerte, ev) {
+  const label = alerte.group_name || 'Vos stations';
+  const docks = alerte.target === 'docks';
+  const kinds = docks ? 'places libres' : bikesLabel(alerte.bike_type, 2).replace(/^2 /, '');
+  let title;
+  if (alerte.comparison === 'at_least') {
+    title = `✅ ${label} : ${kinds} disponibles`;
+  } else if (ev.count === 0) {
+    title = `⚠️ ${label} : ${docks ? 'plus aucune place libre' : `plus aucun ${bikesLabel(alerte.bike_type, 1).replace(/^1 /, '')}`}`;
+  } else {
+    title = `${label} : peu de ${kinds}`;
+  }
+  const body = alerte.group_stations
+    .map((s, i) => `${s.station_name} : ${ev.counts?.[i] ?? 0}`)
+    .join(' · ');
+  return { title, body };
+}
+
 /** « Cathédrale (350 m) : 6 vélos » */
 function describeFallback(f, unit) {
   return `${f.name} (${fmtDistance(f.km)}) : ${unit(f.count)}`;
@@ -258,6 +293,36 @@ function buildPayload(alerte, ev, fallbacks) {
   };
 }
 
+// ── Résumé à heure fixe ────────────────────────────────────────────────────────
+
+const TYPE_SHORT = { mechanical: 'méca', ebike: 'élec' };
+
+/**
+ * Vélos d'une station pour un résumé : « 3 », ou « 2 méca · 1 élec » pour les deux
+ * types ; « indisponible » si la station ne loue pas ou est absente du flux.
+ */
+function summaryLine(status, bikeType) {
+  if (!status || status.is_renting === false) return 'indisponible';
+  if (bikeType !== 'any') return String(countForType(status, bikeType));
+  return ['mechanical', 'ebike'].map((t) => `${countForType(status, t)} ${TYPE_SHORT[t]}`).join(' · ');
+}
+
+/** « 📊 Maison — vélos électriques » + une ligne par station. */
+function buildSummaryPayload(alerte, statusMap) {
+  const label = alerte.group_name || 'Vos stations';
+  const kind = alerte.bike_type === 'any' ? 'vélos' : bikesLabel(alerte.bike_type, 2).replace(/^2 /, '');
+  return {
+    title: `📊 ${label} — ${kind}`,
+    body: (alerte.group_stations ?? [])
+      .map((s) => `${s.station_name} : ${summaryLine(statusMap[s.station_id], alerte.bike_type)}`)
+      .join('\n'),
+    url:       buildRedirectUrl(),
+    stationId: alerte.station_id,
+    icon:      '/icon-192.png',
+    badge:     '/badge-72.png',
+  };
+}
+
 /** Notification de test : ouvre la page Alertes de l'app au clic. */
 function buildTestPayload() {
   const base = (process.env.APP_URL || 'https://velam-notifier.onrender.com').replace(/\/$/, '');
@@ -280,6 +345,19 @@ function isDue(alert, { hhmm, isoDay, date }) {
   return alert.days ? alert.days.split(',').map(Number).includes(isoDay) : true;
 }
 
+// Retard toléré après l'heure d'un résumé (boucle en pause, flux Vélam momentanément
+// périmé…). Au-delà, un résumé « de 8 h » reçu à midi induirait en erreur : on l'abandonne.
+const SUMMARY_GRACE_MIN = 15;
+const minutesOf = (hhmm) => Number(hhmm.slice(0, 2)) * 60 + Number(hhmm.slice(3, 5));
+
+/** Résumé à envoyer maintenant : bon jour, heure atteinte (≤ 15 min), pas encore envoyé aujourd'hui. */
+function isSummaryDue(alert, { hhmm, isoDay, date }) {
+  if (alert.last_notified_date === date) return false;
+  if (!alert.days.split(',').map(Number).includes(isoDay)) return false;
+  const late = minutesOf(hhmm) - minutesOf(alert.time_start);
+  return late >= 0 && late <= SUMMARY_GRACE_MIN;
+}
+
 /** `date` injectable pour les tests (défaut : maintenant). */
 async function checkAlerts(date = new Date()) {
   // Ne rien faire si aucune alerte active n'existe en base
@@ -289,7 +367,8 @@ async function checkAlerts(date = new Date()) {
   const now = nowInTz(date);
   await deleteExpiredAlerts(now.date); // alertes ponctuelles des jours passés
 
-  const due = (await getActiveAlerts(now.date)).filter((a) => isDue(a, now));
+  const due = (await getActiveAlerts(now.date))
+    .filter((a) => (a.kind === 'summary' ? isSummaryDue(a, now) : isDue(a, now)));
   if (due.length === 0) return 'aucune_due';
 
   let status;
@@ -316,6 +395,12 @@ async function checkAlerts(date = new Date()) {
   }
 
   for (const alert of due) {
+    if (alert.kind === 'summary') {
+      // Une fois par jour : la date marquée empêche tout second envoi.
+      await sendToUser(alert.user_id, buildSummaryPayload(alert, statusMap));
+      await markAlertNotified(alert.id, now.date, null);
+      continue;
+    }
     const ev = evaluateAlert(alert, statusMap);
     const notifiedToday = alert.last_notified_date === now.date;
 
@@ -403,5 +488,5 @@ function stopPolling() {
 module.exports = {
   initPush, getVapidPublicKey, startPolling, stopPolling, getAlertLoopHealth,
   // exposés pour les tests
-  checkAlerts, runPollCycle, getAlertLoopHealth, findFallback, fallbacksFor, buildTestPayload, countForType, docksOf, evaluateAlert, buildMessage, buildPayload, sendToUser, inWindow, nowInTz,
+  checkAlerts, runPollCycle, getAlertLoopHealth, findFallback, fallbacksFor, buildTestPayload, countForType, docksOf, evaluateAlert, buildMessage, buildPayload, buildSummaryPayload, isSummaryDue, sendToUser, inWindow, nowInTz,
 };
