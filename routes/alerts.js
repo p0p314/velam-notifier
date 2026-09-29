@@ -18,6 +18,7 @@ const MAX_COUNT  = 50;
 const GROUP_MIN  = 2;
 const GROUP_MAX  = 5;   // au-delà, le corps de la notification est tronqué
 const GROUP_NAME_MAX = 40;
+const SEND_TIMES_MAX = 6; // heures d'envoi d'un résumé
 const PAUSE_MAX_DAYS = 365;
 const YMD_OK = (v) => typeof v === 'string' && YMD.test(v);
 
@@ -41,7 +42,8 @@ const present = (v) => v !== undefined && v !== null && v !== '';
  *    `station_id` / `station_name`. Incompatible avec un trajet.
  *
  * `kind` : `threshold` (défaut, tout ce qui précède) ou `summary` — résumé envoyé chaque
- * jour choisi à `time_start` : 1 à 5 stations (`group_stations`), `bike_type`, `days`.
+ * jour choisi à chacune de ses heures (`send_times`, 1 à 6) : 1 à 5 stations
+ * (`group_stations`), `bike_type`, `days`.
  * Les champs de seuil / trajet / créneau sont alors neutralisés (voir validateSummary).
  *
  * `current` (PATCH) : l'alerte existante ; le payload est fusionné dessus puis tout
@@ -60,7 +62,13 @@ function validateAlertPayload(body, { current = null, today = null } = {}) {
     errors.push('kind (threshold|summary)');
     return { fields, errors };
   }
-  if (fields.kind === 'summary') return validateSummary(src, fields, errors);
+  if (fields.kind === 'summary') {
+    // Heures d'envoi : `send_times`, sinon `time_start` seul (client d'avant la v1.5 —
+    // y compris en PATCH, où l'heure fournie l'emporte sur les heures enregistrées).
+    if (body.send_times === undefined && body.time_start !== undefined) src.send_times = [body.time_start];
+    else if (src.send_times === undefined || src.send_times === null) src.send_times = present(src.time_start) ? [src.time_start] : undefined;
+    return validateSummary(src, fields, errors);
+  }
 
   const group = applyGroup(src, fields, errors, GROUP_MIN);
 
@@ -119,15 +127,16 @@ function validateAlertPayload(body, { current = null, today = null } = {}) {
   else if (today && src.valid_on < today && src.valid_on !== current?.valid_on) errors.push('valid_on (date passée)');
   else fields.valid_on = src.valid_on;
 
+  fields.send_times = null;
   fields.active = src.active === undefined ? 1 : (src.active ? 1 : 0);
 
   return { fields, errors };
 }
 
 /**
- * Résumé à heure fixe : stations (1 à 5), type de vélo, heure d'envoi, jours.
- * Seuil, trajet et alerte ponctuelle n'ont pas de sens : valeurs neutres forcées,
- * et `time_end` = `time_start` (colonne obligatoire, sans usage ici).
+ * Résumé à heure fixe : stations (1 à 5), type de vélo, heures d'envoi (1 à 6), jours.
+ * Seuil, trajet et alerte ponctuelle n'ont pas de sens : valeurs neutres forcées.
+ * `time_start` = `time_end` = première heure (colonnes obligatoires, tri de la liste).
  */
 function validateSummary(src, fields, errors) {
   if (!applyGroup(src, fields, errors, 1)) {
@@ -148,8 +157,11 @@ function validateSummary(src, fields, errors) {
   fields.arrival_threshold = null;
   fields.valid_on = null;
 
-  if (HHMM.test(src.time_start ?? '')) fields.time_start = fields.time_end = src.time_start;
-  else errors.push('time_start (HH:MM)');
+  const times = validateSendTimes(src.send_times);
+  if (times) {
+    fields.send_times = times;
+    fields.time_start = fields.time_end = times[0];
+  } else errors.push(`send_times (1 à ${SEND_TIMES_MAX} heures HH:MM distinctes)`);
   applyDays(src, fields, errors);
   fields.active = src.active === undefined ? 1 : (src.active ? 1 : 0);
 
@@ -174,6 +186,14 @@ function applyGroup(src, fields, errors, min) {
   src.station_id = group[0].station_id;
   src.station_name = group[0].station_name;
   return group;
+}
+
+/** Heures d'envoi d'un résumé : tableau trié de 1 à 6 « HH:MM » distinctes, ou null. */
+function validateSendTimes(raw) {
+  if (!Array.isArray(raw) || raw.length < 1 || raw.length > SEND_TIMES_MAX) return null;
+  if (!raw.every((t) => typeof t === 'string' && HHMM.test(t))) return null;
+  const times = [...new Set(raw)].sort();
+  return times.length === raw.length ? times : null;
 }
 
 function applyDays(src, fields, errors) {

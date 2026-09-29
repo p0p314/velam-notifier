@@ -17,6 +17,8 @@ import Account from "./pages/Account";
 import Privacy from "./pages/Privacy";
 import { OnlineOnly } from "./components/Offline";
 import Onboarding from "./components/Onboarding";
+import Tutorial from "./components/Tutorial";
+import { tutorialPending } from "./lib/tutorial";
 
 // Carte chargée à la demande : mapbox-gl (~1,5 Mo) reste hors du bundle principal.
 const MapPage = lazy(() => import("./pages/MapPage"));
@@ -31,6 +33,17 @@ function Protected() {
 function Landing() {
   const isMobile = useIsMobile();
   return <Navigate to={landingPath(getLandingPref(), isMobile)} replace />;
+}
+
+/**
+ * Première connexion : le tutoriel de présentation d'abord, puis l'accueil pratique
+ * (installer, notifications, favoris) — jamais les deux à la fois. Tant que le serveur
+ * n'a pas confirmé l'état du tutoriel (utilisateur mémorisé sans le champ), rien.
+ */
+function FirstRun() {
+  const { user, completeTutorial } = useAuth();
+  if (tutorialPending(user)) return <Tutorial onClose={completeTutorial} />;
+  return user?.tutorial_done ? <Onboarding /> : null;
 }
 
 export function Layout() {
@@ -64,7 +77,7 @@ export function Layout() {
       <Navbar />
       <main className="app-content"><Outlet /></main>
       <BottomNav />
-      <Onboarding />
+      <FirstRun />
     </div>
   );
 }

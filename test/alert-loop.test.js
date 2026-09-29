@@ -438,6 +438,24 @@ describe('résumé à heure fixe', () => {
     assert.equal(sent.length, 1);
   });
 
+  test('plusieurs heures : un envoi à chacune, sans doublon', async () => {
+    await createAlert(userId, { ...summary, send_times: ['08:30', '18:00'] });
+    await setStatus({ 1: { bikes: 1 }, 2: { bikes: 1 } });
+    await checkAlerts(WED_0830);
+    await expireCache();
+    await checkAlerts(WED_0831);
+    assert.equal(sent.length, 1);
+    await expireCache();
+    await checkAlerts(new Date('2025-09-24T16:02:00Z')); // 18:02 à Paris
+    assert.equal(sent.length, 2);
+    await expireCache();
+    await checkAlerts(new Date('2025-09-24T16:05:00Z'));
+    assert.equal(sent.length, 2);
+    await expireCache();
+    await checkAlerts(THU_0830);
+    assert.equal(sent.length, 3);
+  });
+
   test('coexiste avec une alerte de disponibilité', async () => {
     await createAlert(userId, summary);
     await createAlert(userId, alertBase);

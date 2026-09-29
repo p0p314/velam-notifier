@@ -350,13 +350,29 @@ function isDue(alert, { hhmm, isoDay, date }) {
 const SUMMARY_GRACE_MIN = 15;
 const minutesOf = (hhmm) => Number(hhmm.slice(0, 2)) * 60 + Number(hhmm.slice(3, 5));
 
-/** Résumé à envoyer maintenant : bon jour, heure atteinte (≤ 15 min), pas encore envoyé aujourd'hui. */
-function isSummaryDue(alert, { hhmm, isoDay, date }) {
-  if (alert.last_notified_date === date) return false;
-  if (!alert.days.split(',').map(Number).includes(isoDay)) return false;
-  const late = minutesOf(hhmm) - minutesOf(alert.time_start);
-  return late >= 0 && late <= SUMMARY_GRACE_MIN;
+/**
+ * Heure de résumé à envoyer maintenant (« HH:MM »), ou null : bon jour, heure atteinte
+ * depuis au plus 15 min, et pas encore envoyée aujourd'hui. `last_notified_key` garde la
+ * dernière heure envoyée du jour : les heures ≤ à celle-ci sont faites (heures triées,
+ * comparées en texte). Si deux heures sont dans la tolérance, seule la plus récente part.
+ */
+function summarySlotDue(alert, { hhmm, isoDay, date }) {
+  if (!alert.days.split(',').map(Number).includes(isoDay)) return null;
+  const sentUpTo = alert.last_notified_date === date ? alert.last_notified_key ?? '' : null;
+  const slot = (alert.send_times ?? [alert.time_start])
+    .filter((t) => {
+      const late = minutesOf(hhmm) - minutesOf(t);
+      return late >= 0 && late <= SUMMARY_GRACE_MIN;
+    })
+    .pop();
+  if (!slot) return null;
+  // Envoi d'avant la v1.5 (clé NULL, date du jour) : l'heure unique est faite.
+  if (sentUpTo === '') return null;
+  return sentUpTo !== null && slot <= sentUpTo ? null : slot;
 }
+
+/** Résumé à envoyer maintenant (au moins une de ses heures est due). */
+const isSummaryDue = (alert, now) => summarySlotDue(alert, now) !== null;
 
 /** `date` injectable pour les tests (défaut : maintenant). */
 async function checkAlerts(date = new Date()) {
@@ -396,9 +412,10 @@ async function checkAlerts(date = new Date()) {
 
   for (const alert of due) {
     if (alert.kind === 'summary') {
-      // Une fois par jour : la date marquée empêche tout second envoi.
+      // Une fois par heure d'envoi : date + dernière heure envoyée empêchent tout doublon.
+      const slot = summarySlotDue(alert, now);
       await sendToUser(alert.user_id, buildSummaryPayload(alert, statusMap));
-      await markAlertNotified(alert.id, now.date, null);
+      await markAlertNotified(alert.id, now.date, slot);
       continue;
     }
     const ev = evaluateAlert(alert, statusMap);

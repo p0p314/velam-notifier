@@ -129,7 +129,7 @@ async function getUserByUsername(username) {
 
 /** Avec le hash du mot de passe : réservé aux vérifications d'identité. */
 async function getUserAuthById(id) {
-  return dbc.get('SELECT id, username, password_hash, token_version FROM users WHERE id = ?', [id]);
+  return dbc.get('SELECT id, username, password_hash, token_version, tutorial_done FROM users WHERE id = ?', [id]);
 }
 
 /** Version de session du compte (null si le compte n'existe plus). */
@@ -222,8 +222,13 @@ async function deleteUser(id) {
   return changes > 0;
 }
 
+/** Tutoriel de présentation vu (ou arrêté) : il n'est plus proposé à ce compte. */
+async function markTutorialDone(id) {
+  await dbc.run('UPDATE users SET tutorial_done = 1 WHERE id = ?', [id]);
+}
+
 async function getUserById(id) {
-  return dbc.get('SELECT id, username, token_version, created_at FROM users WHERE id = ?', [id]);
+  return dbc.get('SELECT id, username, token_version, tutorial_done, created_at FROM users WHERE id = ?', [id]);
 }
 
 // ── Favorites ────────────────────────────────────────────────────────────────
@@ -334,20 +339,27 @@ async function removeSubscriptionById(id) {
 
 // ── Alerts ───────────────────────────────────────────────────────────────────
 
-/** Ligne SQL → alerte : `group_stations` (JSON en base) devient un tableau, ou null. */
+/**
+ * Ligne SQL → alerte : `group_stations` (JSON en base) devient un tableau, ou null ;
+ * `send_times` (CSV) devient un tableau d'heures pour un résumé — `[time_start]` pour
+ * un résumé d'avant la v1.5 — et null pour une alerte de disponibilité.
+ */
 function toAlert(row) {
   if (!row) return row;
   let group = null;
   if (row.group_stations) {
     try { group = JSON.parse(row.group_stations); } catch { group = null; }
   }
-  return { ...row, group_stations: Array.isArray(group) && group.length ? group : null };
+  const sendTimes = row.kind !== 'summary' ? null
+    : row.send_times ? row.send_times.split(',') : [row.time_start];
+  return { ...row, group_stations: Array.isArray(group) && group.length ? group : null, send_times: sendTimes };
 }
 
-/** Valeur SQL d'un champ d'alerte (tableau de stations → JSON, booléen → 0/1). */
+/** Valeur SQL d'un champ d'alerte (tableau de stations → JSON, heures → CSV, booléen → 0/1). */
 function alertValue(key, value) {
   if (key === 'active') return value ? 1 : 0;
   if (key === 'group_stations') return value?.length ? JSON.stringify(value) : null;
+  if (key === 'send_times') return value?.length ? value.join(',') : null;
   return value;
 }
 
@@ -369,14 +381,14 @@ async function getAlert(userId, id) {
 const ALERT_FIELDS = [
   'kind', 'station_id', 'station_name', 'bike_type', 'target', 'comparison', 'threshold',
   'arrival_station_id', 'arrival_station_name', 'arrival_threshold', 'valid_on',
-  'group_name', 'group_stations', 'time_start', 'time_end', 'days', 'active',
+  'group_name', 'group_stations', 'send_times', 'time_start', 'time_end', 'days', 'active',
 ];
 
 async function createAlert(userId, a) {
   const row = {
     kind: 'threshold', bike_type: 'any', target: 'bikes', comparison: 'at_most', threshold: 1,
     arrival_station_id: null, arrival_station_name: null, arrival_threshold: null,
-    group_name: null, group_stations: null,
+    group_name: null, group_stations: null, send_times: null,
     valid_on: null, days: '1,2,3,4,5,6,7', active: 1,
     ...a,
   };
@@ -472,7 +484,7 @@ module.exports = {
   // config
   getConfig, setConfig,
   // users
-  createUser, getUserByUsername, getUserById, getUserAuthById, updatePasswordHash, deleteUser,
+  createUser, getUserByUsername, getUserById, getUserAuthById, updatePasswordHash, deleteUser, markTutorialDone,
   getTokenVersion, bumpTokenVersion,
   createSession, getSessionAuth, setSubscriptionSession, touchSession, listSessions, deleteSession, deleteOtherSessions, pruneSessions,
   // favorites

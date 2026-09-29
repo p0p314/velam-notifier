@@ -118,6 +118,8 @@ Modules CommonJS, séparation nette des responsabilités :
   neuve**, donc un jeton volé ne survit pas). `GET /api/auth/sessions` liste les appareils
   (`device.js` → « iPhone · Safari ») et purge les sessions inactives au-delà de `JWT_TTL`.
   `GET /api/auth/export` : toutes les données du compte en JSON (RGPD, jamais le mot de passe).
+  **Tutoriel** : l'utilisateur renvoyé (login, register, `me`…) porte `tutorial_done`
+  (`users.tutorial_done`) ; `POST /api/auth/tutorial` le marque vu (une fois par compte).
 - **push.js** — clés VAPID (env ou générées), envoi `web-push` (`sendToUser` → `{ total, sent }`),
   et la **boucle d'alerte** (`startPolling` → cycle non concurrent toutes les 30 s) :
   `evaluateAlert` (pure), messages (`buildMessage`), stations de repli (`findFallback`).
@@ -162,6 +164,7 @@ Erreurs upstream/proxy → **HTTP 502** `{ ok:false, error }`. Toutes les répon
 enveloppe `ok` ; le client `api()` lève sur `!res.ok || data.ok === false`. Routes protégées
 (`/api/favorites` (+ `PATCH /:id` label, `PUT /order`), `/api/alerts` (+ `PUT /pause`),
 `/api/push/subscribe|unsubscribe|test`, `/api/auth/me` (GET ; DELETE = suppression du compte),
+`POST /api/auth/tutorial`,
 `PUT /api/auth/password`, `POST /api/auth/logout|logout-others`, `/api/auth/sessions` (GET, DELETE `/:id`),
 `GET /api/auth/export`,
 `POST /api/stations/refresh`) : Bearer requis. Publiques : login/register,
@@ -194,11 +197,14 @@ Modèle d'alerte (`routes/alerts.js` → `validateAlertPayload`, PATCH = fusion 
   station de repli ni de trajet. La 1re station est recopiée dans `station_id` / `station_name`.
 
 **Résumé à heure fixe** (`kind = 'summary'`, défaut `threshold` = alerte de disponibilité) :
-1 à 5 stations (`group_stations`, nom facultatif), `bike_type`, heure d'envoi `time_start`
-(`time_end` = même valeur) et `days` ; seuil / trajet / ponctuelle neutralisés par
-`validateSummary`. La boucle l'envoie **une fois par jour** (`last_notified_date`), entre
-l'heure choisie et +15 min (`isSummaryDue`, `SUMMARY_GRACE_MIN`) : au-delà (boucle arrêtée,
-flux périmé), il est abandonné plutôt qu'envoyé avec du retard. Contenu : une ligne par station
+1 à 5 stations (`group_stations`, nom facultatif), `bike_type`, **1 à 6 heures d'envoi**
+`send_times` (tableau trié côté API, CSV en base ; `time_start` = `time_end` = 1re heure,
+pour le tri ; un résumé d'avant la v1.5 sans `send_times` est lu `[time_start]`, et un client
+qui n'envoie que `time_start` remplace les heures) et `days` ; seuil / trajet / ponctuelle
+neutralisés par `validateSummary`. La boucle envoie **chaque heure une fois par jour**
+(`last_notified_date` + `last_notified_key` = dernière heure envoyée du jour), entre l'heure
+et +15 min (`summarySlotDue` / `isSummaryDue`, `SUMMARY_GRACE_MIN`) : au-delà (boucle
+arrêtée, flux périmé), elle est abandonnée plutôt qu'envoyée avec du retard. Contenu : une ligne par station
 (`Gare : 2 méca · 1 élec`, ou le seul type choisi ; `indisponible` si fermée) —
 `buildSummaryPayload`. Dans le formulaire, type choisi en tête (« Alerte de disponibilité » /
 « Résumé à heure fixe ») : seuls les champs utiles sont affichés.
@@ -290,8 +296,14 @@ différenciée (réglable dans Paramètres › Préférences) : par défaut mobi
   mobile** (jamais desktop), réapparaît le lendemain si ignorée ; pas d'ouverture auto tant que
   l'accueil est en attente. Boutons « Installer » masqués quand l'app est déjà installée
   (`display-mode: standalone` / `navigator.standalone`).
+- **components/Tutorial.jsx** + **lib/tutorial.js** — tutoriel de présentation en slides
+  (« Suivant » / glisser, « Arrêter le tutoriel »), lancé après la **première connexion du
+  compte** (`tutorialPending(user)` : `tutorial_done === false` confirmé par le serveur) ;
+  fermé ou terminé → `completeTutorial()` (`auth.jsx`). Revoir : Paramètres › Préférences.
+  Contenu des slides dans `TUTORIAL_SLIDES` : **à tenir à jour** quand une fonctionnalité change.
 - **components/Onboarding.jsx** — accueil au premier lancement (installer / notifications /
-  favoris), uniquement les étapes encore utiles ; rien n'est monté une fois terminé.
+  favoris), uniquement les étapes encore utiles ; rien n'est monté une fois terminé. Monté
+  par `FirstRun` (`App.jsx`) **après** le tutoriel, jamais en même temps.
 - **pages/** — `Login`, `Stations` (recherche/tri/filtre + détail), `Favorites` (swipe-to-delete,
   tri proximité / ordre choisi, mode « Organiser »), `MapPage` (carte + filtres + « Autour de moi » : position mesurée au clic, 3 stations les plus proches recalculées en continu selon les filtres),
   `Alerts` (formulaire complet, pause, notification de test ; liste filtrable par type — filtre
@@ -320,11 +332,11 @@ se fait dans `push.js` (`countForType`) et `routes/stations.js` (`extractCount`)
 
 Tables (créées/migrées par `database/migrations.js`, dialecte selon `DATABASE_URL`) :
 `stations` (référentiel statique), `config` (clé/valeur : secret JWT, clés VAPID),
-`users` (+ `alerts_paused_until`, `token_version`), `sessions` (appareils connectés, horodatages
+`users` (+ `alerts_paused_until`, `token_version`, `tutorial_done`), `sessions` (appareils connectés, horodatages
 en ms), `push_subscriptions.session_id` (appareil de rattachement), `favorites` (unique `user_id+station_id`, `label`, `sort_order`
 — NULL tant que l'utilisateur n'a jamais ordonné : ordre alphabétique), `push_subscriptions`
 (unique `endpoint`), `alerts` (cf. modèle ci-dessus ; `group_stations` stocké en JSON texte,
-parsé par `db.js` → tableau ; `threshold` a remplacé `min_count`,
+parsé par `db.js` → tableau ; `send_times` en CSV → tableau (résumés) ; `threshold` a remplacé `min_count`,
 `last_notified_key` a remplacé `last_notified_count`), `rental_apps` (deep links par plateforme).
 Helpers de migration portables : `columnsOf` / `addColumn` / `dropColumn` (`migrations.js`).
 

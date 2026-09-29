@@ -178,9 +178,24 @@ describe("résumé à heure fixe", () => {
     fireEvent.click(f.getByRole("button", { name: "Créer le résumé" }));
     await waitFor(() => expect(lastPost()).toBeTruthy());
     expect(lastPost()).toMatchObject({
-      kind: "summary", bike_type: "ebike", time_start: "07:40", time_end: "07:40",
+      kind: "summary", bike_type: "ebike", send_times: ["07:40"], time_start: "07:40", time_end: "07:40",
       group_stations: [{ station_id: "1", station_name: "Gare" }],
     });
+  });
+
+  test("plusieurs heures d'envoi : ajout, retrait, envoi trié", async () => {
+    await ready();
+    const f = within(form());
+    fireEvent.click(f.getByRole("button", { name: "Résumé à heure fixe" }));
+    fireEvent.change(f.getByLabelText("Heure d'envoi"), { target: { value: "18:00" } });
+    fireEvent.click(f.getByRole("button", { name: "Ajouter une heure" }));
+    fireEvent.click(f.getByRole("button", { name: "Ajouter une heure" }));
+    expect(f.getByLabelText("Heure d'envoi 3")).toBeTruthy();
+    fireEvent.click(f.getByRole("button", { name: "Retirer l'heure 20:00" }));
+    fireEvent.change(f.getByLabelText("Heure d'envoi 2"), { target: { value: "07:45" } });
+    fireEvent.click(f.getByRole("button", { name: "Créer le résumé" }));
+    await waitFor(() => expect(lastPost()).toBeTruthy());
+    expect(lastPost()).toMatchObject({ send_times: ["07:45", "18:00"], time_start: "07:45" });
   });
 
   test("carte d'un résumé", async () => {
@@ -190,6 +205,14 @@ describe("résumé à heure fixe", () => {
     renderPage();
     expect(await screen.findByText("Gare, Zoo")).toBeTruthy();
     expect(screen.getByText("Résumé à 07:40 · vélos")).toBeTruthy();
+  });
+
+  test("carte d'un résumé à plusieurs heures", async () => {
+    alerts = [{ id: 9, active: 1, kind: "summary", station_id: "1", station_name: "Gare", target: "bikes", comparison: "at_most",
+      bike_type: "any", threshold: 0, time_start: "07:40", time_end: "07:40", send_times: ["07:40", "17:30"], days: "1,2,3,4,5",
+      valid_on: null, group_name: "Maison", group_stations: [{ station_id: "1", station_name: "Gare" }] }];
+    renderPage();
+    expect(await screen.findByText("Gare · Résumé à 07:40, 17:30 · vélos")).toBeTruthy();
   });
 });
 

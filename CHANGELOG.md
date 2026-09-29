@@ -9,6 +9,20 @@ Toutes les évolutions notables de VéloPulse. Format inspiré de
 section `## [x.y.z] - AAAA-MM-JJ` ci-dessous, puis merger sur `main` : le workflow
 `release.yml` crée le tag `vx.y.z` et la release GitHub à partir de cette section.
 
+## [1.5.0] - 2026-09-29
+
+### Résumés à plusieurs heures
+- Un même résumé peut désormais être envoyé à **plusieurs heures** de la journée (jusqu'à 6,
+  par exemple 7 h 45 et 18 h), les jours choisis : « Ajouter une heure » dans le formulaire.
+- Chaque heure est envoyée une seule fois par jour ; les résumés existants gardent leur heure.
+
+### Tutoriel
+- **Tutoriel de présentation** au premier lancement après connexion : quelques slides
+  (stations, carte, favoris, alertes, résumés, paramètres), « Suivant » ou glisser pour
+  avancer, « Arrêter le tutoriel » à tout moment. Montré une seule fois par compte, puis
+  suivi de l'accueil pratique (installer, notifications, favoris).
+- Le tutoriel peut être revu depuis **Paramètres › Préférences**.
+
 ## [1.4.1] - 2026-09-29
 
 ### Corrections

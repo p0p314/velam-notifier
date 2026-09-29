@@ -6,6 +6,7 @@ import { usePushState, TestPushButton } from "../components/PushControls";
 import {
   ALL_DAYS, defaultForm, formFromAlert, validateForm, payloadFromForm, describeAlert,
   tripAllowed, groupRuleText, LIST_FILTERS, LIST_SORTS, loadListPrefs, saveListPrefs, visibleAlerts, hasBothKinds, localYmd, addDaysYmd, fmtDay, GROUP_MIN, GROUP_MAX, GROUP_NAME_MAX,
+  SEND_TIMES_MAX, nextSendTime,
 } from "../lib/alerts";
 import BottomSheet from "../components/BottomSheet";
 import Icon from "../components/Icon";
@@ -26,7 +27,7 @@ const KIND_OPTIONS = [
 ];
 const KIND_HINT = {
   threshold: "Une notification seulement quand la disponibilité franchit votre seuil.",
-  summary:   "Chaque jour choisi, à l'heure dite, le nombre de vélos de vos stations.",
+  summary:   "Chaque jour choisi, aux heures dites, le nombre de vélos de vos stations.",
 };
 const MODE_OPTIONS = [
   { value: "single", label: "Une station" },
@@ -231,6 +232,37 @@ function StationPicker({ stations, form, setField, min }) {
   );
 }
 
+/** Heures d'envoi d'un résumé : 1 à 6, ajout / retrait (la dernière ne se retire pas). */
+function SendTimesPicker({ value, onChange }) {
+  const set = (i, t) => onChange(value.map((v, j) => (j === i ? t : v)));
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+      <span className="form-label">{value.length > 1 ? "Heures d'envoi" : "Heure d'envoi"}</span>
+      <div className="send-times">
+        {value.map((t, i) => (
+          <div key={i} className="send-time">
+            <input type="time" value={t} onChange={(e) => set(i, e.target.value)} className="field mono"
+              aria-label={value.length > 1 ? `Heure d'envoi ${i + 1}` : "Heure d'envoi"} />
+            {value.length > 1 && (
+              <button type="button" className="icon-btn" aria-label={`Retirer l'heure ${t || i + 1}`}
+                onClick={() => onChange(value.filter((_, j) => j !== i))}>
+                <Icon name="x" size={16} />
+              </button>
+            )}
+          </div>
+        ))}
+      </div>
+      {value.length < SEND_TIMES_MAX ? (
+        <button type="button" className="send-time-add" onClick={() => onChange([...value, nextSendTime(value)])}>
+          <Icon name="plus" size={15} /> Ajouter une heure
+        </button>
+      ) : (
+        <span className="form-hint">{SEND_TIMES_MAX} heures maximum.</span>
+      )}
+    </div>
+  );
+}
+
 function AlertForm({ stations, form, setField, error, onSubmit, onCancel, editing }) {
   if (stations.length === 0) {
     return <div style={{ fontSize: 14, color: "var(--text-3)" }}>Ajoutez d'abord des stations en favoris.</div>;
@@ -268,11 +300,7 @@ function AlertForm({ stations, form, setField, error, onSubmit, onCancel, editin
             <span className="form-label">Type de vélo</span>
             <Seg label="Type de vélo" options={BIKE_OPTIONS} value={form.bikeType} onChange={(v) => setField("bikeType", v)} />
           </div>
-          <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-            <span className="form-label">Heure d'envoi</span>
-            <input type="time" value={form.sendTime} onChange={(e) => setField("sendTime", e.target.value)}
-              className="field mono" aria-label="Heure d'envoi" style={{ maxWidth: 160 }} />
-          </label>
+          <SendTimesPicker value={form.sendTimes} onChange={(v) => setField("sendTimes", v)} />
         </>
       ) : (<>
       <Seg label="Stations surveillées" options={MODE_OPTIONS} value={form.group ? "group" : "single"} onChange={setMode} />
