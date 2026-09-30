@@ -13,6 +13,10 @@ import "@fontsource/geist-mono/latin-500.css";
 import "@fontsource/geist-mono/latin-600.css";
 import "./styles.css";
 
+// Pas de zoom au pincement : Safari iOS ignore `user-scalable=no` du viewport, il faut
+// annuler ses gestes. La carte n'est pas concernée (Mapbox zoome via les touch events).
+document.addEventListener("gesturestart", (e) => e.preventDefault(), { passive: false });
+
 // Enregistrement du Service Worker AVANT le rendu React (pas dans un useEffect).
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", async () => {

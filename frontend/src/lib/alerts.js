@@ -100,6 +100,19 @@ export function formFromAlert(a) {
   };
 }
 
+/**
+ * Copie d'une alerte → formulaire de création pré-rempli (rien n'est créé avant validation :
+ * on ajuste d'abord la station, l'heure…). Un groupe nommé prend « (copie) » pour être
+ * distinguable dans la liste ; une ponctuelle copiée vaut pour aujourd'hui.
+ */
+export function copyForm(a) {
+  const form = formFromAlert(a);
+  const name = form.groupName.trim();
+  if (name) form.groupName = `${name.slice(0, GROUP_NAME_MAX - 8)} (copie)`;
+  form.validOn = null;
+  return form;
+}
+
 /** Le trajet n'a de sens que pour « vélos, il en reste peu », sur une seule station. */
 export const tripAllowed = (form) => !form.group && form.target === "bikes" && form.comparison === "at_most";
 

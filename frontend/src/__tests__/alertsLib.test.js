@@ -2,7 +2,7 @@ import { describe, test, expect } from "vitest";
 import {
   defaultForm, formFromAlert, validateForm, payloadFromForm, describeAlert,
   tripAllowed, groupRuleText, localYmd, addDaysYmd, fmtDay,
-  visibleAlerts, hasBothKinds, loadListPrefs, saveListPrefs, nextSendTime,
+  visibleAlerts, hasBothKinds, loadListPrefs, saveListPrefs, nextSendTime, copyForm,
 } from "../lib/alerts";
 
 const names = { 1: "Gare", 2: "Zoo" };
@@ -28,6 +28,26 @@ describe("defaultForm", () => {
   test("tard le soir : fin bornée à 23:59", () => {
     const f = defaultForm(null, new Date(2025, 8, 24, 23, 40));
     expect([f.timeStart, f.timeEnd]).toEqual(["23:40", "23:59"]);
+  });
+});
+
+describe("copyForm", () => {
+  const base = { station_id: "1", station_name: "Gare", target: "bikes", comparison: "at_most", bike_type: "any",
+    threshold: 1, time_start: "08:00", time_end: "09:00", days: "1,2", valid_on: null, group_name: null, group_stations: null };
+  test("reprend tous les réglages", () => {
+    expect(copyForm(base)).toEqual(formFromAlert(base));
+  });
+  test("groupe nommé : « (copie) », dans la limite de 40 caractères", () => {
+    const g = { ...base, group_name: "Maison", group_stations: [{ station_id: "1", station_name: "Gare" }, { station_id: "2", station_name: "Zoo" }] };
+    expect(copyForm(g).groupName).toBe("Maison (copie)");
+    const long = copyForm({ ...g, group_name: "x".repeat(40) }).groupName;
+    expect(long.length).toBe(40);
+    expect(long.endsWith(" (copie)")).toBe(true);
+  });
+  test("ponctuelle copiée : vaut pour aujourd'hui", () => {
+    const f = copyForm({ ...base, valid_on: "2020-01-01" });
+    expect(f.oneShot).toBe(true);
+    expect(f.validOn).toBeNull();
   });
 });
 

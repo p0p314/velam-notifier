@@ -308,7 +308,8 @@ différenciée (réglable dans Paramètres › Préférences) : par défaut mobi
   par `FirstRun` (`App.jsx`) **après** le tutoriel, jamais en même temps.
 - **pages/** — `Login`, `Stations` (recherche/tri/filtre + détail), `Favorites` (swipe-to-delete,
   tri proximité / ordre choisi, mode « Organiser »), `MapPage` (carte + filtres + « Autour de moi » : position mesurée au clic, 3 stations les plus proches recalculées en continu selon les filtres),
-  `Alerts` (formulaire complet, pause, notification de test ; liste filtrable par type — filtre
+  `Alerts` (formulaire complet, pause, notification de test ; « Dupliquer » ouvre le formulaire
+  de **création** pré-rempli via `copyForm` (rien n'est créé avant validation) ; liste filtrable par type — filtre
   affiché seulement si les deux types coexistent — et triable par heure / nom / récentes,
   désactivées en dernier, choix mémorisés en `localStorage` ; pré-rempli via
   `location.state.alertStation` depuis la fiche station), `Account` (`/compte`, « Paramètres » :
@@ -356,6 +357,9 @@ Helpers de migration portables : `columnsOf` / `addColumn` / `dropColumn` (`migr
 - **Sécurité** : secrets uniquement via env/`config`, jamais commités ; garder le CSP à jour
   si de nouvelles origines externes sont ajoutées. Pas de `<script>` inline dans `index.html`
   (bloqué par `script-src 'self'`) → fichier dans `public/` (cf. `theme-init.js`).
+- **Zoom désactivé** (choix produit) : viewport `user-scalable=no`, `touch-action: manipulation`,
+  `gesturestart` annulé (`main.jsx`, iOS ignore le viewport) et champs à **16 px** sur mobile
+  (sinon iOS zoome au focus). Garder ≥ 16 px pour tout nouveau champ de saisie.
 
 ## Déploiement
 

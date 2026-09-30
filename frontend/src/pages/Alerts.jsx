@@ -6,7 +6,7 @@ import { usePushState, TestPushButton } from "../components/PushControls";
 import {
   ALL_DAYS, defaultForm, formFromAlert, validateForm, payloadFromForm, describeAlert,
   tripAllowed, groupRuleText, LIST_FILTERS, LIST_SORTS, loadListPrefs, saveListPrefs, visibleAlerts, hasBothKinds, localYmd, addDaysYmd, fmtDay, GROUP_MIN, GROUP_MAX, GROUP_NAME_MAX,
-  SEND_TIMES_MAX, nextSendTime,
+  SEND_TIMES_MAX, nextSendTime, copyForm,
 } from "../lib/alerts";
 import BottomSheet from "../components/BottomSheet";
 import Icon from "../components/Icon";
@@ -167,7 +167,7 @@ function PauseControl({ pausedUntil, onChange }) {
   );
 }
 
-function AlertCard({ a, onToggle, onDelete, onEdit, paused }) {
+function AlertCard({ a, onToggle, onDelete, onEdit, onCopy, paused }) {
   const { title, detail } = describeAlert(a);
   const icon = a.kind === "summary" ? "clock" : a.group_stations?.length ? "map-pin"
     : a.arrival_station_id ? "route" : a.target === "docks" ? "parking" : BIKE_ICON[a.bike_type];
@@ -187,6 +187,9 @@ function AlertCard({ a, onToggle, onDelete, onEdit, paused }) {
         </button>
         <button className="alert-edit" aria-label="Modifier" onClick={() => onEdit(a)}>
           <Icon name="pencil" size={16} />
+        </button>
+        <button className="alert-edit" aria-label="Dupliquer" onClick={() => onCopy(a)}>
+          <Icon name="copy" size={16} />
         </button>
         <button className="alert-del" aria-label="Supprimer" onClick={() => onDelete(a)}>
           <Icon name="trash" size={17} />
@@ -263,7 +266,7 @@ function SendTimesPicker({ value, onChange }) {
   );
 }
 
-function AlertForm({ stations, form, setField, error, onSubmit, onCancel, editing }) {
+function AlertForm({ stations, form, setField, error, onSubmit, onCancel, editing, copying }) {
   if (stations.length === 0) {
     return <div style={{ fontSize: 14, color: "var(--text-3)" }}>Ajoutez d'abord des stations en favoris.</div>;
   }
@@ -286,7 +289,7 @@ function AlertForm({ stations, form, setField, error, onSubmit, onCancel, editin
 
   return (
     <form onSubmit={onSubmit} style={{ display: "flex", flexDirection: "column", gap: 16 }} aria-label="Formulaire d'alerte">
-      <div className="form-title">{editing ? "Modifier l'alerte" : "Nouvelle alerte"}</div>
+      <div className="form-title">{editing ? "Modifier l'alerte" : copying ? "Dupliquer l'alerte" : "Nouvelle alerte"}</div>
 
       <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
         <Seg label="Type d'alerte" options={KIND_OPTIONS} value={form.kind} onChange={setKind} />
@@ -405,9 +408,9 @@ function AlertForm({ stations, form, setField, error, onSubmit, onCancel, editin
       {error && <div className="form-error" role="alert">{error}</div>}
 
       <div className="form-submit-row">
-        {editing && <button type="button" className="cancel-btn" onClick={onCancel}>Annuler</button>}
+        {(editing || copying) && <button type="button" className="cancel-btn" onClick={onCancel}>Annuler</button>}
         <button type="submit" data-autofocus className="submit-btn">
-          {editing ? "Enregistrer" : summary ? "Créer le résumé" : "Créer l'alerte"}
+          {editing ? "Enregistrer" : copying ? "Créer la copie" : summary ? "Créer le résumé" : "Créer l'alerte"}
         </button>
       </div>
     </form>
@@ -442,6 +445,7 @@ export default function Alerts() {
   const [error, setError] = useState(null);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [editing, setEditing] = useState(null);
+  const [copying, setCopying] = useState(null); // alerte dupliquée (formulaire de création pré-rempli)
   const [listPrefs, setListPrefs] = useState(loadListPrefs);
   const changeListPrefs = (p) => { setListPrefs(p); saveListPrefs(p); };
   // Station transmise par « Créer une alerte » (fiche station) : formulaire pré-rempli.
@@ -450,16 +454,17 @@ export default function Alerts() {
 
   const setField = useCallback((k, v) => setForm((f) => ({ ...f, [k]: v })), []);
 
-  // Stations proposées : favoris + station pré-remplie + stations de l'alerte éditée.
+  // Stations proposées : favoris + station pré-remplie + stations de l'alerte éditée / dupliquée.
   const stations = [...favorites];
   const addOption = (id, name) => {
     if (id && !stations.some((s) => s.station_id === id)) stations.unshift({ station_id: id, station_name: name });
   };
   if (preset) addOption(preset.station_id, preset.name);
-  if (editing) {
-    for (const g of editing.group_stations ?? []) addOption(g.station_id, g.station_name);
-    addOption(editing.arrival_station_id, editing.arrival_station_name);
-    addOption(editing.station_id, editing.station_name);
+  const source = editing ?? copying;
+  if (source) {
+    for (const g of source.group_stations ?? []) addOption(g.station_id, g.station_name);
+    addOption(source.arrival_station_id, source.arrival_station_name);
+    addOption(source.station_id, source.station_name);
   }
   const names = Object.fromEntries(stations.map((s) => [s.station_id, s.station_name]));
 
@@ -493,13 +498,24 @@ export default function Alerts() {
 
   const startEdit = (a) => {
     setEditing(a);
+    setCopying(null);
     setForm(formFromAlert(a));
+    setError(null);
+    if (isMobile) setSheetOpen(true);
+  };
+
+  // Dupliquer : rien n'est créé avant « Créer la copie » (on ajuste d'abord station, heure…).
+  const startCopy = (a) => {
+    setEditing(null);
+    setCopying(a);
+    setForm(copyForm(a));
     setError(null);
     if (isMobile) setSheetOpen(true);
   };
 
   const cancelEdit = useCallback(() => {
     setEditing(null);
+    setCopying(null);
     resetForm();
     setSheetOpen(false);
     setError(null);
@@ -516,6 +532,7 @@ export default function Alerts() {
       else await api("/api/alerts", { method: "POST", body });
       setSheetOpen(false);
       setEditing(null);
+      setCopying(null);
       resetForm();
       reload();
     } catch (err) { setError(err.message); }
@@ -534,7 +551,7 @@ export default function Alerts() {
   const showFilter = hasBothKinds(alerts);
   // Filtre masqué (un seul type restant) ⇒ ignoré, sinon la liste pourrait rester vide.
   const shown = visibleAlerts(alerts, { ...listPrefs, filter: showFilter ? listPrefs.filter : "all" });
-  const formProps = { stations, form, setField, error, onSubmit: save, onCancel: cancelEdit, editing };
+  const formProps = { stations, form, setField, error, onSubmit: save, onCancel: cancelEdit, editing, copying };
 
   return (
     <>
@@ -559,7 +576,7 @@ export default function Alerts() {
             <div className="view-state">Aucune alerte de ce type.</div>
           ) : (
             shown.map((a) => (
-              <AlertCard key={a.id} a={a} paused={!!pausedUntil} onToggle={toggle} onDelete={remove} onEdit={startEdit} />
+              <AlertCard key={a.id} a={a} paused={!!pausedUntil} onToggle={toggle} onDelete={remove} onEdit={startEdit} onCopy={startCopy} />
             ))
           )}
 

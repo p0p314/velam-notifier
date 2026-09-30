@@ -26,8 +26,13 @@ section `## [x.y.z] - AAAA-MM-JJ` ci-dessous, puis merger sur `main` : le workfl
 ### Interface
 - Le bouton clair / sombre de l'en-tête est retiré : le thème se règle dans
   **Paramètres › Préférences** (clair, sombre ou automatique).
+- **Zoom désactivé** dans l'application (pincement, double appui, zoom automatique
+  d'iPhone sur les champs de saisie). La carte reste zoomable.
 
 ### Alertes
+- **Dupliquer une alerte** (bouton sur chaque carte) : ouvre le formulaire pré-rempli
+  pour ajuster station, horaires… avant de créer la copie ; un groupe nommé devient
+  « Maison (copie) ».
 - Alertes et résumés de groupe **nommés** : la liste n'affiche plus que le nom du groupe
   (« Maison »), plus le détail des stations — visible en modifiant l'alerte.
 

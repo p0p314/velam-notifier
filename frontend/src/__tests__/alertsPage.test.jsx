@@ -51,6 +51,35 @@ async function ready() {
   await screen.findByRole("option", { name: "Zoo" });
 }
 
+describe("dupliquer une alerte", () => {
+  test("formulaire de création pré-rempli, rien n'est créé avant validation", async () => {
+    alerts = [{ id: 5, active: 0, station_id: "1", station_name: "Gare", target: "bikes", comparison: "at_least",
+      bike_type: "ebike", threshold: 3, time_start: "08:00", time_end: "09:00", days: "1,2", valid_on: null,
+      group_name: "Maison", group_stations: [{ station_id: "1", station_name: "Gare" }, { station_id: "9", station_name: "Cirque" }] }];
+    renderPage();
+    await screen.findByText("Maison");
+    fireEvent.click(screen.getByRole("button", { name: "Dupliquer" }));
+    const f = within(form());
+    expect(f.getByText("Dupliquer l'alerte")).toBeTruthy();
+    expect(f.getByLabelText("Nom du groupe").value).toBe("Maison (copie)");
+    // Station du groupe hors favoris quand même proposée et cochée.
+    expect(f.getByRole("checkbox", { name: "Cirque" }).checked).toBe(true);
+    expect(calls.some((c) => c.method === "POST")).toBe(false);
+
+    fireEvent.change(f.getByLabelText("Début"), { target: { value: "17:00" } });
+    fireEvent.change(f.getByLabelText("Fin"), { target: { value: "18:00" } });
+    fireEvent.click(f.getByRole("button", { name: "Créer la copie" }));
+    await waitFor(() => expect(lastPost()).toBeTruthy());
+    expect(lastPost()).toMatchObject({
+      group_name: "Maison (copie)", comparison: "at_least", bike_type: "ebike", threshold: 3,
+      time_start: "17:00", time_end: "18:00", days: "1,2",
+      group_stations: [{ station_id: "1", station_name: "Gare" }, { station_id: "9", station_name: "Cirque" }],
+    });
+    // L'original n'est pas modifié.
+    expect(calls.some((c) => c.method === "PATCH")).toBe(false);
+  });
+});
+
 describe("création d'alertes", () => {
   test("alerte places libres : pas de type de vélo, payload correct", async () => {
     await ready();
