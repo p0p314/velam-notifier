@@ -13,7 +13,7 @@ const PASSWORD_MIN = 8;
 const FEATURES = [
   { icon: "bike", text: "Vélos et places disponibles, en direct" },
   { icon: "bell", text: "Une alerte quand votre station se vide" },
-  { icon: "star", text: "Vos stations favorites, même hors ligne" },
+  { icon: "star", text: "Vos stations favorites en un coup d'œil" },
 ];
 
 /** Contrôles côté client (le serveur revalide) : message d'erreur ou null. */
