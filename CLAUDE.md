@@ -195,6 +195,8 @@ Modèle d'alerte (`routes/alerts.js` → `validateAlertPayload`, PATCH = fusion 
   groupe : « au plus N » déclenche quand **toutes** sont basses, « au moins N » dès qu'**une**
   suffit. Une seule notification (détail par station), clé anti-spam = `n1|n2|…`, pas de
   station de repli ni de trajet. La 1re station est recopiée dans `station_id` / `station_name`.
+  Dans la liste (`describeAlert`), un groupe **nommé** n'affiche que son nom, pas ses stations
+  (un groupe sans nom est titré par la liste de ses stations).
 
 **Résumé à heure fixe** (`kind = 'summary'`, défaut `threshold` = alerte de disponibilité) :
 1 à 5 stations (`group_stations`, nom facultatif), `bike_type`, **1 à 6 heures d'envoi**
@@ -296,7 +298,7 @@ différenciée (réglable dans Paramètres › Préférences) : par défaut mobi
   mobile** (jamais desktop), réapparaît le lendemain si ignorée ; pas d'ouverture auto tant que
   l'accueil est en attente. Boutons « Installer » masqués quand l'app est déjà installée
   (`display-mode: standalone` / `navigator.standalone`).
-- **components/Tutorial.jsx** + **lib/tutorial.js** — tutoriel de présentation en slides
+- **components/Tutorial.jsx** + **lib/tutorial.js** — tutoriel de présentation **plein écran** en slides
   (« Suivant » / glisser, « Arrêter le tutoriel »), lancé après la **première connexion du
   compte** (`tutorialPending(user)` : `tutorial_done === false` confirmé par le serveur) ;
   fermé ou terminé → `completeTutorial()` (`auth.jsx`). Revoir : Paramètres › Préférences.

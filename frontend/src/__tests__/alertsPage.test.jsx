@@ -143,7 +143,8 @@ describe("groupe de stations", () => {
       group_name: "Maison", group_stations: [{ station_id: "1", station_name: "Gare" }, { station_id: "9", station_name: "Cirque" }] }];
     renderPage();
     expect(await screen.findByText("Maison")).toBeTruthy();
-    expect(screen.getByText("Gare, Cirque · toutes ≤ 0 vélo · 08:00–09:00")).toBeTruthy();
+    expect(screen.getByText("Toutes ≤ 0 vélo · 08:00–09:00")).toBeTruthy();
+    expect(document.querySelector(".alert-card").textContent).not.toMatch(/Cirque/); // groupe nommé : pas la liste des stations
 
     fireEvent.click(screen.getByRole("button", { name: "Modifier" }));
     const f = within(form());
@@ -212,7 +213,9 @@ describe("résumé à heure fixe", () => {
       bike_type: "any", threshold: 0, time_start: "07:40", time_end: "07:40", send_times: ["07:40", "17:30"], days: "1,2,3,4,5",
       valid_on: null, group_name: "Maison", group_stations: [{ station_id: "1", station_name: "Gare" }] }];
     renderPage();
-    expect(await screen.findByText("Gare · Résumé à 07:40, 17:30 · vélos")).toBeTruthy();
+    expect(await screen.findByText("Maison")).toBeTruthy();
+    expect(screen.getByText("Résumé à 07:40, 17:30 · vélos")).toBeTruthy();
+    expect(document.querySelector(".alert-card").textContent).not.toMatch(/Gare/);
   });
 });
 

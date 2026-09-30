@@ -218,16 +218,14 @@ export function describeAlert(a) {
     const list = (a.group_stations ?? []).map((s) => s.station_name).join(", ");
     const kind = a.bike_type === "any" ? "vélos" : bikesWord(a.bike_type, 2);
     const rule = `Résumé à ${(a.send_times?.length ? a.send_times : [a.time_start]).join(", ")} · ${kind}`;
-    return a.group_name
-      ? { title: a.group_name, detail: `${list} · ${rule}` }
-      : { title: list, detail: rule };
+    // Groupe nommé : le nom suffit (stations visibles en modifiant l'alerte).
+    return a.group_name ? { title: a.group_name, detail: rule } : { title: list, detail: rule };
   }
   if (a.group_stations?.length) {
     const list = a.group_stations.map((s) => s.station_name).join(", ");
     const rule = a.comparison === "at_least" ? `l'une ≥ ${n} ${what}` : `toutes ≤ ${n} ${what}`;
-    return a.group_name
-      ? { title: a.group_name, detail: `${list} · ${rule} · ${window}` }
-      : { title: list, detail: `${rule[0].toUpperCase()}${rule.slice(1)} · ${window}` };
+    const detail = `${rule[0].toUpperCase()}${rule.slice(1)} · ${window}`;
+    return { title: a.group_name || list, detail };
   }
   if (a.arrival_station_id) {
     const arr = a.arrival_threshold ?? 0;

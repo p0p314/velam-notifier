@@ -17,11 +17,15 @@ section `## [x.y.z] - AAAA-MM-JJ` ci-dessous, puis merger sur `main` : le workfl
 - Chaque heure est envoyée une seule fois par jour ; les résumés existants gardent leur heure.
 
 ### Tutoriel
-- **Tutoriel de présentation** au premier lancement après connexion : quelques slides
+- **Tutoriel de présentation** en plein écran au premier lancement après connexion : quelques slides
   (stations, carte, favoris, alertes, résumés, paramètres), « Suivant » ou glisser pour
   avancer, « Arrêter le tutoriel » à tout moment. Montré une seule fois par compte, puis
   suivi de l'accueil pratique (installer, notifications, favoris).
 - Le tutoriel peut être revu depuis **Paramètres › Préférences**.
+
+### Alertes
+- Alertes et résumés de groupe **nommés** : la liste n'affiche plus que le nom du groupe
+  (« Maison »), plus le détail des stations — visible en modifiant l'alerte.
 
 ## [1.4.1] - 2026-09-29
 

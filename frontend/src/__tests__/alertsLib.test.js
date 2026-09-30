@@ -35,7 +35,7 @@ describe("validateForm", () => {
   const ok = { ...defaultForm(), stationId: "1" };
   test("valide", () => expect(validateForm(ok)).toBeNull());
   test("station requise", () => expect(validateForm({ ...ok, stationId: "" })).toMatch(/station/));
-  test("fin après début", () => expect(validateForm({ ...ok, timeEnd: "07:00" })).toMatch(/fin/));
+  test("fin après début", () => expect(validateForm({ ...ok, timeStart: "08:00", timeEnd: "07:00" })).toMatch(/fin/));
   test("seuil : 0 permis en « au plus », pas en « au moins »", () => {
     expect(validateForm({ ...ok, threshold: 0 })).toBeNull();
     expect(validateForm({ ...ok, threshold: 0, comparison: "at_least" })).toMatch(/entre 1 et 50/);
@@ -156,7 +156,7 @@ describe("résumé à heure fixe", () => {
     const a = payloadFromForm(summary, names);
     expect(describeAlert(a)).toEqual({ title: "Gare", detail: "Résumé à 07:45 · vélos électriques" });
     expect(describeAlert({ ...a, bike_type: "any", group_name: "Maison" }))
-      .toEqual({ title: "Maison", detail: "Gare · Résumé à 07:45 · vélos" });
+      .toEqual({ title: "Maison", detail: "Résumé à 07:45 · vélos" });
     expect(describeAlert({ ...a, send_times: ["07:45", "18:00"] }).detail).toBe("Résumé à 07:45, 18:00 · vélos électriques");
   });
 });
@@ -203,7 +203,7 @@ describe("describeAlert", () => {
   test("groupe nommé / sans nom", () => {
     const g = { ...a, bike_type: "any", threshold: 1, group_name: "Maison",
       group_stations: [{ station_id: "1", station_name: "Gare" }, { station_id: "2", station_name: "Zoo" }] };
-    expect(describeAlert(g)).toEqual({ title: "Maison", detail: "Gare, Zoo · toutes ≤ 1 vélo · 08:00–09:00" });
+    expect(describeAlert(g)).toEqual({ title: "Maison", detail: "Toutes ≤ 1 vélo · 08:00–09:00" });
     expect(describeAlert({ ...g, group_name: null, comparison: "at_least" }))
       .toEqual({ title: "Gare, Zoo", detail: "L'une ≥ 1 vélo · 08:00–09:00" });
   });
