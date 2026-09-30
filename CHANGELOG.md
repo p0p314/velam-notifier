@@ -30,6 +30,10 @@ section `## [x.y.z] - AAAA-MM-JJ` ci-dessous, puis merger sur `main` : le workfl
   zoomable). Sur iPhone, un champ de saisie s'agrandit toujours au toucher, et l'écran
   revient à sa taille normale dès qu'on le quitte.
 
+### Corrections
+- Notification → Vélam : le bouton « Ouvrir l'app Vélam », qui ne fonctionnait pas, est
+  retiré ; l'ancien lien « Site Vélam », qui fonctionne, prend sa place sous ce nom.
+
 ### Alertes
 - **Cartes d'alerte allégées** : le type (alerte 🔔 / résumé 🕐) est une pastille en tête de
   carte, le type de vélo une icône (⚡ électrique, 🚲 mécanique) — plus de mention en texte ;

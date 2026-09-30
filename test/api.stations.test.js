@@ -155,7 +155,7 @@ describe('rental_apps et cron', () => {
   test('/open échappe les liens injectés dans le script', async () => {
     await dbc.run(
       'INSERT INTO rental_apps (platform, name, discovery_uri, store_uri, updated_at) VALUES (?, ?, ?, ?, ?)',
-      ['ios', 'Vélam', 'velam://</script><script>alert(1)</script>', null, 0]
+      ['ios', 'Vélam', 'velam://home', 'https://x"></script><script>alert(1)</script>', 0]
     );
     const res = await api.get('/open');
     assert.equal(res.status, 200);
@@ -163,7 +163,7 @@ describe('rental_apps et cron', () => {
     assert.match(res.headers.get('content-type'), /text\/html/);
   });
 
-  test('/open : aucun script inline (CSP), liens par plateforme, site hors de l\'app, retour', async () => {
+  test('/open : aucun script inline (CSP), « Ouvrir l\'app » = site Vélam hors de l\'app, store par plateforme, retour', async () => {
     for (const [platform, deep, store] of [
       ['ios', 'velam://home', 'https://apps.apple.com/app/velam'],
       ['android', 'intent://home#Intent;scheme=velam;end', 'https://play.google.com/store/apps/details?id=velam'],
@@ -176,27 +176,29 @@ describe('rental_apps et cron', () => {
     const res = await api.get('/open');
     // Tous les scripts sont externes : la CSP script-src 'self' les autorise.
     assert.deepEqual(res.text.match(/<script[^>]*>/g), ['<script src="/open.js">']);
-    // Un lien par plateforme (le lien iOS ne doit pas servir sur Android).
-    assert.match(res.text, /data-deep-ios="velam:\/\/home"/);
-    assert.match(res.text, /data-deep-android="intent:\/\/home#Intent;scheme=velam;end"/);
+    // Un store par plateforme (le lien iOS ne doit pas servir sur Android).
     assert.match(res.text, /data-store-ios="https:\/\/apps\.apple\.com\/app\/velam"/);
     assert.match(res.text, /data-store-android="https:\/\/play\.google\.com\/store\/apps\/details\?id=velam"/);
-    // Le site Vélam s'ouvre dans le navigateur, jamais dans la fenêtre de l'app.
-    assert.match(res.text, /href="https:\/\/velam\.amiens\.fr\/fr\/home" target="_blank" rel="noopener"/);
+    // « Ouvrir l'app Vélam » = le site officiel, hors de la fenêtre de l'app ; plus de deep link.
+    assert.match(res.text, /id="open-app" href="https:\/\/velam\.amiens\.fr\/fr\/home" target="_blank" rel="noopener">Ouvrir l'app Vélam</);
+    assert.doesNotMatch(res.text, /velam:\/\/|intent:\/\/|data-deep/);
+    assert.equal((res.text.match(/Ouvrir l'app Vélam</g) ?? []).length, 1);
+    assert.doesNotMatch(res.text, /Site Vélam/);
     assert.match(res.text, /id="back" href="\/"/);
   });
 
-  test('/open sans lien synchronisé : retour toujours présent', async () => {
+  test('/open sans lien synchronisé : « Ouvrir l\'app » et retour toujours présents', async () => {
     const res = await api.get('/open');
-    assert.match(res.text, /data-deep-ios=""/);
+    assert.match(res.text, /data-store-ios=""/);
+    assert.match(res.text, /id="open-app" href="https:\/\/velam\.amiens\.fr/);
     assert.match(res.text, /Retour à VéloPulse/);
   });
 
-  test('/open.js : choix par plateforme, aucune ouverture automatique ni page externe', async () => {
+  test('/open.js : store par plateforme, aucune ouverture automatique ni page externe', async () => {
     const res = await api.get('/open.js');
     assert.equal(res.status, 200);
     assert.match(res.headers.get('content-type'), /javascript/);
-    assert.match(res.text, /isIOS \? data\.deepIos : isAndroid \? data\.deepAndroid/);
+    assert.match(res.text, /isIOS \? data\.storeIos : isAndroid \? data\.storeAndroid/);
     assert.match(res.text, /location\.replace\("\/"\)/);
     // Seul « Retour » navigue : ni deep link automatique, ni store, ni site.
     assert.equal((res.text.match(/location\./g) ?? []).length, 1);
