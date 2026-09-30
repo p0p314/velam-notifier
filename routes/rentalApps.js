@@ -78,8 +78,10 @@ const attr = (v) => String(v ?? '')
  * Page HTML autonome (hors SPA React) servie same-origin pour satisfaire
  * iOS clients.openWindow(). Elle s'ouvre dans la fenêtre de VéloPulse : elle ne doit
  * donc JAMAIS y charger un site externe (une PWA installée n'a ni barre d'adresse
- * ni bouton retour). Elle tente le deep link Vélam, propose le store, ouvre le site
- * Vélam dans le navigateur (nouvel onglet) et garde toujours « Retour à VéloPulse ».
+ * ni bouton retour). « Ouvrir l'app Vélam » pointe vers le site officiel, ouvert hors de
+ * l'app (nouvel onglet) : c'est le lien qui fonctionne depuis une notification (le deep
+ * link `discovery_uri` du flux ne s'ouvrait pas). Elle propose aussi le store et garde
+ * toujours « Retour à VéloPulse ».
  * Script externe (/open.js) : la CSP (script-src 'self') bloque les scripts inline ;
  * les liens lui sont passés en attributs data-*.
  */
@@ -87,10 +89,7 @@ router.get('/open', async (req, res) => {
   let apps = {};
   try { apps = await getRentalAppsMap(); } catch (_) { /* dégrade vers web seul */ }
 
-  // Un lien par plateforme : celui d'iOS ne s'ouvre pas sur Android (et inversement) ;
-  // le script choisit selon l'appareil.
-  const deepIos      = apps.ios?.discovery_uri     || '';
-  const deepAndroid  = apps.android?.discovery_uri || '';
+  // Un store par plateforme (le script choisit selon l'appareil).
   const storeIos     = apps.ios?.store_uri         || '';
   const storeAndroid = apps.android?.store_uri     || '';
 
@@ -118,14 +117,12 @@ router.get('/open', async (req, res) => {
     [hidden]{display:none!important}
   </style>
 </head>
-<body data-deep-ios="${attr(deepIos)}" data-deep-android="${attr(deepAndroid)}"
-      data-store-ios="${attr(storeIos)}" data-store-android="${attr(storeAndroid)}">
+<body data-store-ios="${attr(storeIos)}" data-store-android="${attr(storeAndroid)}">
   <img src="/icon-192.png" alt="" width="64" height="64">
   <p id="msg">Réservez votre vélo avec Vélam.</p>
   <div class="actions">
-    <a class="btn primary" id="open-app" href="#" hidden>Ouvrir l'app Vélam</a>
+    <a class="btn primary" id="open-app" href="${attr(OFFICIAL_WEB)}" target="_blank" rel="noopener">Ouvrir l'app Vélam</a>
     <a class="btn" id="store" href="#" hidden target="_blank" rel="noopener">Installer l'app Vélam</a>
-    <a class="btn" href="${attr(OFFICIAL_WEB)}" target="_blank" rel="noopener">Site Vélam (navigateur)</a>
     <a class="btn back" id="back" href="/">← Retour à VéloPulse</a>
   </div>
   <script src="/open.js"></script>
@@ -134,23 +131,19 @@ router.get('/open', async (req, res) => {
 });
 
 /**
- * Script de /open : choisit le lien de l'app Vélam et du store selon le système de
- * l'appareil. L'app ne s'ouvre que sur appui (une tentative automatique affiche, sur
- * iPhone, « adresse non valide » quand le lien ne peut pas être ouvert). Si l'app
- * s'ouvre, revenir dans VéloPulse ramène à l'application. Jamais de page externe.
+ * Script de /open : choisit le store selon le système de l'appareil. Rien ne s'ouvre
+ * automatiquement ; si l'utilisateur quitte la page (Vélam ou store ouvert), revenir
+ * dans VéloPulse ramène à l'application. Jamais de page externe dans la fenêtre.
  */
 const OPEN_JS = `(function () {
   var data = document.body.dataset;
   var ua = navigator.userAgent;
   var isIOS = /iphone|ipad|ipod/i.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
   var isAndroid = /android/i.test(ua);
-  var deep = isIOS ? data.deepIos : isAndroid ? data.deepAndroid : "";
   var store = isIOS ? data.storeIos : isAndroid ? data.storeAndroid : "";
-  var openLink = document.getElementById("open-app");
   var storeLink = document.getElementById("store");
   var left = false;
 
-  if (deep) { openLink.href = deep; openLink.hidden = false; }
   if (store) { storeLink.href = store; storeLink.hidden = false; }
 
   // Retour dans VéloPulse : remplace /open dans l'historique.

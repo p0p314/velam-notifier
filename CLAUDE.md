@@ -118,6 +118,8 @@ Modules CommonJS, séparation nette des responsabilités :
   neuve**, donc un jeton volé ne survit pas). `GET /api/auth/sessions` liste les appareils
   (`device.js` → « iPhone · Safari ») et purge les sessions inactives au-delà de `JWT_TTL`.
   `GET /api/auth/export` : toutes les données du compte en JSON (RGPD, jamais le mot de passe).
+  **Tutoriel** : l'utilisateur renvoyé (login, register, `me`…) porte `tutorial_done`
+  (`users.tutorial_done`) ; `POST /api/auth/tutorial` le marque vu (une fois par compte).
 - **push.js** — clés VAPID (env ou générées), envoi `web-push` (`sendToUser` → `{ total, sent }`),
   et la **boucle d'alerte** (`startPolling` → cycle non concurrent toutes les 30 s) :
   `evaluateAlert` (pure), messages (`buildMessage`), stations de repli (`findFallback`).
@@ -162,6 +164,7 @@ Erreurs upstream/proxy → **HTTP 502** `{ ok:false, error }`. Toutes les répon
 enveloppe `ok` ; le client `api()` lève sur `!res.ok || data.ok === false`. Routes protégées
 (`/api/favorites` (+ `PATCH /:id` label, `PUT /order`), `/api/alerts` (+ `PUT /pause`),
 `/api/push/subscribe|unsubscribe|test`, `/api/auth/me` (GET ; DELETE = suppression du compte),
+`POST /api/auth/tutorial`,
 `PUT /api/auth/password`, `POST /api/auth/logout|logout-others`, `/api/auth/sessions` (GET, DELETE `/:id`),
 `GET /api/auth/export`,
 `POST /api/stations/refresh`) : Bearer requis. Publiques : login/register,
@@ -192,13 +195,18 @@ Modèle d'alerte (`routes/alerts.js` → `validateAlertPayload`, PATCH = fusion 
   groupe : « au plus N » déclenche quand **toutes** sont basses, « au moins N » dès qu'**une**
   suffit. Une seule notification (détail par station), clé anti-spam = `n1|n2|…`, pas de
   station de repli ni de trajet. La 1re station est recopiée dans `station_id` / `station_name`.
+  Dans la liste (`describeAlert`), un groupe **nommé** n'affiche que son nom, pas ses stations
+  (un groupe sans nom est titré par la liste de ses stations).
 
 **Résumé à heure fixe** (`kind = 'summary'`, défaut `threshold` = alerte de disponibilité) :
-1 à 5 stations (`group_stations`, nom facultatif), `bike_type`, heure d'envoi `time_start`
-(`time_end` = même valeur) et `days` ; seuil / trajet / ponctuelle neutralisés par
-`validateSummary`. La boucle l'envoie **une fois par jour** (`last_notified_date`), entre
-l'heure choisie et +15 min (`isSummaryDue`, `SUMMARY_GRACE_MIN`) : au-delà (boucle arrêtée,
-flux périmé), il est abandonné plutôt qu'envoyé avec du retard. Contenu : une ligne par station
+1 à 5 stations (`group_stations`, nom facultatif), `bike_type`, **1 à 6 heures d'envoi**
+`send_times` (tableau trié côté API, CSV en base ; `time_start` = `time_end` = 1re heure,
+pour le tri ; un résumé d'avant la v1.5 sans `send_times` est lu `[time_start]`, et un client
+qui n'envoie que `time_start` remplace les heures) et `days` ; seuil / trajet / ponctuelle
+neutralisés par `validateSummary`. La boucle envoie **chaque heure une fois par jour**
+(`last_notified_date` + `last_notified_key` = dernière heure envoyée du jour), entre l'heure
+et +15 min (`summarySlotDue` / `isSummaryDue`, `SUMMARY_GRACE_MIN`) : au-delà (boucle
+arrêtée, flux périmé), elle est abandonnée plutôt qu'envoyée avec du retard. Contenu : une ligne par station
 (`Gare : 2 méca · 1 élec`, ou le seul type choisi ; `indisponible` si fermée) —
 `buildSummaryPayload`. Dans le formulaire, type choisi en tête (« Alerte de disponibilité » /
 « Résumé à heure fixe ») : seuls les champs utiles sont affichés.
@@ -226,11 +234,11 @@ par plateforme). Ils sont synchronisés **une fois par jour** par **GitHub Actio
 Les notifications pointent toujours vers une URL `https://` (`/open`, page HTML servie par
 `routes/rentalApps.js`) car le Service Worker iOS refuse les schemes custom (`velam://`).
 `/open` (publique, `noindex`) s'affiche **dans la fenêtre de VéloPulse** : elle ne doit jamais y
-charger un site externe (une PWA installée n'a ni barre d'adresse ni retour). Le deep link et le
-store sont choisis **selon la plateforme de l'appareil** (lien iOS ≠ lien Android) et l'app ne
-s'ouvre que **sur appui** (une tentative automatique affiche « adresse non valide » sur iPhone si
-le lien ne s'ouvre pas) ; le site Vélam s'ouvre en `target="_blank"` ; « Retour à VéloPulse »
-toujours présent ; si l'app Vélam s'est ouverte, revenir ramène à `/`. Script externe `/open.js`
+charger un site externe (une PWA installée n'a ni barre d'adresse ni retour). « Ouvrir l'app
+Vélam » pointe vers le **site officiel** (`OFFICIAL_WEB`, `target="_blank"`, sur appui) : le deep
+link `discovery_uri` du flux ne s'ouvrait pas depuis une notification, il n'est plus proposé
+(toujours synchronisé en base). Le store est choisi **selon la plateforme de l'appareil** ;
+« Retour à VéloPulse » toujours présent ; si l'utilisateur a quitté la page, revenir ramène à `/`. Script externe `/open.js`
 (la CSP `script-src 'self'` bloque l'inline), liens passés en `data-*` échappés.
 
 ### Sécurité (backend)
@@ -258,8 +266,8 @@ différenciée (réglable dans Paramètres › Préférences) : par défaut mobi
 - **auth.jsx** — `AuthContext` / `useAuth` (login/register/logout async, `isAuthenticated`).
   Au démarrage : `/api/auth/me` (ignoré si la session a changé entre-temps) puis `syncPush()`.
 - **useTheme.jsx** — thème via `data-theme` sur `<html>` ; mode `light|dark|system` persisté
-  (`system`, défaut : suit `prefers-color-scheme` en direct) ; le bouton de l'en-tête fixe un
-  thème explicite. `public/theme-init.js` applique le même choix avant le rendu.
+  (`system`, défaut : suit `prefers-color-scheme` en direct) ; choisi **uniquement** dans
+  Paramètres › Préférences (pas de bouton dans l'en-tête). `public/theme-init.js` applique le même choix avant le rendu.
 - **lib/prefs.js** — préférences **de l'appareil** (localStorage) : type de vélo par défaut
   (formulaire d'alerte, filtres Stations / Carte via `stationFilterFor`) et page d'ouverture
   (`landingPath`, utilisé par `<Landing>`).
@@ -290,11 +298,21 @@ différenciée (réglable dans Paramètres › Préférences) : par défaut mobi
   mobile** (jamais desktop), réapparaît le lendemain si ignorée ; pas d'ouverture auto tant que
   l'accueil est en attente. Boutons « Installer » masqués quand l'app est déjà installée
   (`display-mode: standalone` / `navigator.standalone`).
+- **components/Tutorial.jsx** + **lib/tutorial.js** — tutoriel de présentation **plein écran** en slides
+  (« Suivant » / glisser, « Arrêter le tutoriel »), lancé après la **première connexion du
+  compte** (`tutorialPending(user)` : `tutorial_done === false` confirmé par le serveur) ;
+  fermé ou terminé → `completeTutorial()` (`auth.jsx`). Revoir : Paramètres › Préférences.
+  Contenu des slides dans `TUTORIAL_SLIDES` : **à tenir à jour** quand une fonctionnalité change.
 - **components/Onboarding.jsx** — accueil au premier lancement (installer / notifications /
-  favoris), uniquement les étapes encore utiles ; rien n'est monté une fois terminé.
+  favoris), uniquement les étapes encore utiles ; rien n'est monté une fois terminé. Monté
+  par `FirstRun` (`App.jsx`) **après** le tutoriel, jamais en même temps.
 - **pages/** — `Login`, `Stations` (recherche/tri/filtre + détail), `Favorites` (swipe-to-delete,
   tri proximité / ordre choisi, mode « Organiser »), `MapPage` (carte + filtres + « Autour de moi » : position mesurée au clic, 3 stations les plus proches recalculées en continu selon les filtres),
-  `Alerts` (formulaire complet, pause, notification de test ; liste filtrable par type — filtre
+  `Alerts` (formulaire complet, pause, notification de test ; carte : pastille de type
+  (cloche / horloge), type de vélo en icône (`describeAlert` → `bikeType`, jamais en texte),
+  jours modifiables sur la carte (PATCH `days` optimiste), suppression par glissement
+  (`components/SwipeRow`, mobile) ou dans le formulaire (confirmation) ; « Dupliquer » ouvre le formulaire
+  de **création** pré-rempli via `copyForm` (rien n'est créé avant validation) ; liste filtrable par type — filtre
   affiché seulement si les deux types coexistent — et triable par heure / nom / récentes,
   désactivées en dernier, choix mémorisés en `localStorage` ; pré-rempli via
   `location.state.alertStation` depuis la fiche station), `Account` (`/compte`, « Paramètres » :
@@ -320,11 +338,11 @@ se fait dans `push.js` (`countForType`) et `routes/stations.js` (`extractCount`)
 
 Tables (créées/migrées par `database/migrations.js`, dialecte selon `DATABASE_URL`) :
 `stations` (référentiel statique), `config` (clé/valeur : secret JWT, clés VAPID),
-`users` (+ `alerts_paused_until`, `token_version`), `sessions` (appareils connectés, horodatages
+`users` (+ `alerts_paused_until`, `token_version`, `tutorial_done`), `sessions` (appareils connectés, horodatages
 en ms), `push_subscriptions.session_id` (appareil de rattachement), `favorites` (unique `user_id+station_id`, `label`, `sort_order`
 — NULL tant que l'utilisateur n'a jamais ordonné : ordre alphabétique), `push_subscriptions`
 (unique `endpoint`), `alerts` (cf. modèle ci-dessus ; `group_stations` stocké en JSON texte,
-parsé par `db.js` → tableau ; `threshold` a remplacé `min_count`,
+parsé par `db.js` → tableau ; `send_times` en CSV → tableau (résumés) ; `threshold` a remplacé `min_count`,
 `last_notified_key` a remplacé `last_notified_count`), `rental_apps` (deep links par plateforme).
 Helpers de migration portables : `columnsOf` / `addColumn` / `dropColumn` (`migrations.js`).
 
@@ -342,6 +360,11 @@ Helpers de migration portables : `columnsOf` / `addColumn` / `dropColumn` (`migr
 - **Sécurité** : secrets uniquement via env/`config`, jamais commités ; garder le CSP à jour
   si de nouvelles origines externes sont ajoutées. Pas de `<script>` inline dans `index.html`
   (bloqué par `script-src 'self'`) → fichier dans `public/` (cf. `theme-init.js`).
+- **Zoom** (choix produit, `lib/zoom.js` installé par `main.jsx`) : pincement et double-tap
+  bloqués (`touch-action: pan-x pan-y` sur `html`, `gesturestart` annulé pour iOS) ; le zoom
+  automatique d'iOS au focus d'un champ < 16 px est **conservé**, et l'échelle est remise à 1
+  en quittant les champs (`maximum-scale=1` posé 300 ms sur le viewport). Ne pas remettre
+  `user-scalable=no` / `maximum-scale` en dur dans `index.html` : cela supprimerait ce zoom.
 
 ## Déploiement
 

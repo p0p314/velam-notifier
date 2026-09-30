@@ -59,11 +59,21 @@ test('/api/auth/me renvoie un jeton neuf (session glissante)', async () => {
   const { token, user } = await registerUser(api, 'alice');
   const res = await api.get('/api/auth/me', { token });
   assert.equal(res.status, 200);
-  assert.deepEqual(res.body.user, { id: user.id, username: 'alice' });
+  assert.deepEqual(res.body.user, { id: user.id, username: 'alice', tutorial_done: false });
   const payload = jwt.decode(res.body.token);
   assert.equal(payload.id, user.id);
   // Durée par défaut : 30 jours
   assert.equal(payload.exp - payload.iat, 30 * 24 * 3600);
+});
+
+test('tutoriel : proposé au nouveau compte, puis plus après POST /api/auth/tutorial', async () => {
+  const { token, user } = await registerUser(api, 'alice');
+  assert.equal(user.tutorial_done, false);
+  assert.equal((await api.post('/api/auth/tutorial', {})).status, 401);
+  assert.equal((await api.post('/api/auth/tutorial', { token })).status, 200);
+  assert.equal((await api.get('/api/auth/me', { token })).body.user.tutorial_done, true);
+  const login = await api.post('/api/auth/login', { body: { username: 'alice', password: 'motdepasse1' } });
+  assert.equal(login.body.user.tutorial_done, true);
 });
 
 test('/api/auth/me : compte supprimé → 401', async () => {

@@ -2,7 +2,7 @@ import { describe, test, expect } from "vitest";
 import {
   defaultForm, formFromAlert, validateForm, payloadFromForm, describeAlert,
   tripAllowed, groupRuleText, localYmd, addDaysYmd, fmtDay,
-  visibleAlerts, hasBothKinds, loadListPrefs, saveListPrefs,
+  visibleAlerts, hasBothKinds, loadListPrefs, saveListPrefs, nextSendTime, copyForm,
 } from "../lib/alerts";
 
 const names = { 1: "Gare", 2: "Zoo" };
@@ -31,11 +31,31 @@ describe("defaultForm", () => {
   });
 });
 
+describe("copyForm", () => {
+  const base = { station_id: "1", station_name: "Gare", target: "bikes", comparison: "at_most", bike_type: "any",
+    threshold: 1, time_start: "08:00", time_end: "09:00", days: "1,2", valid_on: null, group_name: null, group_stations: null };
+  test("reprend tous les réglages", () => {
+    expect(copyForm(base)).toEqual(formFromAlert(base));
+  });
+  test("groupe nommé : « (copie) », dans la limite de 40 caractères", () => {
+    const g = { ...base, group_name: "Maison", group_stations: [{ station_id: "1", station_name: "Gare" }, { station_id: "2", station_name: "Zoo" }] };
+    expect(copyForm(g).groupName).toBe("Maison (copie)");
+    const long = copyForm({ ...g, group_name: "x".repeat(40) }).groupName;
+    expect(long.length).toBe(40);
+    expect(long.endsWith(" (copie)")).toBe(true);
+  });
+  test("ponctuelle copiée : vaut pour aujourd'hui", () => {
+    const f = copyForm({ ...base, valid_on: "2020-01-01" });
+    expect(f.oneShot).toBe(true);
+    expect(f.validOn).toBeNull();
+  });
+});
+
 describe("validateForm", () => {
   const ok = { ...defaultForm(), stationId: "1" };
   test("valide", () => expect(validateForm(ok)).toBeNull());
   test("station requise", () => expect(validateForm({ ...ok, stationId: "" })).toMatch(/station/));
-  test("fin après début", () => expect(validateForm({ ...ok, timeEnd: "07:00" })).toMatch(/fin/));
+  test("fin après début", () => expect(validateForm({ ...ok, timeStart: "08:00", timeEnd: "07:00" })).toMatch(/fin/));
   test("seuil : 0 permis en « au plus », pas en « au moins »", () => {
     expect(validateForm({ ...ok, threshold: 0 })).toBeNull();
     expect(validateForm({ ...ok, threshold: 0, comparison: "at_least" })).toMatch(/entre 1 et 50/);
@@ -109,12 +129,16 @@ describe("formFromAlert ↔ payloadFromForm", () => {
 });
 
 describe("résumé à heure fixe", () => {
-  const summary = { ...defaultForm(), kind: "summary", groupIds: ["1"], sendTime: "07:45", bikeType: "ebike", days: [1, 2] };
+  const summary = { ...defaultForm(), kind: "summary", groupIds: ["1"], sendTimes: ["07:45"], bikeType: "ebike", days: [1, 2] };
 
   test("validation : 1 à 5 stations, heure requise", () => {
     expect(validateForm(summary)).toBeNull();
     expect(validateForm({ ...summary, groupIds: [] })).toMatch(/de 1 à 5 stations/);
-    expect(validateForm({ ...summary, sendTime: "" })).toMatch(/heure d'envoi/);
+    expect(validateForm({ ...summary, sendTimes: [""] })).toMatch(/heure d'envoi/);
+    expect(validateForm({ ...summary, sendTimes: ["07:45", ""] })).toMatch(/heure d'envoi/);
+    expect(validateForm({ ...summary, sendTimes: ["07:45", "07:45"] })).toMatch(/qu'une fois/);
+    expect(validateForm({ ...summary, sendTimes: ["06:00", "07:00", "08:00", "09:00", "10:00", "11:00", "12:00"] })).toMatch(/6 heures/);
+    expect(validateForm({ ...summary, sendTimes: ["18:00", "07:45"] })).toBeNull();
     // Le seuil et le créneau d'une alerte ne s'appliquent pas.
     expect(validateForm({ ...summary, threshold: "abc", timeEnd: "00:00" })).toBeNull();
   });
@@ -124,8 +148,22 @@ describe("résumé à heure fixe", () => {
       group_stations: [{ station_id: "2", station_name: "Zoo" }, { station_id: "1", station_name: "Gare" }],
       target: "bikes", comparison: "at_most", bike_type: "ebike", threshold: 0,
       arrival_station_id: null, arrival_station_name: null, arrival_threshold: null,
-      time_start: "07:45", time_end: "07:45", days: "1,2", valid_on: null,
+      send_times: ["07:45"], time_start: "07:45", time_end: "07:45", days: "1,2", valid_on: null,
     });
+  });
+  test("plusieurs heures : triées, la première sert de time_start", () => {
+    expect(payloadFromForm({ ...summary, sendTimes: ["18:00", "07:45"] }, names))
+      .toMatchObject({ send_times: ["07:45", "18:00"], time_start: "07:45", time_end: "07:45" });
+  });
+  test("heure proposée à l'ajout : +1 h, sans doublon", () => {
+    expect(nextSendTime(["07:45"])).toBe("08:45");
+    expect(nextSendTime(["23:30"])).toBe("00:30");
+    expect(nextSendTime(["07:00", "09:00", "08:00"])).toBe("10:00"); // 08:00 + 1 h = 09:00 déjà pris
+  });
+  test("résumé d'avant la v1.5 (sans send_times) : son heure unique", () => {
+    const a = { ...payloadFromForm(summary, names), send_times: undefined };
+    expect(formFromAlert(a).sendTimes).toEqual(["07:45"]);
+    expect(describeAlert(a).detail).toBe("07:45");
   });
   test("aller-retour d'un résumé ; repassé en alerte : station unique", () => {
     const alert = payloadFromForm(summary, names);
@@ -136,9 +174,11 @@ describe("résumé à heure fixe", () => {
   });
   test("résumé de la carte", () => {
     const a = payloadFromForm(summary, names);
-    expect(describeAlert(a)).toEqual({ title: "Gare", detail: "Résumé à 07:45 · vélos électriques" });
+    // Type (résumé) et type de vélo : en icônes sur la carte, pas en texte.
+    expect(describeAlert(a)).toEqual({ title: "Gare", detail: "07:45", bikeType: "ebike" });
     expect(describeAlert({ ...a, bike_type: "any", group_name: "Maison" }))
-      .toEqual({ title: "Maison", detail: "Gare · Résumé à 07:45 · vélos" });
+      .toEqual({ title: "Maison", detail: "07:45", bikeType: null });
+    expect(describeAlert({ ...a, send_times: ["07:45", "18:00"] }).detail).toBe("07:45, 18:00");
   });
 });
 
@@ -174,19 +214,20 @@ describe("groupe de stations", () => {
 
 describe("describeAlert", () => {
   const a = { station_name: "Gare", target: "bikes", comparison: "at_most", bike_type: "ebike", threshold: 2, time_start: "08:00", time_end: "09:00" };
-  test("vélos", () => expect(describeAlert(a)).toEqual({ title: "Gare", detail: "≤ 2 vélos électriques · 08:00–09:00" }));
-  test("singulier", () => expect(describeAlert({ ...a, threshold: 1 }).detail).toMatch(/^≤ 1 vélo électrique ·/));
+  test("vélos : type de vélo à part (icône)", () => expect(describeAlert(a)).toEqual({ title: "Gare", detail: "≤ 2 vélos · 08:00–09:00", bikeType: "ebike" }));
+  test("singulier", () => expect(describeAlert({ ...a, threshold: 1 }).detail).toMatch(/^≤ 1 vélo ·/));
+  test("places : pas de type de vélo", () => expect(describeAlert({ ...a, target: "docks" }).bikeType).toBeNull());
   test("places au moins", () => expect(describeAlert({ ...a, target: "docks", comparison: "at_least", threshold: 3 }).detail).toMatch(/^≥ 3 places ·/));
   test("trajet", () => {
     const d = describeAlert({ ...a, bike_type: "any", threshold: 1, arrival_station_id: "2", arrival_station_name: "Zoo", arrival_threshold: 0 });
-    expect(d).toEqual({ title: "Gare → Zoo", detail: "Départ ≤ 1 vélo · Arrivée ≤ 0 place · 08:00–09:00" });
+    expect(d).toEqual({ title: "Gare → Zoo", detail: "Départ ≤ 1 vélo · Arrivée ≤ 0 place · 08:00–09:00", bikeType: null });
   });
   test("groupe nommé / sans nom", () => {
     const g = { ...a, bike_type: "any", threshold: 1, group_name: "Maison",
       group_stations: [{ station_id: "1", station_name: "Gare" }, { station_id: "2", station_name: "Zoo" }] };
-    expect(describeAlert(g)).toEqual({ title: "Maison", detail: "Gare, Zoo · toutes ≤ 1 vélo · 08:00–09:00" });
+    expect(describeAlert(g)).toMatchObject({ title: "Maison", detail: "Toutes ≤ 1 vélo · 08:00–09:00" });
     expect(describeAlert({ ...g, group_name: null, comparison: "at_least" }))
-      .toEqual({ title: "Gare, Zoo", detail: "L'une ≥ 1 vélo · 08:00–09:00" });
+      .toMatchObject({ title: "Gare, Zoo", detail: "L'une ≥ 1 vélo · 08:00–09:00" });
   });
 });
 

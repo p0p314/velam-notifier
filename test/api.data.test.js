@@ -158,6 +158,22 @@ describe('alertes v1.1', () => {
     assert.equal(res.body.alert.time_end, '07:45');
     assert.equal(res.body.alert.threshold, 0);
     assert.equal(res.body.alert.station_id, '1');
+    assert.deepEqual(res.body.alert.send_times, ['07:45']);
+  });
+
+  test('résumé à plusieurs heures : enregistré trié, relu tel quel', async () => {
+    const { token } = await registerUser(api);
+    const res = await api.post('/api/alerts', { token, body: {
+      kind: 'summary', group_stations: [{ station_id: '1', station_name: 'Gare' }],
+      send_times: ['18:00', '07:45'], time_start: '18:00', days: '1,2,3,4,5',
+    } });
+    assert.equal(res.status, 201);
+    assert.deepEqual(res.body.alert.send_times, ['07:45', '18:00']);
+    assert.equal(res.body.alert.time_start, '07:45');
+    const list = await api.get('/api/alerts', { token });
+    assert.deepEqual(list.body.alerts[0].send_times, ['07:45', '18:00']);
+    const bad = await api.post('/api/alerts', { token, body: { ...res.body.alert, id: undefined, send_times: ['07:45', '07:45'] } });
+    assert.equal(bad.status, 400);
   });
 
   test('groupe invalide (1 station) → 400', async () => {

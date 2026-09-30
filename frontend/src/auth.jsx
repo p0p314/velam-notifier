@@ -68,7 +68,20 @@ export function AuthProvider({ children }) {
   // renewSession : jeton neuf renvoyé par le serveur (mot de passe changé, autres
   // appareils déconnectés) — l'ancien jeton de cet appareil est révoqué.
   const renewSession = useCallback((data) => { if (data?.token) persist(data); }, [persist]);
-  const value = { user, token, login, register, logout, endSession, renewSession, isAuthenticated: !!token };
+
+  // Tutoriel terminé ou arrêté : plus proposé, ni ici ni sur les autres appareils du
+  // compte. Mis à jour localement d'abord ; l'appel serveur est best-effort.
+  const completeTutorial = useCallback(() => {
+    setUser((u) => {
+      if (!u) return u;
+      const next = { ...u, tutorial_done: true };
+      setStoredUser(next);
+      return next;
+    });
+    api("/api/auth/tutorial", { method: "POST" }).catch(() => {});
+  }, []);
+
+  const value = { user, token, login, register, logout, endSession, renewSession, completeTutorial, isAuthenticated: !!token };
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 

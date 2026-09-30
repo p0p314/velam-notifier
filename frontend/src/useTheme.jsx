@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, useCallback } from "react";
+import { createContext, useContext, useState, useEffect } from "react";
 
 const KEY = "velopulse-theme";
 export const THEME_MODES = [
@@ -47,11 +47,10 @@ export function ThemeProvider({ children }) {
     try { localStorage.setItem(KEY, mode); } catch { /* facultatif */ }
   }, [mode]);
 
-  // Bouton de l'en-tête : bascule vers le thème opposé à celui affiché (choix explicite).
-  const toggle = useCallback(() => setMode(theme === "dark" ? "light" : "dark"), [theme]);
-  return <ThemeCtx.Provider value={{ theme, mode, setMode, toggle }}>{children}</ThemeCtx.Provider>;
+  // Le thème se choisit uniquement dans Paramètres › Préférences (setMode).
+  return <ThemeCtx.Provider value={{ theme, mode, setMode }}>{children}</ThemeCtx.Provider>;
 }
 
 export function useTheme() {
-  return useContext(ThemeCtx) ?? { theme: "light", mode: "light", setMode: () => {}, toggle: () => {} };
+  return useContext(ThemeCtx) ?? { theme: "light", mode: "light", setMode: () => {} };
 }

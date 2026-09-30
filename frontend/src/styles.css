@@ -99,6 +99,9 @@
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
 html, body, #root { height: 100%; }
+/* Ni pincement ni double-tap (Android / Chrome) ; défilement conservé. La carte gère
+   son propre zoom (Mapbox, touch-action: none). iOS : voir lib/zoom.js. */
+html { touch-action: pan-x pan-y; }
 body {
   background: var(--bg);
   color: var(--text);
@@ -462,8 +465,6 @@ select option { background: var(--surface); color: var(--text); }
 .day-picker button.active {
   background: var(--accent); border-color: var(--accent); color: #fff;
 }
-.day-picker.disabled button { cursor: default; }
-.day-picker.disabled button.active { background: var(--neutral-bar); border-color: var(--neutral-bar); }
 
 /* ── Alertes : conteneurs ────────────────────────────────────────────────── */
 .alertes-layout { display: block; padding: 16px; }
@@ -505,18 +506,25 @@ select option { background: var(--surface); color: var(--text); }
 .check-row { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-2); cursor: pointer; }
 .check-row input { width: 18px; height: 18px; accent-color: var(--accent); }
 .form-hint { font-size: 12px; color: var(--text-3); }
+.send-times { display: flex; flex-wrap: wrap; gap: 8px; }
+.send-time { display: flex; align-items: center; gap: 4px; }
+.send-time .field { width: 132px; }
+.send-time-add { align-self: flex-start; display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 0 12px; background: none; border: 1px dashed var(--border-strong); border-radius: var(--r-sm); color: var(--accent); font-size: 13px; font-weight: 600; cursor: pointer; }
 .form-error { color: var(--danger); font-size: 13px; width: 100%; }
 .alert-once { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-2); font-family: var(--font-mono); }
 .detail-cta.secondary { background: var(--surface); color: var(--accent); border: 1px solid var(--border-strong); margin-top: 8px; }
 .push-banner-btn { min-height: 36px; padding: 0 14px; background: var(--accent); border: none; border-radius: var(--r-sm); color: var(--on-accent); font-size: 13px; font-weight: 600; cursor: pointer; }
-.alert-card-head { display: flex; align-items: center; gap: 12px; }
+.alert-card-head { display: flex; align-items: center; gap: 10px; }
+/* Type d'alerte en pastille : cloche (disponibilité) ou horloge (résumé). */
+.alert-kind { flex-shrink: 0; width: 36px; height: 36px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; background: var(--inset); color: var(--accent); }
+.alert-kind.summary { color: var(--ok); background: var(--ok-bg); }
 .alert-card-name { font-size: 14px; font-weight: 600; color: var(--text); }
 .alert-card-sub { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-3); margin-top: 4px; font-family: var(--font-mono); }
 .alert-card-sub .ic { color: var(--text-3); }
 .alert-edit { width: 34px; height: 34px; display: inline-flex; align-items: center; justify-content: center; background: none; border: none; color: var(--text-3); cursor: pointer; border-radius: var(--r-sm); }
 .alert-edit:hover { background: var(--inset); color: var(--accent); }
-.alert-del { width: 34px; height: 34px; display: inline-flex; align-items: center; justify-content: center; background: none; border: none; color: var(--danger); cursor: pointer; border-radius: var(--r-sm); }
-.alert-del:hover { background: var(--inset); }
+.alert-del-btn { width: 100%; min-height: 44px; background: none; border: none; border-radius: var(--r-sm); color: var(--danger); font-size: 14px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+.alert-del-btn:hover, .alert-del-btn.confirm { background: var(--danger-bg); }
 
 /* Switch (toggle alerte) */
 .switch { width: 40px; height: 24px; flex-shrink: 0; padding: 0; border-radius: var(--r-pill); background: var(--inset); border: 1px solid var(--border); position: relative; cursor: pointer; transition: background .15s, border-color .15s; }
@@ -740,6 +748,30 @@ select option { background: var(--surface); color: var(--text); }
 .map-user-dot { width: 16px; height: 16px; border-radius: 50%; background: var(--accent); border: 3px solid var(--surface); box-shadow: var(--focus-ring); }
 
 /* Accueil (premier lancement) */
+/* Tutoriel de présentation (slides) */
+.tutorial {
+  position: fixed; inset: 0; z-index: 200; background: var(--bg); overflow-y: auto;
+  padding: calc(16px + env(safe-area-inset-top)) 20px calc(20px + env(safe-area-inset-bottom));
+}
+.tutorial-inner { display: flex; flex-direction: column; gap: 20px; width: 100%; max-width: 480px; min-height: 100%; margin: 0 auto; }
+.tutorial-head { display: flex; align-items: center; justify-content: space-between; }
+.tutorial-count { font-family: var(--font-mono); font-size: 12px; color: var(--text-3); }
+.tutorial-slide { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; gap: 14px; animation: tutorial-in .22s ease-out; }
+.tutorial-icon { display: inline-flex; align-items: center; justify-content: center; width: 88px; height: 88px; border-radius: 50%; background: var(--inset); color: var(--accent); }
+.tutorial-title { font-size: 24px; font-weight: 700; color: var(--text); }
+.tutorial-text { margin: 0; max-width: 380px; font-size: 15px; line-height: 1.5; color: var(--text-2); }
+.tutorial-points { list-style: none; margin: 4px 0 0; padding: 0; display: flex; flex-direction: column; gap: 8px; text-align: left; }
+.tutorial-points li { display: flex; align-items: flex-start; gap: 8px; font-size: 14px; line-height: 1.4; color: var(--text-2); }
+.tutorial-points .ic { flex-shrink: 0; margin-top: 2px; color: var(--ok); }
+.tutorial-dots { display: flex; justify-content: center; gap: 4px; }
+.tutorial-dots button { width: 24px; height: 24px; padding: 0; border: none; background: none; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
+.tutorial-dots button::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--border-strong); transition: width .2s, background .2s; }
+.tutorial-dots button.on::before { width: 20px; border-radius: 4px; background: var(--accent); }
+.tutorial-nav { display: flex; align-items: center; gap: 10px; }
+.tutorial-nav .cancel-btn { width: auto; padding: 0 16px; }
+.tutorial-nav .onboarding-next { margin-left: auto; }
+@keyframes tutorial-in { from { opacity: 0; transform: translateX(16px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .tutorial-slide { animation: none; } }
 .onboarding { display: flex; flex-direction: column; gap: 14px; }
 .onboarding-head { display: flex; align-items: center; justify-content: space-between; }
 .onboarding-count { font-family: var(--font-mono); font-size: 12px; color: var(--text-3); }

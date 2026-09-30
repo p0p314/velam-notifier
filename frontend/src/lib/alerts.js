@@ -9,6 +9,8 @@ export const ALL_DAYS = [1, 2, 3, 4, 5, 6, 7];
 export const GROUP_MIN = 2;
 export const GROUP_MAX = 5;
 export const GROUP_NAME_MAX = 40;
+// Heures d'envoi d'un résumé (alignées sur le serveur).
+export const SEND_TIMES_MAX = 6;
 
 const BIKE_WORD = { mechanical: " mécanique", ebike: " électrique", any: "" };
 
@@ -51,10 +53,25 @@ export function defaultForm(station = null, now = new Date()) {
     arrivalThreshold: 1,
     timeStart: hhmm(now),
     timeEnd: end.getDate() === now.getDate() ? hhmm(end) : "23:59",
-    sendTime: "08:00",
+    sendTimes: ["08:00"],
     days: [...ALL_DAYS],
     oneShot: false,
   };
+}
+
+/**
+ * Heure proposée pour un nouvel envoi de résumé : 1 h après la dernière, en évitant
+ * les heures déjà prises (tour du cadran au besoin).
+ */
+export function nextSendTime(times) {
+  const last = times[times.length - 1] || "08:00";
+  const base = Number(last.slice(0, 2)) * 60 + Number(last.slice(3, 5));
+  for (let h = 1; h <= 24; h++) {
+    const m = (base + h * 60) % 1440;
+    const t = `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+    if (!times.includes(t)) return t;
+  }
+  return last;
 }
 
 /** Alerte API → état du formulaire (édition). */
@@ -76,11 +93,24 @@ export function formFromAlert(a) {
     arrivalThreshold: a.arrival_threshold ?? 1,
     timeStart: a.time_start,
     timeEnd: a.time_end,
-    sendTime: a.time_start,
+    sendTimes: a.send_times?.length ? [...a.send_times] : [a.time_start],
     days: a.days ? a.days.split(",").map(Number) : [...ALL_DAYS],
     oneShot: !!a.valid_on,
     validOn: a.valid_on ?? null,
   };
+}
+
+/**
+ * Copie d'une alerte → formulaire de création pré-rempli (rien n'est créé avant validation :
+ * on ajuste d'abord la station, l'heure…). Un groupe nommé prend « (copie) » pour être
+ * distinguable dans la liste ; une ponctuelle copiée vaut pour aujourd'hui.
+ */
+export function copyForm(a) {
+  const form = formFromAlert(a);
+  const name = form.groupName.trim();
+  if (name) form.groupName = `${name.slice(0, GROUP_NAME_MAX - 8)} (copie)`;
+  form.validOn = null;
+  return form;
 }
 
 /** Le trajet n'a de sens que pour « vélos, il en reste peu », sur une seule station. */
@@ -105,7 +135,10 @@ export function validateForm(form) {
   if (form.kind === "summary") {
     if (form.groupIds.length < 1 || form.groupIds.length > GROUP_MAX) return `Choisissez de 1 à ${GROUP_MAX} stations`;
     if (form.groupName.trim().length > GROUP_NAME_MAX) return `Nom du groupe : ${GROUP_NAME_MAX} caractères maximum`;
-    if (!form.sendTime) return "Choisissez l'heure d'envoi";
+    const times = form.sendTimes.filter(Boolean);
+    if (times.length < form.sendTimes.length || times.length === 0) return "Choisissez chaque heure d'envoi";
+    if (times.length > SEND_TIMES_MAX) return `${SEND_TIMES_MAX} heures d'envoi maximum`;
+    if (new Set(times).size < times.length) return "Chaque heure d'envoi ne peut figurer qu'une fois";
     return null;
   }
   if (form.group) {
@@ -163,6 +196,7 @@ const namedStations = (ids, names) => ids.map((id) => ({ station_id: id, station
 /** Résumé à heure fixe : champs de seuil / trajet neutres (le serveur les force aussi). */
 function summaryPayload(form, names) {
   const id = form.groupIds[0];
+  const times = [...form.sendTimes].sort();
   return {
     kind: "summary",
     station_id: id,
@@ -176,8 +210,9 @@ function summaryPayload(form, names) {
     arrival_station_id: null,
     arrival_station_name: null,
     arrival_threshold: null,
-    time_start: form.sendTime,
-    time_end: form.sendTime,
+    send_times: times,
+    time_start: times[0],
+    time_end: times[0],
     days: form.days.join(","),
     valid_on: null,
   };
@@ -186,35 +221,38 @@ function summaryPayload(form, names) {
 const bikesWord = (type, n) => `vélo${n > 1 ? "s" : ""}${BIKE_WORD[type] ?? ""}${type !== "any" && n > 1 ? "s" : ""}`;
 const docksWord = (n) => `place${n > 1 ? "s" : ""}`;
 
-/** Résumé d'une alerte pour sa carte : { title, detail }. */
+/**
+ * Résumé d'une alerte pour sa carte : { title, detail, bikeType }. Le type (alerte /
+ * résumé) et le type de vélo sont montrés en icônes par la carte, pas en texte :
+ * `bikeType` = "mechanical" | "ebike", ou null (les deux types, ou places libres).
+ */
 export function describeAlert(a) {
   const cmp = a.comparison === "at_least" ? "≥" : "≤";
   const n = a.threshold ?? 0;
-  const what = a.target === "docks" ? docksWord(n) : bikesWord(a.bike_type, n);
+  const what = a.target === "docks" ? docksWord(n) : bikesWord("any", n);
   const window = `${a.time_start}–${a.time_end}`;
+  const bikeType = a.target !== "docks" && a.bike_type !== "any" ? a.bike_type ?? null : null;
   if (a.kind === "summary") {
     const list = (a.group_stations ?? []).map((s) => s.station_name).join(", ");
-    const kind = a.bike_type === "any" ? "vélos" : bikesWord(a.bike_type, 2);
-    const rule = `Résumé à ${a.time_start} · ${kind}`;
-    return a.group_name
-      ? { title: a.group_name, detail: `${list} · ${rule}` }
-      : { title: list, detail: rule };
+    const detail = (a.send_times?.length ? a.send_times : [a.time_start]).join(", ");
+    // Groupe nommé : le nom suffit (stations visibles en modifiant l'alerte).
+    return { title: a.group_name || list, detail, bikeType };
   }
   if (a.group_stations?.length) {
     const list = a.group_stations.map((s) => s.station_name).join(", ");
     const rule = a.comparison === "at_least" ? `l'une ≥ ${n} ${what}` : `toutes ≤ ${n} ${what}`;
-    return a.group_name
-      ? { title: a.group_name, detail: `${list} · ${rule} · ${window}` }
-      : { title: list, detail: `${rule[0].toUpperCase()}${rule.slice(1)} · ${window}` };
+    const detail = `${rule[0].toUpperCase()}${rule.slice(1)} · ${window}`;
+    return { title: a.group_name || list, detail, bikeType };
   }
   if (a.arrival_station_id) {
     const arr = a.arrival_threshold ?? 0;
     return {
       title: `${a.station_name} → ${a.arrival_station_name}`,
       detail: `Départ ${cmp} ${n} ${what} · Arrivée ≤ ${arr} ${docksWord(arr)} · ${window}`,
+      bikeType,
     };
   }
-  return { title: a.station_name, detail: `${cmp} ${n} ${what} · ${window}` };
+  return { title: a.station_name, detail: `${cmp} ${n} ${what} · ${window}`, bikeType };
 }
 
 // ── Liste : filtre et tri ─────────────────────────────────────────────────────

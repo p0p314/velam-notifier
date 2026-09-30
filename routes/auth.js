@@ -2,7 +2,7 @@
 const express   = require('express');
 const rateLimit = require('express-rate-limit');
 const {
-  createUser, getUserByUsername, getUserById, getUserAuthById, updatePasswordHash, deleteUser,
+  createUser, getUserByUsername, getUserById, getUserAuthById, updatePasswordHash, deleteUser, markTutorialDone,
   bumpTokenVersion, removeOtherSubscriptions,
   touchSession, listSessions, deleteSession, deleteOtherSessions, pruneSessions, setSubscriptionSession,
   getFavorites, getAlerts, getAlertsPause, getSubscriptionsByUser,
@@ -13,6 +13,9 @@ const {
 const { describeDevice } = require('../device');
 
 const router = express.Router();
+
+/** Utilisateur renvoyé au client : identité + tutoriel de présentation déjà vu ou non. */
+const publicUser = (user) => ({ id: user.id, username: user.username, tutorial_done: !!user.tutorial_done });
 
 // RATE_LIMIT_DISABLED=1 : uniquement pour les tests d'intégration (nombreux comptes créés).
 const skip = () => process.env.RATE_LIMIT_DISABLED === '1';
@@ -46,7 +49,7 @@ router.post('/api/auth/register', registerLimiter, async (req, res) => {
 
     const user  = await createUser(username.trim(), await hashPassword(password));
     const token = await startSession(user, req);
-    res.status(201).json({ ok: true, token, user: { id: user.id, username: user.username } });
+    res.status(201).json({ ok: true, token, user: publicUser(user) });
   } catch (err) {
     console.error('[POST /api/auth/register]', err.message);
     res.status(500).json({ ok: false, error: 'Erreur serveur' });
@@ -66,7 +69,7 @@ router.post('/api/auth/login', loginLimiter, async (req, res) => {
     }
 
     const token = await startSession(user, req);
-    res.json({ ok: true, token, user: { id: user.id, username: user.username } });
+    res.json({ ok: true, token, user: publicUser(user) });
   } catch (err) {
     console.error('[POST /api/auth/login]', err.message);
     res.status(500).json({ ok: false, error: 'Erreur serveur' });
@@ -91,7 +94,7 @@ router.get('/api/auth/me', requireAuth, async (req, res) => {
     } else {
       token = await startSession(user, req);
     }
-    res.json({ ok: true, token, user: { id: user.id, username: user.username } });
+    res.json({ ok: true, token, user: publicUser(user) });
   } catch (err) {
     console.error('[GET /api/auth/me]', err.message);
     res.status(500).json({ ok: false, error: 'Erreur serveur' });
@@ -145,7 +148,7 @@ router.put('/api/auth/password', requireAuth, loginLimiter, async (req, res) => 
     }
     await updatePasswordHash(user.id, await hashPassword(next));
     const { token } = await revokeOtherSessions(user, endpoint, req);
-    res.json({ ok: true, token, user: { id: user.id, username: user.username } });
+    res.json({ ok: true, token, user: publicUser(user) });
   } catch (err) {
     console.error('[PUT /api/auth/password]', err.message);
     res.status(500).json({ ok: false, error: 'Erreur serveur' });
@@ -164,7 +167,7 @@ router.post('/api/auth/logout-others', requireAuth, async (req, res) => {
     const user = await getUserById(req.user.id);
     if (!user) return res.status(401).json({ ok: false, error: 'Compte introuvable' });
     const { token, devices } = await revokeOtherSessions(user, endpoint, req);
-    res.json({ ok: true, token, user: { id: user.id, username: user.username }, devices });
+    res.json({ ok: true, token, user: publicUser(user), devices });
   } catch (err) {
     console.error('[POST /api/auth/logout-others]', err.message);
     res.status(500).json({ ok: false, error: 'Erreur serveur' });
@@ -178,6 +181,17 @@ router.post('/api/auth/logout', requireAuth, async (req, res) => {
     res.json({ ok: true });
   } catch (err) {
     console.error('[POST /api/auth/logout]', err.message);
+    res.status(500).json({ ok: false, error: 'Erreur serveur' });
+  }
+});
+
+/** POST /api/auth/tutorial — tutoriel vu ou arrêté : il n'est plus proposé à ce compte. */
+router.post('/api/auth/tutorial', requireAuth, async (req, res) => {
+  try {
+    await markTutorialDone(req.user.id);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[POST /api/auth/tutorial]', err.message);
     res.status(500).json({ ok: false, error: 'Erreur serveur' });
   }
 });

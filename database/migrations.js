@@ -115,6 +115,17 @@ async function migrateSessions(db) {
   await addColumn(db, 'push_subscriptions', 'session_id', 'TEXT DEFAULT NULL');
 }
 
+/**
+ * v1.5 — résumés à plusieurs heures et tutoriel.
+ * `alerts.send_times` : heures d'envoi d'un résumé, CSV trié (« 07:45,18:00 ») ; NULL =
+ * résumé d'avant la v1.5, envoyé à `time_start` seul. `users.tutorial_done` : tutoriel
+ * de présentation vu (ou arrêté) — montré une fois par compte, pas par appareil.
+ */
+async function migrateV15(db) {
+  await addColumn(db, 'alerts', 'send_times', 'TEXT DEFAULT NULL');
+  await addColumn(db, 'users', 'tutorial_done', 'INTEGER NOT NULL DEFAULT 0');
+}
+
 async function runMigrations(db) {
   const isPostgres = !!process.env.DATABASE_URL;
 
@@ -191,6 +202,7 @@ async function runMigrations(db) {
     )`);
     await db.run('CREATE INDEX IF NOT EXISTS sessions_user_idx ON sessions (user_id)');
     await migrateSessions(db);
+    await migrateV15(db);
     await db.run(`CREATE TABLE IF NOT EXISTS rental_apps (
       platform      TEXT PRIMARY KEY,
       name          TEXT NOT NULL,
@@ -286,6 +298,7 @@ async function runMigrations(db) {
   )`);
   await db.run('CREATE INDEX IF NOT EXISTS sessions_user_idx ON sessions (user_id)');
   await migrateSessions(db);
+  await migrateV15(db);
 
   console.log('[db] migrations SQLite appliquées');
 }

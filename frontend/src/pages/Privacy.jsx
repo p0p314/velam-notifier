@@ -14,9 +14,9 @@ export default function Privacy() {
 
       <h2>Ce que VéloPulse enregistre</h2>
       <ul>
-        <li><b>Votre compte</b> : un nom d'utilisateur et votre mot de passe <b>chiffré</b> (haché, jamais lisible). Aucune adresse e-mail, aucun nom réel.</li>
+        <li><b>Votre compte</b> : un nom d'utilisateur et votre mot de passe <b>chiffré</b> (haché, jamais lisible), et si vous avez déjà vu le tutoriel de présentation. Aucune adresse e-mail, aucun nom réel.</li>
         <li><b>Vos favoris</b> et le nom que vous leur donnez, ainsi que leur ordre.</li>
-        <li><b>Vos alertes</b> : stations, seuils, horaires, jours, le nom éventuel de vos groupes de stations, et la date de pause éventuelle.</li>
+        <li><b>Vos alertes</b> : stations, seuils, horaires (dont les heures d'envoi de vos résumés), jours, le nom éventuel de vos groupes de stations, et la date de pause éventuelle.</li>
         <li><b>Vos appareils connectés</b> : le type d'appareil et de navigateur (tel que votre navigateur l'annonce), la date de connexion et la dernière activité, pour que vous puissiez les reconnaître et les déconnecter. Un appareil inactif au-delà de la durée de connexion (30 jours) est effacé.</li>
         <li><b>Vos appareils</b> ayant activé les notifications : l'adresse technique fournie par votre navigateur pour vous les envoyer.</li>
       </ul>

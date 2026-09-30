@@ -28,7 +28,7 @@ describe('validateAlertPayload — création', () => {
     assert.deepEqual(fields, {
       ...validAlert, target: 'bikes', comparison: 'at_most', valid_on: null, active: 1,
       arrival_station_id: null, arrival_station_name: null, arrival_threshold: null,
-      group_name: null, group_stations: null, kind: 'threshold',
+      group_name: null, group_stations: null, send_times: null, kind: 'threshold',
     });
   });
 
@@ -180,15 +180,34 @@ describe('validateAlertPayload — résumé à heure fixe', () => {
       kind: 'summary', group_stations: [gare], group_name: null, station_id: '1', station_name: 'Gare',
       target: 'bikes', comparison: 'at_most', threshold: 0, bike_type: 'ebike',
       arrival_station_id: null, arrival_station_name: null, arrival_threshold: null, valid_on: null,
-      time_start: '08:00', time_end: '08:00', days: '1,2,3,4,5', active: 1,
+      send_times: ['08:00'], time_start: '08:00', time_end: '08:00', days: '1,2,3,4,5', active: 1,
     });
+  });
+  test('plusieurs heures d\'envoi : triées, la première devient time_start', () => {
+    const { fields, errors } = v({ ...summary, time_start: undefined, send_times: ['18:00', '07:45', '12:30'] });
+    assert.deepEqual(errors, []);
+    assert.deepEqual(fields.send_times, ['07:45', '12:30', '18:00']);
+    assert.equal(fields.time_start, '07:45');
+    assert.equal(fields.time_end, '07:45');
+  });
+  test('heures d\'envoi invalides refusées (vide, doublon, format, plus de 6)', () => {
+    const err = 'send_times (1 à 6 heures HH:MM distinctes)';
+    for (const send_times of [[], ['08:00', '08:00'], ['8h'], ['07:00', '08:00', '09:00', '10:00', '11:00', '12:00', '13:00'], '08:00']) {
+      assert.ok(v({ ...summary, send_times }).errors.includes(err), JSON.stringify(send_times));
+    }
+  });
+  test('PATCH : heures conservées, ou remplacées par time_start seul (ancien client)', () => {
+    const current = { ...v({ ...summary, send_times: ['08:00', '18:00'] }).fields, id: 1 };
+    assert.deepEqual(v({ bike_type: 'any' }, { current }).fields.send_times, ['08:00', '18:00']);
+    assert.deepEqual(v({ time_start: '09:15' }, { current }).fields.send_times, ['09:15']);
+    assert.deepEqual(v({ send_times: ['06:00', '21:00'] }, { current }).fields.send_times, ['06:00', '21:00']);
   });
   test('stations obligatoires (1 à 5)', () => {
     assert.ok(v({ ...summary, group_stations: undefined, station_id: '1', station_name: 'Gare' }).errors.length);
     assert.ok(v({ ...summary, group_stations: [] }).errors.length);
   });
   test('heure et type de vélo validés', () => {
-    assert.ok(v({ ...summary, time_start: '8h' }).errors.includes('time_start (HH:MM)'));
+    assert.ok(v({ ...summary, time_start: '8h' }).errors.includes('send_times (1 à 6 heures HH:MM distinctes)'));
     assert.ok(v({ ...summary, bike_type: 'tandem' }).errors.length);
   });
   test('type inconnu refusé', () => {
@@ -217,6 +236,19 @@ describe('résumé : échéance et contenu', () => {
     assert.equal(isSummaryDue(alert, at('08:00', 4)), false);
     assert.equal(isSummaryDue({ ...alert, last_notified_date: '2025-09-24' }, at('08:05')), false);
     assert.equal(isSummaryDue({ ...alert, last_notified_date: '2025-09-23' }, at('08:05')), true);
+  });
+
+  test('plusieurs heures : chacune envoyée une fois par jour', () => {
+    const multi = { ...alert, send_times: ['08:00', '12:00', '18:00'] };
+    const sent = (key) => ({ ...multi, last_notified_date: '2025-09-24', last_notified_key: key });
+    assert.equal(isSummaryDue(multi, at('12:05')), true);
+    assert.equal(isSummaryDue(multi, at('10:00')), false);
+    assert.equal(isSummaryDue(sent('08:00'), at('08:10')), false);
+    assert.equal(isSummaryDue(sent('08:00'), at('12:00')), true);
+    assert.equal(isSummaryDue(sent('12:00'), at('12:10')), false);
+    assert.equal(isSummaryDue(sent('12:00'), at('18:15')), true);
+    // Envoi d'avant la v1.5 (clé NULL) : la journée est faite.
+    assert.equal(isSummaryDue(sent(null), at('08:05')), false);
   });
 
   const statusMap = {

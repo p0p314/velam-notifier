@@ -211,6 +211,20 @@ describe("Paramètres — Préférences", () => {
     fireEvent.click(within(screen.getByRole("group", { name: "Page d'ouverture" })).getByRole("button", { name: "Carte" }));
     expect(localStorage.getItem("velopulse-pref-landing")).toBe("carte");
   });
+
+  test("« Revoir le tutoriel » l'ouvre, sans rien renvoyer au serveur", async () => {
+    mockApi();
+    render(
+      <MemoryRouter initialEntries={["/compte"]}>
+        <ThemeProvider><AuthProvider><Routes><Route path="/compte" element={<Account />} /></Routes></AuthProvider></ThemeProvider>
+      </MemoryRouter>
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Revoir le tutoriel" }));
+    expect(screen.getByText("Bienvenue sur VéloPulse")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Arrêter le tutoriel" }));
+    expect(screen.queryByText("Bienvenue sur VéloPulse")).toBeNull();
+    expect(fetch.mock.calls.some(([u]) => String(u).endsWith("/api/auth/tutorial"))).toBe(false);
+  });
 });
 
 describe("Paramètres — page et onglets", () => {

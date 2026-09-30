@@ -10,6 +10,7 @@ import { shareApp } from "../lib/share";
 import { fmtLastSeen, exportFileName, downloadJson } from "../lib/devices";
 import { BIKE_TYPES, LANDINGS, getBikePref, setBikePref, getLandingPref, setLandingPref } from "../lib/prefs";
 import { useTheme, THEME_MODES } from "../useTheme";
+import Tutorial from "../components/Tutorial";
 
 const TABS = [
   { value: "preferences",   label: "Préférences" },
@@ -235,6 +236,7 @@ function PreferencesTab() {
   const { mode, setMode } = useTheme();
   const [bike, setBike] = useState(getBikePref);
   const [landing, setLanding] = useState(getLandingPref);
+  const [tutorial, setTutorial] = useState(false);
   return (
     <div className="account-card">
       <Field label="Thème" hint={mode === "system" ? "Suit le réglage clair / sombre de votre appareil." : null}>
@@ -249,6 +251,10 @@ function PreferencesTab() {
           onChange={(v) => { setLanding(v); setLandingPref(v); }} />
       </Field>
       <p className="account-text">Ces préférences sont propres à cet appareil.</p>
+      <button type="button" className="cancel-btn" onClick={() => setTutorial(true)}>
+        <Icon name="bike" size={16} /> Revoir le tutoriel
+      </button>
+      {tutorial && <Tutorial onClose={() => setTutorial(false)} />}
     </div>
   );
 }

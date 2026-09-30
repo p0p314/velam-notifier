@@ -9,6 +9,44 @@ Toutes les évolutions notables de VéloPulse. Format inspiré de
 section `## [x.y.z] - AAAA-MM-JJ` ci-dessous, puis merger sur `main` : le workflow
 `release.yml` crée le tag `vx.y.z` et la release GitHub à partir de cette section.
 
+## [1.5.0] - 2026-09-30
+
+### Résumés à plusieurs heures
+- Un même résumé peut désormais être envoyé à **plusieurs heures** de la journée (jusqu'à 6,
+  par exemple 7 h 45 et 18 h), les jours choisis : « Ajouter une heure » dans le formulaire.
+- Chaque heure est envoyée une seule fois par jour ; les résumés existants gardent leur heure.
+
+### Tutoriel
+- **Tutoriel de présentation** en plein écran au premier lancement après connexion : quelques slides
+  (stations, carte, favoris, alertes, résumés, paramètres), « Suivant » ou glisser pour
+  avancer, « Arrêter le tutoriel » à tout moment. Montré une seule fois par compte, puis
+  suivi de l'accueil pratique (installer, notifications, favoris).
+- Le tutoriel peut être revu depuis **Paramètres › Préférences**.
+
+### Interface
+- Le bouton clair / sombre de l'en-tête est retiré : le thème se règle dans
+  **Paramètres › Préférences** (clair, sombre ou automatique).
+- **Zoom au pincement et au double appui désactivé** dans l'application (la carte reste
+  zoomable). Sur iPhone, un champ de saisie s'agrandit toujours au toucher, et l'écran
+  revient à sa taille normale dès qu'on le quitte.
+
+### Corrections
+- Notification → Vélam : le bouton « Ouvrir l'app Vélam », qui ne fonctionnait pas, est
+  retiré ; l'ancien lien « Site Vélam », qui fonctionne, prend sa place sous ce nom.
+
+### Alertes
+- **Cartes d'alerte allégées** : le type (alerte 🔔 / résumé 🕐) est une pastille en tête de
+  carte, le type de vélo une icône (⚡ électrique, 🚲 mécanique) — plus de mention en texte ;
+  un résumé n'affiche que ses heures (« 07:45, 18:00 »).
+- **Jours modifiables directement sur la carte** (appui sur une pastille), sans ouvrir l'alerte.
+- **Supprimer** : en glissant la carte vers la gauche, ou depuis le formulaire de
+  modification (« Supprimer l'alerte », avec confirmation).
+- **Dupliquer une alerte** (bouton sur chaque carte) : ouvre le formulaire pré-rempli
+  pour ajuster station, horaires… avant de créer la copie ; un groupe nommé devient
+  « Maison (copie) ».
+- Alertes et résumés de groupe **nommés** : la liste n'affiche plus que le nom du groupe
+  (« Maison »), plus le détail des stations — visible en modifiant l'alerte.
+
 ## [1.4.1] - 2026-09-29
 
 ### Corrections

@@ -2,7 +2,7 @@ import { lazy, Suspense } from "react";
 import { Routes, Route, Navigate, Outlet, useNavigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "./auth";
 import { useIsMobile } from "./hooks";
-import { ThemeProvider, useTheme } from "./useTheme";
+import { ThemeProvider } from "./useTheme";
 import { PwaInstallProvider, usePwaInstall } from "./components/PwaInstallContext";
 import { getLandingPref, landingPath } from "./lib/prefs";
 import BottomNav from "./components/BottomNav";
@@ -17,6 +17,8 @@ import Account from "./pages/Account";
 import Privacy from "./pages/Privacy";
 import { OnlineOnly } from "./components/Offline";
 import Onboarding from "./components/Onboarding";
+import Tutorial from "./components/Tutorial";
+import { tutorialPending } from "./lib/tutorial";
 
 // Carte chargée à la demande : mapbox-gl (~1,5 Mo) reste hors du bundle principal.
 const MapPage = lazy(() => import("./pages/MapPage"));
@@ -33,8 +35,18 @@ function Landing() {
   return <Navigate to={landingPath(getLandingPref(), isMobile)} replace />;
 }
 
+/**
+ * Première connexion : le tutoriel de présentation d'abord, puis l'accueil pratique
+ * (installer, notifications, favoris) — jamais les deux à la fois. Tant que le serveur
+ * n'a pas confirmé l'état du tutoriel (utilisateur mémorisé sans le champ), rien.
+ */
+function FirstRun() {
+  const { user, completeTutorial } = useAuth();
+  if (tutorialPending(user)) return <Tutorial onClose={completeTutorial} />;
+  return user?.tutorial_done ? <Onboarding /> : null;
+}
+
 export function Layout() {
-  const { theme, toggle } = useTheme();
   // Déjà installée (lancée depuis l'écran d'accueil) : plus rien à proposer.
   const { open: openInstall, isInstalled } = usePwaInstall();
   const navigate = useNavigate();
@@ -47,9 +59,6 @@ export function Layout() {
           <span className="brand-name">VéloPulse</span>
         </div>
         <div style={{ display: "flex", gap: 8 }}>
-          <button className="icon-btn" aria-label="Changer de thème" onClick={toggle}>
-            <Icon name={theme === "dark" ? "sun" : "moon"} />
-          </button>
           {!isInstalled && (
             <button className="icon-btn" aria-label="Installer l'app" onClick={openInstall}>
               <Icon name="download" />
@@ -64,7 +73,7 @@ export function Layout() {
       <Navbar />
       <main className="app-content"><Outlet /></main>
       <BottomNav />
-      <Onboarding />
+      <FirstRun />
     </div>
   );
 }
