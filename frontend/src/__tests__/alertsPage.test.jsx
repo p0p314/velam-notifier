@@ -64,16 +64,16 @@ describe("carte d'alerte", () => {
   test("type d'alerte et type de vélo en icônes, pas en texte", async () => {
     alerts = [base];
     renderPage();
-    await screen.findByText("≤ 1 vélo · 08:00–09:00");
+    await screen.findByText("≤ 1 · 08:00–09:00");
     expect(card().getByRole("img", { name: "Alerte de disponibilité" })).toBeTruthy();
     expect(card().getByRole("img", { name: "Vélos électriques" })).toBeTruthy();
-    expect(document.querySelector(".alert-card").textContent).not.toMatch(/électrique/);
+    expect(document.querySelector(".alert-card").textContent).not.toMatch(/électrique|vélo/);
   });
 
   test("jours modifiables directement sur la carte", async () => {
     alerts = [base];
     renderPage();
-    await screen.findByText("≤ 1 vélo · 08:00–09:00");
+    await screen.findByText("≤ 1 · 08:00–09:00");
     fireEvent.click(card().getByRole("button", { name: "vendredi" }));
     expect(card().getByRole("button", { name: "vendredi" }).getAttribute("aria-pressed")).toBe("true");
     await waitFor(() => expect(calls.find((c) => c.method === "PATCH")?.body).toEqual({ days: "1,2,5" }));
@@ -82,7 +82,7 @@ describe("carte d'alerte", () => {
   test("supprimer : bouton révélé en glissant la carte", async () => {
     alerts = [base];
     renderPage();
-    await screen.findByText("≤ 1 vélo · 08:00–09:00");
+    await screen.findByText("≤ 1 · 08:00–09:00");
     // jsdom n'a pas de PointerEvent (clientX serait perdu) : équivalent souris.
     window.PointerEvent ??= class extends MouseEvent {
       constructor(type, init = {}) { super(type, init); this.pointerId = init.pointerId; }
@@ -100,7 +100,7 @@ describe("carte d'alerte", () => {
   test("supprimer : carte retirée tout de suite ; déjà supprimée (404) → aucun message d'erreur", async () => {
     alerts = [base];
     renderPage();
-    await screen.findByText("≤ 1 vélo · 08:00–09:00");
+    await screen.findByText("≤ 1 · 08:00–09:00");
     let answer;
     fetch.mockImplementationOnce(() => new Promise((r) => { answer = r; })); // serveur lent
     fireEvent.click(document.querySelector(".swipe-delete"));
@@ -114,7 +114,7 @@ describe("carte d'alerte", () => {
   test("supprimer depuis le formulaire de modification, après confirmation", async () => {
     alerts = [base];
     renderPage();
-    await screen.findByText("≤ 1 vélo · 08:00–09:00");
+    await screen.findByText("≤ 1 · 08:00–09:00");
     fireEvent.click(screen.getByTitle("Modifier l'alerte"));
     const f = within(form());
     fireEvent.click(f.getByRole("button", { name: /Supprimer l'alerte/ }));
@@ -246,7 +246,7 @@ describe("groupe de stations", () => {
       group_name: "Maison", group_stations: [{ station_id: "1", station_name: "Gare" }, { station_id: "9", station_name: "Cirque" }] }];
     renderPage();
     expect(await screen.findByText("Maison")).toBeTruthy();
-    expect(screen.getByText("≤ 0 vélo · 08:00–09:00")).toBeTruthy();
+    expect(screen.getByText("≤ 0 · 08:00–09:00")).toBeTruthy();
     expect(document.querySelector(".alert-card").textContent).not.toMatch(/Cirque/); // groupe nommé : pas la liste des stations
 
     fireEvent.click(screen.getByTitle("Modifier l'alerte"));
@@ -349,7 +349,7 @@ describe("liste", () => {
     ];
     renderPage();
     expect(await screen.findByText("Gare → Zoo")).toBeTruthy();
-    expect(screen.getByText("Départ ≤ 1 vélo · Arrivée ≤ 0 place · 08:00–09:00")).toBeTruthy();
+    expect(screen.getByText("Départ ≤ 1 · Arrivée ≤ 0 place · 08:00–09:00")).toBeTruthy();
     expect(screen.getByText("≥ 3 places · 17:00–18:00")).toBeTruthy();
     expect(screen.getByText(/Uniquement le 30\/09/)).toBeTruthy();
   });
