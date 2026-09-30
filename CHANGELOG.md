@@ -9,7 +9,7 @@ Toutes les évolutions notables de VéloPulse. Format inspiré de
 section `## [x.y.z] - AAAA-MM-JJ` ci-dessous, puis merger sur `main` : le workflow
 `release.yml` crée le tag `vx.y.z` et la release GitHub à partir de cette section.
 
-## [1.5.0] - 2026-09-29
+## [1.5.0] - 2026-09-30
 
 ### Résumés à plusieurs heures
 - Un même résumé peut désormais être envoyé à **plusieurs heures** de la journée (jusqu'à 6,
