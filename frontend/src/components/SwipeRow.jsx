@@ -47,10 +47,8 @@ export default function SwipeRow({ onDelete, label = "Supprimer", children }) {
   const revealed = tx < 0;
   return (
     <div className="swipe-wrap">
-      {/* Masqué au repos : sinon son rouge déborde à l'anticrénelage des coins arrondis. */}
-      <button className="swipe-delete" onClick={onDelete} tabIndex={revealed ? 0 : -1}
-        aria-hidden={!revealed} aria-label={label}
-        style={{ visibility: revealed || dragging ? "visible" : "hidden" }}>
+      <button className={"swipe-delete" + (revealed ? " shown" : "")} onClick={onDelete}
+        tabIndex={revealed ? 0 : -1} aria-hidden={!revealed} aria-label={label}>
         <Icon name="trash" />
       </button>
       <div className="swipe-fg"

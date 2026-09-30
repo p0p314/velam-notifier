@@ -9,6 +9,22 @@ Toutes les évolutions notables de VéloPulse. Format inspiré de
 section `## [x.y.z] - AAAA-MM-JJ` ci-dessous, puis merger sur `main` : le workflow
 `release.yml` crée le tag `vx.y.z` et la release GitHub à partir de cette section.
 
+## [1.5.1] - 2026-09-30
+
+### Alertes
+- Supprimer une alerte n'affiche plus « Alerte introuvable » : l'alerte disparaît de la
+  liste tout de suite, et un second appui pendant l'enregistrement est ignoré.
+- Le bouton « Modifier » est retiré : on ouvre l'alerte en touchant son nom.
+- Groupes « au plus N » : la mention « toutes » est retirée (« ≤ 1 vélo · 08:00–09:00 »).
+- La notification de test n'est plus sur la page Alertes, uniquement dans
+  **Paramètres › Notifications**.
+
+### Corrections
+- Glisser pour supprimer (Alertes, Favoris) : le bouton rouge est détaché de la carte,
+  avec des coins arrondis, et ne dépasse plus aux coins au repos.
+- Page Stations (téléphone) : l'état et l'étoile favori sont alignés en haut à droite, les
+  compteurs ne passent plus sur deux lignes.
+
 ## [1.5.0] - 2026-09-30
 
 ### Résumés à plusieurs heures

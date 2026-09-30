@@ -22,7 +22,7 @@ export default function StationListItem({ s, onClick, dist, isFav = false, onTog
   );
 
   return (
-    <div className={"station-item" + (offline ? " offline" : "")} role="button" tabIndex={0} onClick={onClick} onKeyDown={onKey}
+    <div className={"station-item" + (offline ? " offline" : "") + (onToggleFav ? " with-fav" : "")} role="button" tabIndex={0} onClick={onClick} onKeyDown={onKey}
       aria-label={`${s.name}, voir le détail`}>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div className="station-item-name">{s.name}</div>

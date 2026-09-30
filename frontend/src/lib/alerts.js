@@ -240,7 +240,7 @@ export function describeAlert(a) {
   }
   if (a.group_stations?.length) {
     const list = a.group_stations.map((s) => s.station_name).join(", ");
-    const rule = a.comparison === "at_least" ? `l'une ≥ ${n} ${what}` : `toutes ≤ ${n} ${what}`;
+    const rule = a.comparison === "at_least" ? `l'une ≥ ${n} ${what}` : `≤ ${n} ${what}`;
     const detail = `${rule[0].toUpperCase()}${rule.slice(1)} · ${window}`;
     return { title: a.group_name || list, detail, bikeType };
   }

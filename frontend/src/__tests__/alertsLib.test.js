@@ -225,7 +225,7 @@ describe("describeAlert", () => {
   test("groupe nommé / sans nom", () => {
     const g = { ...a, bike_type: "any", threshold: 1, group_name: "Maison",
       group_stations: [{ station_id: "1", station_name: "Gare" }, { station_id: "2", station_name: "Zoo" }] };
-    expect(describeAlert(g)).toMatchObject({ title: "Maison", detail: "Toutes ≤ 1 vélo · 08:00–09:00" });
+    expect(describeAlert(g)).toMatchObject({ title: "Maison", detail: "≤ 1 vélo · 08:00–09:00" }); // sans « toutes »
     expect(describeAlert({ ...g, group_name: null, comparison: "at_least" }))
       .toMatchObject({ title: "Gare, Zoo", detail: "L'une ≥ 1 vélo · 08:00–09:00" });
   });

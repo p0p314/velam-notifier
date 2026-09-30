@@ -1,8 +1,8 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { api } from "../api";
 import { useFavorites, useIsMobile } from "../hooks";
-import { usePushState, TestPushButton } from "../components/PushControls";
+import { usePushState } from "../components/PushControls";
 import {
   ALL_DAYS, defaultForm, formFromAlert, validateForm, payloadFromForm, describeAlert,
   tripAllowed, groupRuleText, LIST_FILTERS, LIST_SORTS, loadListPrefs, saveListPrefs, visibleAlerts, hasBothKinds, localYmd, addDaysYmd, fmtDay, GROUP_MIN, GROUP_MAX, GROUP_NAME_MAX,
@@ -82,11 +82,10 @@ function Seg({ options, value, onChange, label }) {
 /**
  * Notifications de cet appareil : activation sur clic (exigé par iOS, jamais
  * automatique) ; coupées dans les Paramètres ⇒ avertissement + réactivation ;
- * actives ⇒ bouton d'envoi d'une notification de test.
+ * actives ⇒ rien (le test est dans Paramètres › Notifications).
  */
 function PushBanner() {
   const { status, busy, enable } = usePushState();
-  const [testMsg, setTestMsg] = useState(null);
   if (status === "unsupported") return null;
 
   if (status === "denied") {
@@ -97,15 +96,8 @@ function PushBanner() {
       </div>
     );
   }
-  if (status === "on") {
-    return (
-      <div className="push-banner">
-        <Icon name="bell" size={18} />
-        <span>{testMsg ?? "Notifications activées sur cet appareil."}</span>
-        <TestPushButton onResult={setTestMsg} />
-      </div>
-    );
-  }
+  // Actives : rien à signaler (la notification de test est dans Paramètres › Notifications).
+  if (status === "on") return null;
   const off = status === "off";
   return (
     <div className={"push-banner" + (off ? " warn" : "")} role={off ? "status" : undefined}>
@@ -191,23 +183,21 @@ function AlertCard({ a, onToggle, onDelete, onEdit, onCopy, onDays, paused }) {
             aria-label={kind.label} title={kind.label}>
             <Icon name={kind.icon} size={18} />
           </span>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div className="alert-card-name">{title}</div>
-            <div className="alert-card-sub">
+          {/* Appui sur le nom (ou le détail) = modifier l'alerte. */}
+          <button type="button" className="alert-card-main" title="Modifier l'alerte" onClick={() => onEdit(a)}>
+            <span className="alert-card-name">{title}</span>
+            <span className="alert-card-sub">
               {bikeType && (
                 <span role="img" aria-label={BIKE_TYPE_LABEL[bikeType]} title={BIKE_TYPE_LABEL[bikeType]} style={{ display: "inline-flex" }}>
                   <Icon name={BIKE_ICON[bikeType]} size={14} />
                 </span>
               )}
               <span>{detail}</span>
-            </div>
-          </div>
+            </span>
+          </button>
           <button role="switch" aria-checked={!!a.active} aria-label={a.active ? "Désactiver" : "Activer"}
             className={"switch" + (a.active ? " on" : "")} onClick={() => onToggle(a)}>
             <span className="switch-knob" />
-          </button>
-          <button className="alert-edit" aria-label="Modifier" onClick={() => onEdit(a)}>
-            <Icon name="pencil" size={16} />
           </button>
           <button className="alert-edit" aria-label="Dupliquer" onClick={() => onCopy(a)}>
             <Icon name="copy" size={16} />
@@ -573,12 +563,22 @@ export default function Alerts() {
     try { await api(`/api/alerts/${a.id}`, { method: "PATCH", body: { active: !a.active } }); reload(); }
     catch (e) { setError(e.message); }
   };
+  // Retirée de la liste tout de suite (le serveur peut être lent à répondre) ; un second
+  // appui pendant la requête ne renvoie rien, et un 404 veut dire « déjà supprimée ».
+  const deleting = useRef(new Set());
   const remove = async (a) => {
+    if (deleting.current.has(a.id)) return;
+    deleting.current.add(a.id);
+    setError(null);
+    setAlerts((list) => list.filter((x) => x.id !== a.id));
+    if (editing?.id === a.id) cancelEdit(); // supprimée depuis son formulaire
     try {
       await api(`/api/alerts/${a.id}`, { method: "DELETE" });
-      if (editing?.id === a.id) cancelEdit(); // supprimée depuis son formulaire
-      reload();
-    } catch (e) { setError(e.message); }
+    } catch (e) {
+      if (e.status !== 404) { setError(e.message); reload(); }
+    } finally {
+      deleting.current.delete(a.id);
+    }
   };
   // Jours changés depuis la carte : affichés tout de suite, enregistrés en arrière-plan.
   const setDays = async (a, days) => {
