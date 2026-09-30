@@ -9,6 +9,13 @@ Toutes les évolutions notables de VéloPulse. Format inspiré de
 section `## [x.y.z] - AAAA-MM-JJ` ci-dessous, puis merger sur `main` : le workflow
 `release.yml` crée le tag `vx.y.z` et la release GitHub à partir de cette section.
 
+## [1.5.2] - 2026-09-30
+
+### Alertes
+- Cartes d'alerte : le mot « vélo » disparaît (« ≤ 1 · 08:00–09:00 ») ; les vélos
+  surveillés sont indiqués par icônes (⚡ électriques, 🚲 mécaniques, les deux pour « Les
+  deux »). Les alertes sur les places libres gardent le mot « places ».
+
 ## [1.5.1] - 2026-09-30
 
 ### Connexion et inscription

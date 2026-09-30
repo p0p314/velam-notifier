@@ -12,7 +12,6 @@ import BottomSheet from "../components/BottomSheet";
 import SwipeRow from "../components/SwipeRow";
 import Icon from "../components/Icon";
 
-const BIKE_ICON = { mechanical: "bike", ebike: "bolt", any: "bike" };
 const BIKE_OPTIONS = [
   { value: "mechanical", label: "Mécanique" },
   { value: "ebike",      label: "Électrique" },
@@ -166,7 +165,12 @@ const KIND_BADGE = {
   threshold: { icon: "bell",  label: "Alerte de disponibilité" },
   summary:   { icon: "clock", label: "Résumé à heure fixe" },
 };
-const BIKE_TYPE_LABEL = { mechanical: "Vélos mécaniques", ebike: "Vélos électriques" };
+// Vélos surveillés, en icônes (pas de mot « vélo » sur la carte) ; les deux types ⇒ deux icônes.
+const BIKE_TYPE_ICONS = {
+  ebike:      { icons: ["bolt"],         label: "Vélos électriques" },
+  mechanical: { icons: ["bike"],         label: "Vélos mécaniques" },
+  any:        { icons: ["bolt", "bike"], label: "Vélos électriques et mécaniques" },
+};
 
 /**
  * Carte d'alerte : type (alerte / résumé) et type de vélo en icônes, jours modifiables
@@ -187,9 +191,9 @@ function AlertCard({ a, onToggle, onDelete, onEdit, onCopy, onDays, paused }) {
           <button type="button" className="alert-card-main" title="Modifier l'alerte" onClick={() => onEdit(a)}>
             <span className="alert-card-name">{title}</span>
             <span className="alert-card-sub">
-              {bikeType && (
-                <span role="img" aria-label={BIKE_TYPE_LABEL[bikeType]} title={BIKE_TYPE_LABEL[bikeType]} style={{ display: "inline-flex" }}>
-                  <Icon name={BIKE_ICON[bikeType]} size={14} />
+              {BIKE_TYPE_ICONS[bikeType] && (
+                <span role="img" aria-label={BIKE_TYPE_ICONS[bikeType].label} title={BIKE_TYPE_ICONS[bikeType].label} className="alert-bike-icons">
+                  {BIKE_TYPE_ICONS[bikeType].icons.map((name) => <Icon key={name} name={name} size={14} />)}
                 </span>
               )}
               <span>{detail}</span>

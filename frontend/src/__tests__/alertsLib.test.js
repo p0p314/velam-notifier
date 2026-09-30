@@ -177,7 +177,7 @@ describe("résumé à heure fixe", () => {
     // Type (résumé) et type de vélo : en icônes sur la carte, pas en texte.
     expect(describeAlert(a)).toEqual({ title: "Gare", detail: "07:45", bikeType: "ebike" });
     expect(describeAlert({ ...a, bike_type: "any", group_name: "Maison" }))
-      .toEqual({ title: "Maison", detail: "07:45", bikeType: null });
+      .toEqual({ title: "Maison", detail: "07:45", bikeType: "any" });
     expect(describeAlert({ ...a, send_times: ["07:45", "18:00"] }).detail).toBe("07:45, 18:00");
   });
 });
@@ -214,20 +214,22 @@ describe("groupe de stations", () => {
 
 describe("describeAlert", () => {
   const a = { station_name: "Gare", target: "bikes", comparison: "at_most", bike_type: "ebike", threshold: 2, time_start: "08:00", time_end: "09:00" };
-  test("vélos : type de vélo à part (icône)", () => expect(describeAlert(a)).toEqual({ title: "Gare", detail: "≤ 2 vélos · 08:00–09:00", bikeType: "ebike" }));
-  test("singulier", () => expect(describeAlert({ ...a, threshold: 1 }).detail).toMatch(/^≤ 1 vélo ·/));
-  test("places : pas de type de vélo", () => expect(describeAlert({ ...a, target: "docks" }).bikeType).toBeNull());
+  test("vélos : ni « vélo » ni type en texte (icônes)", () => expect(describeAlert(a)).toEqual({ title: "Gare", detail: "≤ 2 · 08:00–09:00", bikeType: "ebike" }));
+  test("singulier", () => expect(describeAlert({ ...a, threshold: 1 }).detail).toMatch(/^≤ 1 ·/));
+  test("places : le mot « places » reste, pas de type de vélo", () => {
+    expect(describeAlert({ ...a, target: "docks" })).toMatchObject({ detail: "≤ 2 places · 08:00–09:00", bikeType: null });
+  });
   test("places au moins", () => expect(describeAlert({ ...a, target: "docks", comparison: "at_least", threshold: 3 }).detail).toMatch(/^≥ 3 places ·/));
   test("trajet", () => {
     const d = describeAlert({ ...a, bike_type: "any", threshold: 1, arrival_station_id: "2", arrival_station_name: "Zoo", arrival_threshold: 0 });
-    expect(d).toEqual({ title: "Gare → Zoo", detail: "Départ ≤ 1 vélo · Arrivée ≤ 0 place · 08:00–09:00", bikeType: null });
+    expect(d).toEqual({ title: "Gare → Zoo", detail: "Départ ≤ 1 · Arrivée ≤ 0 place · 08:00–09:00", bikeType: "any" });
   });
   test("groupe nommé / sans nom", () => {
     const g = { ...a, bike_type: "any", threshold: 1, group_name: "Maison",
       group_stations: [{ station_id: "1", station_name: "Gare" }, { station_id: "2", station_name: "Zoo" }] };
-    expect(describeAlert(g)).toMatchObject({ title: "Maison", detail: "≤ 1 vélo · 08:00–09:00" }); // sans « toutes »
+    expect(describeAlert(g)).toMatchObject({ title: "Maison", detail: "≤ 1 · 08:00–09:00" }); // sans « toutes » ni « vélo »
     expect(describeAlert({ ...g, group_name: null, comparison: "at_least" }))
-      .toMatchObject({ title: "Gare, Zoo", detail: "L'une ≥ 1 vélo · 08:00–09:00" });
+      .toMatchObject({ title: "Gare, Zoo", detail: "L'une ≥ 1 · 08:00–09:00" });
   });
 });
 

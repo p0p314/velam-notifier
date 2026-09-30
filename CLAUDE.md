@@ -311,7 +311,7 @@ différenciée (réglable dans Paramètres › Préférences) : par défaut mobi
   tri proximité / ordre choisi, mode « Organiser »), `MapPage` (carte + filtres + « Autour de moi » : position mesurée au clic, 3 stations les plus proches recalculées en continu selon les filtres),
   `Alerts` (formulaire complet, pause ; notification de test **uniquement** dans Paramètres ;
   carte : appui sur le nom = modifier (pas de bouton « Modifier »), pastille de type
-  (cloche / horloge), type de vélo en icône (`describeAlert` → `bikeType`, jamais en texte),
+  (cloche / horloge), vélos en icônes (`describeAlert` → `bikeType`, y compris `any` ⇒ deux icônes ; ni « vélo » ni type en texte, seules les places gardent leur mot),
   jours modifiables sur la carte (PATCH `days` optimiste), suppression par glissement
   (`components/SwipeRow`, mobile) ou dans le formulaire (confirmation) — optimiste,
   idempotente (second appui ignoré, 404 = déjà supprimée) ; « Dupliquer » ouvre le formulaire
