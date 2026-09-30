@@ -221,33 +221,38 @@ function summaryPayload(form, names) {
 const bikesWord = (type, n) => `vélo${n > 1 ? "s" : ""}${BIKE_WORD[type] ?? ""}${type !== "any" && n > 1 ? "s" : ""}`;
 const docksWord = (n) => `place${n > 1 ? "s" : ""}`;
 
-/** Résumé d'une alerte pour sa carte : { title, detail }. */
+/**
+ * Résumé d'une alerte pour sa carte : { title, detail, bikeType }. Le type (alerte /
+ * résumé) et le type de vélo sont montrés en icônes par la carte, pas en texte :
+ * `bikeType` = "mechanical" | "ebike", ou null (les deux types, ou places libres).
+ */
 export function describeAlert(a) {
   const cmp = a.comparison === "at_least" ? "≥" : "≤";
   const n = a.threshold ?? 0;
-  const what = a.target === "docks" ? docksWord(n) : bikesWord(a.bike_type, n);
+  const what = a.target === "docks" ? docksWord(n) : bikesWord("any", n);
   const window = `${a.time_start}–${a.time_end}`;
+  const bikeType = a.target !== "docks" && a.bike_type !== "any" ? a.bike_type ?? null : null;
   if (a.kind === "summary") {
     const list = (a.group_stations ?? []).map((s) => s.station_name).join(", ");
-    const kind = a.bike_type === "any" ? "vélos" : bikesWord(a.bike_type, 2);
-    const rule = `Résumé à ${(a.send_times?.length ? a.send_times : [a.time_start]).join(", ")} · ${kind}`;
+    const detail = (a.send_times?.length ? a.send_times : [a.time_start]).join(", ");
     // Groupe nommé : le nom suffit (stations visibles en modifiant l'alerte).
-    return a.group_name ? { title: a.group_name, detail: rule } : { title: list, detail: rule };
+    return { title: a.group_name || list, detail, bikeType };
   }
   if (a.group_stations?.length) {
     const list = a.group_stations.map((s) => s.station_name).join(", ");
     const rule = a.comparison === "at_least" ? `l'une ≥ ${n} ${what}` : `toutes ≤ ${n} ${what}`;
     const detail = `${rule[0].toUpperCase()}${rule.slice(1)} · ${window}`;
-    return { title: a.group_name || list, detail };
+    return { title: a.group_name || list, detail, bikeType };
   }
   if (a.arrival_station_id) {
     const arr = a.arrival_threshold ?? 0;
     return {
       title: `${a.station_name} → ${a.arrival_station_name}`,
       detail: `Départ ${cmp} ${n} ${what} · Arrivée ≤ ${arr} ${docksWord(arr)} · ${window}`,
+      bikeType,
     };
   }
-  return { title: a.station_name, detail: `${cmp} ${n} ${what} · ${window}` };
+  return { title: a.station_name, detail: `${cmp} ${n} ${what} · ${window}`, bikeType };
 }
 
 // ── Liste : filtre et tri ─────────────────────────────────────────────────────

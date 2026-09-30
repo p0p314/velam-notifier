@@ -9,6 +9,7 @@ import {
   SEND_TIMES_MAX, nextSendTime, copyForm,
 } from "../lib/alerts";
 import BottomSheet from "../components/BottomSheet";
+import SwipeRow from "../components/SwipeRow";
 import Icon from "../components/Icon";
 
 const BIKE_ICON = { mechanical: "bike", ebike: "bolt", any: "bike" };
@@ -44,17 +45,19 @@ const DAYS = [
   { label: "Di", value: 7 },
 ];
 
-function DayPicker({ value, onChange, disabled }) {
+const DAY_NAMES = ["lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche"];
+
+/** Jours de la semaine (au moins un reste coché). Formulaire et cartes de la liste. */
+function DayPicker({ value, onChange }) {
   const toggle = (day) => {
-    if (disabled) return;
     if (value.includes(day) && value.length === 1) return;
     const next = value.includes(day) ? value.filter((d) => d !== day) : [...value, day];
     onChange(next.sort((a, b) => a - b));
   };
   return (
-    <div className={`day-picker${disabled ? " disabled" : ""}`}>
+    <div className="day-picker" role="group" aria-label="Jours">
       {DAYS.map(({ label, value: day }) => (
-        <button key={day} type="button" disabled={disabled}
+        <button key={day} type="button" aria-pressed={value.includes(day)} aria-label={DAY_NAMES[day - 1]}
           className={value.includes(day) ? "active" : ""} onClick={() => toggle(day)}>
           {label}
         </button>
@@ -167,40 +170,56 @@ function PauseControl({ pausedUntil, onChange }) {
   );
 }
 
-function AlertCard({ a, onToggle, onDelete, onEdit, onCopy, paused }) {
-  const { title, detail } = describeAlert(a);
-  const icon = a.kind === "summary" ? "clock" : a.group_stations?.length ? "map-pin"
-    : a.arrival_station_id ? "route" : a.target === "docks" ? "parking" : BIKE_ICON[a.bike_type];
+const KIND_BADGE = {
+  threshold: { icon: "bell",  label: "Alerte de disponibilité" },
+  summary:   { icon: "clock", label: "Résumé à heure fixe" },
+};
+const BIKE_TYPE_LABEL = { mechanical: "Vélos mécaniques", ebike: "Vélos électriques" };
+
+/**
+ * Carte d'alerte : type (alerte / résumé) et type de vélo en icônes, jours modifiables
+ * directement ; suppression en glissant la carte (ou depuis le formulaire).
+ */
+function AlertCard({ a, onToggle, onDelete, onEdit, onCopy, onDays, paused }) {
+  const { title, detail, bikeType } = describeAlert(a);
+  const kind = KIND_BADGE[a.kind === "summary" ? "summary" : "threshold"];
   return (
-    <div className={"alert-card" + (a.active && !paused ? "" : " off")}>
-      <div className="alert-card-head">
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div className="alert-card-name">{title}</div>
-          <div className="alert-card-sub">
-            <Icon name={icon} size={14} />
-            <span>{detail}</span>
+    <SwipeRow onDelete={() => onDelete(a)} label={`Supprimer ${title}`}>
+      <div className={"alert-card" + (a.active && !paused ? "" : " off")}>
+        <div className="alert-card-head">
+          <span className={`alert-kind ${a.kind === "summary" ? "summary" : ""}`} role="img"
+            aria-label={kind.label} title={kind.label}>
+            <Icon name={kind.icon} size={18} />
+          </span>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div className="alert-card-name">{title}</div>
+            <div className="alert-card-sub">
+              {bikeType && (
+                <span role="img" aria-label={BIKE_TYPE_LABEL[bikeType]} title={BIKE_TYPE_LABEL[bikeType]} style={{ display: "inline-flex" }}>
+                  <Icon name={BIKE_ICON[bikeType]} size={14} />
+                </span>
+              )}
+              <span>{detail}</span>
+            </div>
           </div>
+          <button role="switch" aria-checked={!!a.active} aria-label={a.active ? "Désactiver" : "Activer"}
+            className={"switch" + (a.active ? " on" : "")} onClick={() => onToggle(a)}>
+            <span className="switch-knob" />
+          </button>
+          <button className="alert-edit" aria-label="Modifier" onClick={() => onEdit(a)}>
+            <Icon name="pencil" size={16} />
+          </button>
+          <button className="alert-edit" aria-label="Dupliquer" onClick={() => onCopy(a)}>
+            <Icon name="copy" size={16} />
+          </button>
         </div>
-        <button role="switch" aria-checked={!!a.active} aria-label={a.active ? "Désactiver" : "Activer"}
-          className={"switch" + (a.active ? " on" : "")} onClick={() => onToggle(a)}>
-          <span className="switch-knob" />
-        </button>
-        <button className="alert-edit" aria-label="Modifier" onClick={() => onEdit(a)}>
-          <Icon name="pencil" size={16} />
-        </button>
-        <button className="alert-edit" aria-label="Dupliquer" onClick={() => onCopy(a)}>
-          <Icon name="copy" size={16} />
-        </button>
-        <button className="alert-del" aria-label="Supprimer" onClick={() => onDelete(a)}>
-          <Icon name="trash" size={17} />
-        </button>
+        <div style={{ marginTop: 12 }}>
+          {a.valid_on
+            ? <span className="alert-once"><Icon name="calendar" size={14} /> Uniquement le {fmtDay(a.valid_on)}</span>
+            : <DayPicker value={a.days ? a.days.split(",").map(Number) : ALL_DAYS} onChange={(d) => onDays(a, d)} />}
+        </div>
       </div>
-      <div style={{ marginTop: 12 }}>
-        {a.valid_on
-          ? <span className="alert-once"><Icon name="calendar" size={14} /> Uniquement le {fmtDay(a.valid_on)}</span>
-          : <DayPicker value={a.days ? a.days.split(",").map(Number) : ALL_DAYS} onChange={() => {}} disabled />}
-      </div>
-    </div>
+    </SwipeRow>
   );
 }
 
@@ -266,7 +285,18 @@ function SendTimesPicker({ value, onChange }) {
   );
 }
 
-function AlertForm({ stations, form, setField, error, onSubmit, onCancel, editing, copying }) {
+/** Suppression depuis le formulaire : un premier appui demande confirmation. */
+function DeleteAlertButton({ onDelete }) {
+  const [confirm, setConfirm] = useState(false);
+  return (
+    <button type="button" className={"alert-del-btn" + (confirm ? " confirm" : "")}
+      onClick={() => (confirm ? onDelete() : setConfirm(true))}>
+      <Icon name="trash" size={16} /> {confirm ? "Confirmer la suppression" : "Supprimer l'alerte"}
+    </button>
+  );
+}
+
+function AlertForm({ stations, form, setField, error, onSubmit, onCancel, onDelete, editing, copying }) {
   if (stations.length === 0) {
     return <div style={{ fontSize: 14, color: "var(--text-3)" }}>Ajoutez d'abord des stations en favoris.</div>;
   }
@@ -412,6 +442,7 @@ function AlertForm({ stations, form, setField, error, onSubmit, onCancel, editin
         <button type="submit" data-autofocus className="submit-btn">
           {editing ? "Enregistrer" : copying ? "Créer la copie" : summary ? "Créer le résumé" : "Créer l'alerte"}
         </button>
+        {editing && <DeleteAlertButton key={editing.id} onDelete={() => onDelete(editing)} />}
       </div>
     </form>
   );
@@ -543,15 +574,25 @@ export default function Alerts() {
     catch (e) { setError(e.message); }
   };
   const remove = async (a) => {
-    try { await api(`/api/alerts/${a.id}`, { method: "DELETE" }); reload(); }
-    catch (e) { setError(e.message); }
+    try {
+      await api(`/api/alerts/${a.id}`, { method: "DELETE" });
+      if (editing?.id === a.id) cancelEdit(); // supprimée depuis son formulaire
+      reload();
+    } catch (e) { setError(e.message); }
+  };
+  // Jours changés depuis la carte : affichés tout de suite, enregistrés en arrière-plan.
+  const setDays = async (a, days) => {
+    const value = days.join(",");
+    setAlerts((list) => list.map((x) => (x.id === a.id ? { ...x, days: value } : x)));
+    try { await api(`/api/alerts/${a.id}`, { method: "PATCH", body: { days: value } }); }
+    catch (e) { setError(e.message); reload(); }
   };
 
   const activeCount = alerts.filter((a) => a.active).length;
   const showFilter = hasBothKinds(alerts);
   // Filtre masqué (un seul type restant) ⇒ ignoré, sinon la liste pourrait rester vide.
   const shown = visibleAlerts(alerts, { ...listPrefs, filter: showFilter ? listPrefs.filter : "all" });
-  const formProps = { stations, form, setField, error, onSubmit: save, onCancel: cancelEdit, editing, copying };
+  const formProps = { stations, form, setField, error, onSubmit: save, onCancel: cancelEdit, onDelete: remove, editing, copying };
 
   return (
     <>
@@ -576,7 +617,7 @@ export default function Alerts() {
             <div className="view-state">Aucune alerte de ce type.</div>
           ) : (
             shown.map((a) => (
-              <AlertCard key={a.id} a={a} paused={!!pausedUntil} onToggle={toggle} onDelete={remove} onEdit={startEdit} onCopy={startCopy} />
+              <AlertCard key={a.id} a={a} paused={!!pausedUntil} onToggle={toggle} onDelete={remove} onEdit={startEdit} onCopy={startCopy} onDays={setDays} />
             ))
           )}
 

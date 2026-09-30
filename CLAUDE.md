@@ -308,7 +308,10 @@ différenciée (réglable dans Paramètres › Préférences) : par défaut mobi
   par `FirstRun` (`App.jsx`) **après** le tutoriel, jamais en même temps.
 - **pages/** — `Login`, `Stations` (recherche/tri/filtre + détail), `Favorites` (swipe-to-delete,
   tri proximité / ordre choisi, mode « Organiser »), `MapPage` (carte + filtres + « Autour de moi » : position mesurée au clic, 3 stations les plus proches recalculées en continu selon les filtres),
-  `Alerts` (formulaire complet, pause, notification de test ; « Dupliquer » ouvre le formulaire
+  `Alerts` (formulaire complet, pause, notification de test ; carte : pastille de type
+  (cloche / horloge), type de vélo en icône (`describeAlert` → `bikeType`, jamais en texte),
+  jours modifiables sur la carte (PATCH `days` optimiste), suppression par glissement
+  (`components/SwipeRow`, mobile) ou dans le formulaire (confirmation) ; « Dupliquer » ouvre le formulaire
   de **création** pré-rempli via `copyForm` (rien n'est créé avant validation) ; liste filtrable par type — filtre
   affiché seulement si les deux types coexistent — et triable par heure / nom / récentes,
   désactivées en dernier, choix mémorisés en `localStorage` ; pré-rempli via

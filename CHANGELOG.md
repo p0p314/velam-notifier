@@ -31,6 +31,12 @@ section `## [x.y.z] - AAAA-MM-JJ` ci-dessous, puis merger sur `main` : le workfl
   revient à sa taille normale dès qu'on le quitte.
 
 ### Alertes
+- **Cartes d'alerte allégées** : le type (alerte 🔔 / résumé 🕐) est une pastille en tête de
+  carte, le type de vélo une icône (⚡ électrique, 🚲 mécanique) — plus de mention en texte ;
+  un résumé n'affiche que ses heures (« 07:45, 18:00 »).
+- **Jours modifiables directement sur la carte** (appui sur une pastille), sans ouvrir l'alerte.
+- **Supprimer** : en glissant la carte vers la gauche, ou depuis le formulaire de
+  modification (« Supprimer l'alerte », avec confirmation).
 - **Dupliquer une alerte** (bouton sur chaque carte) : ouvre le formulaire pré-rempli
   pour ajuster station, horaires… avant de créer la copie ; un groupe nommé devient
   « Maison (copie) ».

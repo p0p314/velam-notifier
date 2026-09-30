@@ -23,6 +23,10 @@ function mockApi() {
     }
     if (path === "/api/alerts/pause") { pausedUntil = body.until; return jsonResponse({ ok: true, paused_until: body.until }); }
     if (path.startsWith("/api/alerts/") && method === "PATCH") return jsonResponse({ ok: true, alert: {} });
+    if (path.startsWith("/api/alerts/") && method === "DELETE") {
+      alerts = alerts.filter((a) => `/api/alerts/${a.id}` !== path);
+      return jsonResponse({ ok: true });
+    }
     if (path === "/api/push/test") return jsonResponse({ ok: true, sent: 2, total: 2 });
     return jsonResponse({ ok: false, error: `route non simulée ${method} ${path}` }, 404);
   });
@@ -50,6 +54,62 @@ async function ready() {
   renderPage();
   await screen.findByRole("option", { name: "Zoo" });
 }
+
+describe("carte d'alerte", () => {
+  const base = { id: 5, active: 1, station_id: "1", station_name: "Gare", target: "bikes", comparison: "at_most",
+    bike_type: "ebike", threshold: 1, time_start: "08:00", time_end: "09:00", days: "1,2", valid_on: null,
+    group_name: null, group_stations: null };
+  const card = () => within(document.querySelector(".alert-card"));
+
+  test("type d'alerte et type de vélo en icônes, pas en texte", async () => {
+    alerts = [base];
+    renderPage();
+    await screen.findByText("≤ 1 vélo · 08:00–09:00");
+    expect(card().getByRole("img", { name: "Alerte de disponibilité" })).toBeTruthy();
+    expect(card().getByRole("img", { name: "Vélos électriques" })).toBeTruthy();
+    expect(document.querySelector(".alert-card").textContent).not.toMatch(/électrique/);
+  });
+
+  test("jours modifiables directement sur la carte", async () => {
+    alerts = [base];
+    renderPage();
+    await screen.findByText("≤ 1 vélo · 08:00–09:00");
+    fireEvent.click(card().getByRole("button", { name: "vendredi" }));
+    expect(card().getByRole("button", { name: "vendredi" }).getAttribute("aria-pressed")).toBe("true");
+    await waitFor(() => expect(calls.find((c) => c.method === "PATCH")?.body).toEqual({ days: "1,2,5" }));
+  });
+
+  test("supprimer : bouton révélé en glissant la carte", async () => {
+    alerts = [base];
+    renderPage();
+    await screen.findByText("≤ 1 vélo · 08:00–09:00");
+    // jsdom n'a pas de PointerEvent (clientX serait perdu) : équivalent souris.
+    window.PointerEvent ??= class extends MouseEvent {
+      constructor(type, init = {}) { super(type, init); this.pointerId = init.pointerId; }
+    };
+    const fg = document.querySelector(".swipe-fg");
+    fireEvent.pointerDown(fg, { clientX: 300, clientY: 10, pointerId: 1 });
+    fireEvent.pointerMove(fg, { clientX: 200, clientY: 12, pointerId: 1 });
+    fireEvent.pointerUp(fg, { clientX: 200, clientY: 12, pointerId: 1 });
+    const del = screen.getByRole("button", { name: "Supprimer Gare" });
+    expect(del.getAttribute("aria-hidden")).toBe("false");
+    fireEvent.click(del);
+    await waitFor(() => expect(calls.some((c) => c.method === "DELETE" && c.path === "/api/alerts/5")).toBe(true));
+  });
+
+  test("supprimer depuis le formulaire de modification, après confirmation", async () => {
+    alerts = [base];
+    renderPage();
+    await screen.findByText("≤ 1 vélo · 08:00–09:00");
+    fireEvent.click(screen.getByRole("button", { name: "Modifier" }));
+    const f = within(form());
+    fireEvent.click(f.getByRole("button", { name: /Supprimer l'alerte/ }));
+    expect(calls.some((c) => c.method === "DELETE")).toBe(false);
+    fireEvent.click(f.getByRole("button", { name: /Confirmer la suppression/ }));
+    await waitFor(() => expect(calls.some((c) => c.method === "DELETE" && c.path === "/api/alerts/5")).toBe(true));
+    expect(within(form()).getByText("Nouvelle alerte")).toBeTruthy(); // formulaire refermé
+  });
+});
 
 describe("dupliquer une alerte", () => {
   test("formulaire de création pré-rempli, rien n'est créé avant validation", async () => {
@@ -234,7 +294,8 @@ describe("résumé à heure fixe", () => {
       group_name: null, group_stations: [{ station_id: "1", station_name: "Gare" }, { station_id: "2", station_name: "Zoo" }] }];
     renderPage();
     expect(await screen.findByText("Gare, Zoo")).toBeTruthy();
-    expect(screen.getByText("Résumé à 07:40 · vélos")).toBeTruthy();
+    expect(screen.getByText("07:40")).toBeTruthy();
+    expect(screen.getByRole("img", { name: "Résumé à heure fixe" })).toBeTruthy();
   });
 
   test("carte d'un résumé à plusieurs heures", async () => {
@@ -243,7 +304,7 @@ describe("résumé à heure fixe", () => {
       valid_on: null, group_name: "Maison", group_stations: [{ station_id: "1", station_name: "Gare" }] }];
     renderPage();
     expect(await screen.findByText("Maison")).toBeTruthy();
-    expect(screen.getByText("Résumé à 07:40, 17:30 · vélos")).toBeTruthy();
+    expect(screen.getByText("07:40, 17:30")).toBeTruthy();
     expect(document.querySelector(".alert-card").textContent).not.toMatch(/Gare/);
   });
 });
