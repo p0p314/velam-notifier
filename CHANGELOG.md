@@ -11,6 +11,18 @@ section `## [x.y.z] - AAAA-MM-JJ` ci-dessous, puis merger sur `main` : le workfl
 
 ## [1.5.1] - 2026-09-30
 
+### Connexion et inscription
+- Page retravaillée : présentation de l'app, choix Connexion / Inscription, champs plus
+  grands (pas de zoom sur iPhone), bouton pour **afficher le mot de passe**, pas de
+  majuscule automatique sur le nom d'utilisateur.
+- Inscription : **confirmation du mot de passe** (il n'est pas récupérable) et
+  vérifications avant envoi (8 caractères minimum, nom de 32 caractères maximum).
+
+### Stations et favoris
+- Cartes de station : l'état n'est plus qu'une **pastille de couleur** (vert : ouverte,
+  orange : faible disponibilité, rouge : hors service) ; le libellé reste dans la fiche
+  de la station.
+
 ### Alertes
 - Supprimer une alerte n'affiche plus « Alerte introuvable » : l'alerte disparaît de la
   liste tout de suite, et un second appui pendant l'enregistrement est ignoré.
@@ -22,8 +34,8 @@ section `## [x.y.z] - AAAA-MM-JJ` ci-dessous, puis merger sur `main` : le workfl
 ### Corrections
 - Glisser pour supprimer (Alertes, Favoris) : le bouton rouge est détaché de la carte,
   avec des coins arrondis, et ne dépasse plus aux coins au repos.
-- Page Stations (téléphone) : l'état et l'étoile favori sont alignés en haut à droite, les
-  compteurs ne passent plus sur deux lignes.
+- Page Stations (téléphone) : la pastille d'état et l'étoile favori sont alignées en haut
+  à droite, les compteurs ne passent plus sur deux lignes.
 
 ## [1.5.0] - 2026-09-30
 

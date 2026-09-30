@@ -128,21 +128,34 @@ select option { background: var(--surface); color: var(--text); }
 :focus-visible { outline: none; box-shadow: var(--focus-ring); border-radius: var(--r-sm); }
 
 /* ── Connexion ───────────────────────────────────────────────────────────── */
-.auth-wrap { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 20px; background: var(--bg); }
-.auth-card { width: 100%; max-width: 320px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg); padding: 28px 24px; box-shadow: var(--shadow-pop); }
-.auth-brand { text-align: center; margin-bottom: 22px; }
-.auth-logo { width: 42px; height: 42px; border-radius: 11px; overflow: hidden; display: inline-flex; align-items: center; justify-content: center; margin-bottom: 12px; }
-.auth-name { font-size: 19px; font-weight: 600; letter-spacing: -.015em; color: var(--text); }
-.auth-sub { font-size: 12px; color: var(--text-3); margin-top: 2px; }
+.auth-wrap {
+  min-height: 100vh; min-height: 100dvh; display: flex; align-items: center; justify-content: center; background: var(--bg);
+  padding: calc(24px + env(safe-area-inset-top)) 16px calc(20px + env(safe-area-inset-bottom));
+}
+.auth-inner { width: 100%; max-width: 380px; display: flex; flex-direction: column; gap: 22px; }
+.auth-hero { text-align: center; }
+.auth-logo { width: 56px; height: 56px; border-radius: 14px; overflow: hidden; display: inline-flex; align-items: center; justify-content: center; margin-bottom: 12px; }
+.auth-name { margin: 0; font-size: 26px; font-weight: 700; letter-spacing: -.02em; color: var(--text); }
+.auth-sub { margin: 4px 0 0; font-size: 14px; color: var(--text-2); }
+.auth-features { list-style: none; margin: 18px auto 0; padding: 0; display: inline-flex; flex-direction: column; gap: 8px; text-align: left; }
+.auth-features li { display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--text-2); }
+.auth-features .ic { flex-shrink: 0; color: var(--accent); }
+.auth-card { display: flex; flex-direction: column; gap: 14px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg); padding: 20px; box-shadow: var(--shadow-pop); }
+.auth-seg button { flex: 1; }
 .app-version { font-size: 11px; color: var(--text-3); font-family: var(--font-mono); text-align: center; }
-.auth-tabs { display: flex; margin-bottom: 20px; border-bottom: 1px solid var(--hairline); }
-.auth-tab { flex: 1; padding: 10px 0; background: none; border: none; border-bottom: 2px solid transparent; margin-bottom: -1px; color: var(--text-3); font-size: 13px; font-weight: 500; cursor: pointer; }
-.auth-tab.active { color: var(--text); border-bottom-color: var(--accent); font-weight: 600; }
-.auth-field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
-.auth-field span { font-size: 12px; font-weight: 500; color: var(--text-2); }
-.auth-field input { height: 40px; padding: 0 12px; background: var(--inset); border: 1px solid var(--border-strong); border-radius: var(--r-sm); color: var(--text); font-size: 14px; outline: none; transition: border-color .15s, box-shadow .15s; }
+.auth-field { display: flex; flex-direction: column; gap: 6px; }
+.auth-field > span, .auth-field > label { font-size: 13px; font-weight: 500; color: var(--text-2); }
+/* 16 px : pas de zoom d'iOS sur le formulaire de connexion. */
+.auth-field input { width: 100%; height: 46px; padding: 0 14px; background: var(--inset); border: 1px solid var(--border-strong); border-radius: var(--r-sm); color: var(--text); font-size: 16px; outline: none; transition: border-color .15s, box-shadow .15s; }
 .auth-field input:focus { border-color: var(--accent); box-shadow: var(--focus-ring); }
-.auth-error { color: var(--danger); font-size: 12px; margin: 4px 0 12px; text-align: center; }
+.auth-password { position: relative; }
+.auth-password input { padding-right: 48px; }
+.auth-eye { position: absolute; top: 1px; right: 1px; width: 44px; height: 44px; display: inline-flex; align-items: center; justify-content: center; background: none; border: none; color: var(--text-3); cursor: pointer; border-radius: var(--r-sm); }
+.auth-eye:hover { color: var(--text-2); }
+.auth-hint { font-size: 12px; color: var(--text-3); }
+.auth-error { padding: 10px 12px; border-radius: var(--r-sm); background: var(--danger-bg); color: var(--danger); font-size: 13px; }
+.auth-card .submit-btn:disabled { opacity: .6; cursor: default; }
+.auth-foot a { color: inherit; }
 
 /* ── Shell applicatif ────────────────────────────────────────────────────── */
 .app-shell { min-height: 100%; display: flex; flex-direction: column; }
@@ -326,15 +339,20 @@ select option { background: var(--surface); color: var(--text); }
 .status-pill.open  { color: var(--ok); }      .status-pill.open  .dot { background: var(--ok); }
 .status-pill.warn  { color: var(--warn); }    .status-pill.warn  .dot { background: var(--warn); }
 .status-pill.closed{ color: var(--danger); }  .status-pill.closed .dot { background: var(--danger); }
+/* Pastille seule (cartes de liste) : le libellé est au survol / pour les lecteurs d'écran. */
+.status-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+.status-dot.open { background: var(--ok); }
+.status-dot.warn { background: var(--warn); }
+.status-dot.closed { background: var(--danger); }
 .station-item.offline { opacity: .6; }
 /* Mobile : état (et étoile) en haut à droite, compteurs sur toute la largeur — sinon
    l'étoile de la page Stations tasse la carte (compteurs sur deux lignes). */
 @media (max-width: 768px) {
-  .station-item > .status-pill { position: absolute; top: 15px; right: 14px; }
-  .station-item.with-fav > .status-pill { right: 50px; }
+  .station-item > .status-dot { position: absolute; top: 19px; right: 16px; }
+  .station-item.with-fav > .status-dot { right: 54px; }
   .station-item > .item-fav { position: absolute; top: 3px; right: 4px; margin: 0; }
-  .station-item-name { padding-right: 84px; }
-  .station-item.with-fav .station-item-name { padding-right: 120px; }
+  .station-item-name { padding-right: 20px; }
+  .station-item.with-fav .station-item-name { padding-right: 64px; }
 }
 
 /* Variantes desktop (cards compactes Favoris) */
@@ -677,7 +695,7 @@ select option { background: var(--surface); color: var(--text); }
   .station-item-addr { display: block; font-size: 12px; color: var(--text-3); margin-bottom: 14px; padding-right: 92px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
   .station-item > .station-item-counts { display: none; }
-  .station-item > .status-pill { display: none; }
+  .station-item > .status-dot { display: none; }
 
   .card-counts { display: flex; align-items: center; gap: 14px; }
   .count-item { display: inline-flex; align-items: center; gap: 5px; }
@@ -813,7 +831,8 @@ select option { background: var(--surface); color: var(--text); }
 .danger-btn { min-height: 44px; padding: 0 16px; border: none; border-radius: var(--r-sm); background: var(--danger); color: var(--on-accent); font-size: 14px; font-weight: 600; cursor: pointer; }
 .danger-btn:disabled { opacity: .6; }
 .form-ok { color: var(--ok); font-size: 13px; }
-.auth-note { font-size: 12px; line-height: 1.45; color: var(--text-3); }
+.auth-note { display: flex; gap: 8px; align-items: flex-start; padding: 10px 12px; border-radius: var(--r-sm); background: var(--inset); font-size: 12px; line-height: 1.45; color: var(--text-2); }
+.auth-note .ic { flex-shrink: 0; margin-top: 1px; color: var(--warn); }
 .nav-user { display: inline-flex; align-items: center; gap: 6px; text-decoration: none; }
 .legal-page { max-width: 720px; margin: 0 auto; padding: 24px 16px 48px; color: var(--text-2); font-size: 14px; line-height: 1.6; background: var(--bg); }
 .legal-page h2 { font-size: 16px; color: var(--text); margin: 24px 0 8px; }
