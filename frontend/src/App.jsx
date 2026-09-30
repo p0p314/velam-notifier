@@ -2,7 +2,7 @@ import { lazy, Suspense } from "react";
 import { Routes, Route, Navigate, Outlet, useNavigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "./auth";
 import { useIsMobile } from "./hooks";
-import { ThemeProvider, useTheme } from "./useTheme";
+import { ThemeProvider } from "./useTheme";
 import { PwaInstallProvider, usePwaInstall } from "./components/PwaInstallContext";
 import { getLandingPref, landingPath } from "./lib/prefs";
 import BottomNav from "./components/BottomNav";
@@ -47,7 +47,6 @@ function FirstRun() {
 }
 
 export function Layout() {
-  const { theme, toggle } = useTheme();
   // Déjà installée (lancée depuis l'écran d'accueil) : plus rien à proposer.
   const { open: openInstall, isInstalled } = usePwaInstall();
   const navigate = useNavigate();
@@ -60,9 +59,6 @@ export function Layout() {
           <span className="brand-name">VéloPulse</span>
         </div>
         <div style={{ display: "flex", gap: 8 }}>
-          <button className="icon-btn" aria-label="Changer de thème" onClick={toggle}>
-            <Icon name={theme === "dark" ? "sun" : "moon"} />
-          </button>
           {!isInstalled && (
             <button className="icon-btn" aria-label="Installer l'app" onClick={openInstall}>
               <Icon name="download" />

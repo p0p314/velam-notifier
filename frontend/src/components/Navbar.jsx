@@ -1,6 +1,5 @@
 import { NavLink, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth";
-import { useTheme } from "../useTheme";
 import { usePwaInstall } from "./PwaInstallContext";
 import Icon from "./Icon";
 import Logo from "./Logo";
@@ -9,7 +8,6 @@ import { APP_VERSION } from "../theme";
 // Top navbar — affichée uniquement en desktop (> 768px) via CSS.
 export default function Navbar() {
   const { user, logout } = useAuth();
-  const { theme, toggle } = useTheme();
   const { open: openInstall, isMobile, isInstalled } = usePwaInstall();
   const navigate = useNavigate();
   const cls = ({ isActive }) => "nav-link" + (isActive ? " active" : "");
@@ -30,9 +28,6 @@ export default function Navbar() {
       <div className="nav-right">
         {/* Installation PWA : uniquement sur mobile (jamais sur desktop), et pas si déjà installée. */}
         {isMobile && !isInstalled && <button className="nav-btn" onClick={openInstall}><Icon name="download" /> Installer</button>}
-        <button className="icon-btn" aria-label="Changer de thème" onClick={toggle}>
-          <Icon name={theme === "dark" ? "sun" : "moon"} />
-        </button>
         <NavLink to="/compte" className="nav-user" title="Paramètres"><Icon name="user" size={16} /> {user?.username}</NavLink>
         <button className="nav-btn" onClick={async () => { await logout(); navigate("/login", { replace: true }); }}>
           <Icon name="log-out" /> Déconnexion

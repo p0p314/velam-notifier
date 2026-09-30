@@ -59,8 +59,8 @@ describe("thème automatique", () => {
     });
   };
   function Probe() {
-    const { theme, mode, toggle } = useTheme();
-    return <button onClick={toggle}>{mode}:{theme}</button>;
+    const { theme, mode, setMode } = useTheme();
+    return <button onClick={() => setMode("light")}>{mode}:{theme}</button>;
   }
 
   test("par défaut, suit le réglage de l'appareil, y compris quand il change", async () => {
@@ -75,7 +75,7 @@ describe("thème automatique", () => {
     expect(document.documentElement.dataset.theme).toBe("dark");
   });
 
-  test("le bouton de l'en-tête fixe un thème explicite (l'opposé de celui affiché)", () => {
+  test("un thème explicite choisi remplace le réglage de l'appareil", () => {
     dark = true;
     fakeMatchMedia();
     render(<ThemeProvider><Probe /></ThemeProvider>);

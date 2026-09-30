@@ -266,8 +266,8 @@ différenciée (réglable dans Paramètres › Préférences) : par défaut mobi
 - **auth.jsx** — `AuthContext` / `useAuth` (login/register/logout async, `isAuthenticated`).
   Au démarrage : `/api/auth/me` (ignoré si la session a changé entre-temps) puis `syncPush()`.
 - **useTheme.jsx** — thème via `data-theme` sur `<html>` ; mode `light|dark|system` persisté
-  (`system`, défaut : suit `prefers-color-scheme` en direct) ; le bouton de l'en-tête fixe un
-  thème explicite. `public/theme-init.js` applique le même choix avant le rendu.
+  (`system`, défaut : suit `prefers-color-scheme` en direct) ; choisi **uniquement** dans
+  Paramètres › Préférences (pas de bouton dans l'en-tête). `public/theme-init.js` applique le même choix avant le rendu.
 - **lib/prefs.js** — préférences **de l'appareil** (localStorage) : type de vélo par défaut
   (formulaire d'alerte, filtres Stations / Carte via `stationFilterFor`) et page d'ouverture
   (`landingPath`, utilisé par `<Landing>`).

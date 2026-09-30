@@ -23,6 +23,10 @@ section `## [x.y.z] - AAAA-MM-JJ` ci-dessous, puis merger sur `main` : le workfl
   suivi de l'accueil pratique (installer, notifications, favoris).
 - Le tutoriel peut être revu depuis **Paramètres › Préférences**.
 
+### Interface
+- Le bouton clair / sombre de l'en-tête est retiré : le thème se règle dans
+  **Paramètres › Préférences** (clair, sombre ou automatique).
+
 ### Alertes
 - Alertes et résumés de groupe **nommés** : la liste n'affiche plus que le nom du groupe
   (« Maison »), plus le détail des stations — visible en modifiant l'alerte.
