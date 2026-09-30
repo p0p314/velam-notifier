@@ -266,6 +266,17 @@ describe("Paramètres — Notifications", () => {
     await waitFor(() => expect(toggle().getAttribute("aria-checked")).toBe("true"));
   });
 
+  test("notification de test : résultat, ou erreur du serveur", async () => {
+    mockApi({ "POST /api/push/test": () => jsonResponse({ ok: true, sent: 2, total: 2 }) });
+    renderAt(NOTIF);
+    fireEvent.click(screen.getByRole("button", { name: "Tester" }));
+    expect(await screen.findByText("Notification envoyée à 2 appareils.")).toBeTruthy();
+
+    mockApi({ "POST /api/push/test": () => jsonResponse({ ok: false, error: "Aucun appareil enregistré" }, 409) });
+    fireEvent.click(screen.getByRole("button", { name: "Tester" }));
+    expect(await screen.findByText("Aucun appareil enregistré")).toBeTruthy();
+  });
+
   test("bloquées dans le navigateur : explication, pas d'interrupteur", () => {
     push.state = "denied";
     mockApi();

@@ -29,7 +29,7 @@ export const TUTORIAL_SLIDES = [
     text: "Touchez l'étoile d'une station (maison, travail…) : elle apparaît dans Favoris, triée par proximité ou dans votre ordre.",
     points: [
       "Renommez-les (« Maison ») et réorganisez-les",
-      "Consultables même hors connexion",
+      "Depuis la fiche d'une station, créez une alerte en un geste",
     ],
   },
   {

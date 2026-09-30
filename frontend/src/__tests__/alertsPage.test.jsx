@@ -97,11 +97,25 @@ describe("carte d'alerte", () => {
     await waitFor(() => expect(calls.some((c) => c.method === "DELETE" && c.path === "/api/alerts/5")).toBe(true));
   });
 
+  test("supprimer : carte retirée tout de suite ; déjà supprimée (404) → aucun message d'erreur", async () => {
+    alerts = [base];
+    renderPage();
+    await screen.findByText("≤ 1 vélo · 08:00–09:00");
+    let answer;
+    fetch.mockImplementationOnce(() => new Promise((r) => { answer = r; })); // serveur lent
+    fireEvent.click(document.querySelector(".swipe-delete"));
+    expect(document.querySelector(".alert-card")).toBeNull();
+    answer(jsonResponse({ ok: false, error: "Alerte introuvable" }, 404));
+    await waitFor(() => expect(fetch).toHaveBeenCalled());
+    await new Promise((r) => setTimeout(r, 0));
+    expect(screen.queryByText("Alerte introuvable")).toBeNull();
+  });
+
   test("supprimer depuis le formulaire de modification, après confirmation", async () => {
     alerts = [base];
     renderPage();
     await screen.findByText("≤ 1 vélo · 08:00–09:00");
-    fireEvent.click(screen.getByRole("button", { name: "Modifier" }));
+    fireEvent.click(screen.getByTitle("Modifier l'alerte"));
     const f = within(form());
     fireEvent.click(f.getByRole("button", { name: /Supprimer l'alerte/ }));
     expect(calls.some((c) => c.method === "DELETE")).toBe(false);
@@ -232,10 +246,10 @@ describe("groupe de stations", () => {
       group_name: "Maison", group_stations: [{ station_id: "1", station_name: "Gare" }, { station_id: "9", station_name: "Cirque" }] }];
     renderPage();
     expect(await screen.findByText("Maison")).toBeTruthy();
-    expect(screen.getByText("Toutes ≤ 0 vélo · 08:00–09:00")).toBeTruthy();
+    expect(screen.getByText("≤ 0 vélo · 08:00–09:00")).toBeTruthy();
     expect(document.querySelector(".alert-card").textContent).not.toMatch(/Cirque/); // groupe nommé : pas la liste des stations
 
-    fireEvent.click(screen.getByRole("button", { name: "Modifier" }));
+    fireEvent.click(screen.getByTitle("Modifier l'alerte"));
     const f = within(form());
     // Station du groupe hors favoris quand même proposée et cochée.
     expect(f.getByRole("checkbox", { name: "Cirque" }).checked).toBe(true);
@@ -344,7 +358,7 @@ describe("liste", () => {
     alerts = [{ id: 7, active: 1, station_id: "2", station_name: "Zoo", target: "docks", comparison: "at_most", bike_type: "any",
       threshold: 2, time_start: "17:00", time_end: "18:00", days: "1,2", valid_on: null }];
     renderPage();
-    fireEvent.click(await screen.findByRole("button", { name: "Modifier" }));
+    fireEvent.click(await screen.findByTitle("Modifier l'alerte"));
     const f = within(form());
     expect(f.getByLabelText("Seuil").value).toBe("2");
     fireEvent.change(f.getByLabelText("Seuil"), { target: { value: "4" } });
@@ -432,18 +446,10 @@ describe("pause globale", () => {
 });
 
 describe("notification de test", () => {
-  test("bouton Tester quand les notifications sont accordées", async () => {
+  test("absente de la page Alertes (elle est dans Paramètres)", async () => {
     await ready();
-    fireEvent.click(screen.getByRole("button", { name: "Tester" }));
-    expect(await screen.findByText("Notification envoyée à 2 appareils.")).toBeTruthy();
-    expect(calls.some((c) => c.method === "POST" && c.path === "/api/push/test")).toBe(true);
-  });
-
-  test("erreur serveur affichée", async () => {
-    await ready();
-    fetch.mockImplementationOnce(async () => jsonResponse({ ok: false, error: "Aucun appareil enregistré" }, 409));
-    fireEvent.click(screen.getByRole("button", { name: "Tester" }));
-    expect(await screen.findByText("Aucun appareil enregistré")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Tester" })).toBeNull();
+    expect(screen.queryByText(/Notifications activées/)).toBeNull();
   });
 });
 

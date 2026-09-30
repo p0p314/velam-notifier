@@ -44,7 +44,7 @@ function FavoriteItem({ s, onOpen, onDelete, dist }) {
     <div className="swipe-wrap">
       {/* Mobile : bouton révélé par le swipe */}
       <button
-        className="swipe-delete"
+        className={"swipe-delete" + (revealed ? " shown" : "")}
         onClick={() => onDelete(s)}
         tabIndex={revealed ? 0 : -1}
         aria-hidden={!revealed}

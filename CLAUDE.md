@@ -306,12 +306,15 @@ différenciée (réglable dans Paramètres › Préférences) : par défaut mobi
 - **components/Onboarding.jsx** — accueil au premier lancement (installer / notifications /
   favoris), uniquement les étapes encore utiles ; rien n'est monté une fois terminé. Monté
   par `FirstRun` (`App.jsx`) **après** le tutoriel, jamais en même temps.
-- **pages/** — `Login`, `Stations` (recherche/tri/filtre + détail), `Favorites` (swipe-to-delete,
+- **pages/** — `Login` (connexion / inscription : présentation, `validateAuth` avant envoi —
+  confirmation du mot de passe à l'inscription —, afficher le mot de passe, champs 16 px), `Stations` (recherche/tri/filtre + détail), `Favorites` (swipe-to-delete,
   tri proximité / ordre choisi, mode « Organiser »), `MapPage` (carte + filtres + « Autour de moi » : position mesurée au clic, 3 stations les plus proches recalculées en continu selon les filtres),
-  `Alerts` (formulaire complet, pause, notification de test ; carte : pastille de type
+  `Alerts` (formulaire complet, pause ; notification de test **uniquement** dans Paramètres ;
+  carte : appui sur le nom = modifier (pas de bouton « Modifier »), pastille de type
   (cloche / horloge), type de vélo en icône (`describeAlert` → `bikeType`, jamais en texte),
   jours modifiables sur la carte (PATCH `days` optimiste), suppression par glissement
-  (`components/SwipeRow`, mobile) ou dans le formulaire (confirmation) ; « Dupliquer » ouvre le formulaire
+  (`components/SwipeRow`, mobile) ou dans le formulaire (confirmation) — optimiste,
+  idempotente (second appui ignoré, 404 = déjà supprimée) ; « Dupliquer » ouvre le formulaire
   de **création** pré-rempli via `copyForm` (rien n'est créé avant validation) ; liste filtrable par type — filtre
   affiché seulement si les deux types coexistent — et triable par heure / nom / récentes,
   désactivées en dernier, choix mémorisés en `localStorage` ; pré-rempli via
@@ -320,7 +323,8 @@ différenciée (réglable dans Paramètres › Préférences) : par défaut mobi
   d'ouverture ; notifications de cet appareil ; mot de passe, appareils connectés
   (`lib/devices.js`), export des données, suppression du compte — puis partage de l'app
   via `lib/share.js` : feuille de partage, sinon presse-papiers), `Privacy` (`/confidentialite`, publique).
-- **components/** — `StationCard` (desktop), `StationListItem` (mobile, étoile favori optionnelle
+- **components/** — `StationCard` (desktop), `StationListItem` (mobile ; état en **pastille de couleur seule** `status-dot`, libellé
+  dans le `title` et le nom accessible, texte gardé dans `StationDetailSheet` ; étoile favori optionnelle
   via `onToggleFav`), `StationDetailSheet`,
   `BottomSheet`, `BottomNav` / `Navbar`, `Icon` (SVG inline style Lucide), `Logo`, `Offline`,
   `map/StationMap` (markers diffés, pas de recréation), `map/MapFilters`.

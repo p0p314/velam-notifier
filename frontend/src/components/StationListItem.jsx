@@ -17,13 +17,16 @@ export default function StationListItem({ s, onClick, dist, isFav = false, onTog
     if (onClick && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); onClick(); }
   };
 
+  // Carte de liste : l'état en pastille de couleur seule (place comptée sur téléphone) ;
+  // le libellé (« Ouverte », « Faible disponibilité »…) reste dans la fiche détaillée.
+  // (Décorative pour les lecteurs d'écran : l'état est lu dans le libellé de la carte.)
   const Pill = (
-    <span className={"status-pill " + st.cls}><span className="dot" />{st.label}</span>
+    <span className={"status-dot " + st.cls} title={st.labelLong} aria-hidden="true" />
   );
 
   return (
-    <div className={"station-item" + (offline ? " offline" : "")} role="button" tabIndex={0} onClick={onClick} onKeyDown={onKey}
-      aria-label={`${s.name}, voir le détail`}>
+    <div className={"station-item" + (offline ? " offline" : "") + (onToggleFav ? " with-fav" : "")} role="button" tabIndex={0} onClick={onClick} onKeyDown={onKey}
+      aria-label={`${s.name}, ${st.labelLong.toLowerCase()}, voir le détail`}>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div className="station-item-name">{s.name}</div>
         {s.subtitle && <div className="station-item-sub">{s.subtitle}</div>}
