@@ -357,9 +357,11 @@ Helpers de migration portables : `columnsOf` / `addColumn` / `dropColumn` (`migr
 - **Sécurité** : secrets uniquement via env/`config`, jamais commités ; garder le CSP à jour
   si de nouvelles origines externes sont ajoutées. Pas de `<script>` inline dans `index.html`
   (bloqué par `script-src 'self'`) → fichier dans `public/` (cf. `theme-init.js`).
-- **Zoom désactivé** (choix produit) : viewport `user-scalable=no`, `touch-action: manipulation`,
-  `gesturestart` annulé (`main.jsx`, iOS ignore le viewport) et champs à **16 px** sur mobile
-  (sinon iOS zoome au focus). Garder ≥ 16 px pour tout nouveau champ de saisie.
+- **Zoom** (choix produit, `lib/zoom.js` installé par `main.jsx`) : pincement et double-tap
+  bloqués (`touch-action: pan-x pan-y` sur `html`, `gesturestart` annulé pour iOS) ; le zoom
+  automatique d'iOS au focus d'un champ < 16 px est **conservé**, et l'échelle est remise à 1
+  en quittant les champs (`maximum-scale=1` posé 300 ms sur le viewport). Ne pas remettre
+  `user-scalable=no` / `maximum-scale` en dur dans `index.html` : cela supprimerait ce zoom.
 
 ## Déploiement
 

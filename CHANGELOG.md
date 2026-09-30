@@ -26,8 +26,9 @@ section `## [x.y.z] - AAAA-MM-JJ` ci-dessous, puis merger sur `main` : le workfl
 ### Interface
 - Le bouton clair / sombre de l'en-tête est retiré : le thème se règle dans
   **Paramètres › Préférences** (clair, sombre ou automatique).
-- **Zoom désactivé** dans l'application (pincement, double appui, zoom automatique
-  d'iPhone sur les champs de saisie). La carte reste zoomable.
+- **Zoom au pincement et au double appui désactivé** dans l'application (la carte reste
+  zoomable). Sur iPhone, un champ de saisie s'agrandit toujours au toucher, et l'écran
+  revient à sa taille normale dès qu'on le quitte.
 
 ### Alertes
 - **Dupliquer une alerte** (bouton sur chaque carte) : ouvre le formulaire pré-rempli

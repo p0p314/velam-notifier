@@ -99,8 +99,9 @@
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
 html, body, #root { height: 100%; }
-/* Pas de zoom au double-tap (et pas de délai de 300 ms sur les appuis). */
-html { touch-action: manipulation; }
+/* Ni pincement ni double-tap (Android / Chrome) ; défilement conservé. La carte gère
+   son propre zoom (Mapbox, touch-action: none). iOS : voir lib/zoom.js. */
+html { touch-action: pan-x pan-y; }
 body {
   background: var(--bg);
   color: var(--text);
@@ -535,8 +536,6 @@ select option { background: var(--surface); color: var(--text); }
 .form-label { font-size: 12px; font-weight: 500; color: var(--text-2); }
 .field { height: 40px; background: var(--inset); border: 1px solid var(--border-strong); border-radius: var(--r-sm); padding: 0 12px; color: var(--text); font-size: 14px; outline: none; transition: border-color .15s, box-shadow .15s; }
 .field:focus { border-color: var(--accent); box-shadow: var(--focus-ring); }
-/* iOS zoome sur tout champ < 16 px au focus : 16 px sur téléphone. */
-@media (max-width: 768px) { .field, .select-wrap select, .auth-field input { font-size: 16px; } }
 .select-wrap.select-inset select { background: var(--inset); }
 
 /* ── Carte Mapbox ─────────────────────────────────────────────────────────── */
