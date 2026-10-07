@@ -96,9 +96,10 @@ export function useTrainRoute(id) {
 /**
  * Favoris trains (avec l'état de leurs prochaines circulations) et alertes de ligne,
  * plus les actions associées. Chaque action recharge la liste depuis le serveur.
+ * `enabled` faux (fonctionnalité trains désactivée) : rien n'est chargé.
  */
-export function useMyTrains() {
-  const res = useTrainResource("/api/trains/favorites", { auth: true });
+export function useMyTrains(enabled = true) {
+  const res = useTrainResource(enabled ? "/api/trains/favorites" : null, { auth: true });
   useVisibleRefresh(() => res.load(), TRAIN_REFRESH_MS, !!res.data?.favorites?.length);
   const { load } = res;
 

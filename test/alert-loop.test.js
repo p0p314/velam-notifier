@@ -61,6 +61,15 @@ describe('déclenchement', () => {
     assert.equal(sent.length, 0);
   });
 
+  test('fonctionnalité vélos désactivée pour le compte : alertes vélo conservées mais pas envoyées', async () => {
+    await createAlert(userId, alertBase);
+    await require('../db').setModules(userId, { bikes: false, trains: true });
+    await setBikes(0);
+    assert.equal(await checkAlerts(WED_0830), 'aucune_due');
+    assert.equal(sent.length, 0);
+    assert.equal(await alertCount(), 1);
+  });
+
   test('aucune alerte active → aucun appel GBFS', async () => {
     await createAlert(userId, { ...alertBase, active: 0 });
     await checkAlerts(WED_0830);

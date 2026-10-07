@@ -7,7 +7,7 @@ import { APP_VERSION } from "../theme";
 
 // Top navbar — affichée uniquement en desktop (> 768px) via CSS.
 export default function Navbar() {
-  const { user, logout } = useAuth();
+  const { user, logout, modules } = useAuth();
   const { open: openInstall, isMobile, isInstalled } = usePwaInstall();
   const navigate = useNavigate();
   const cls = ({ isActive }) => "nav-link" + (isActive ? " active" : "");
@@ -21,8 +21,8 @@ export default function Navbar() {
       </div>
       <nav className="nav-links">
         <NavLink to="/trajets" className={cls}>Mes trajets</NavLink>
-        <NavLink to="/velos" className={cls}>Vélos</NavLink>
-        <NavLink to="/trains" className={cls}>Trains</NavLink>
+        {modules.bikes && <NavLink to="/velos" className={cls}>Vélos</NavLink>}
+        {modules.trains && <NavLink to="/trains" className={cls}>Trains</NavLink>}
         <NavLink to="/alertes" className={cls}>Alertes</NavLink>
       </nav>
       <div className="nav-right">

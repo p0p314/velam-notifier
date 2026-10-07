@@ -141,6 +141,11 @@ async function migrateTrains(db) {
   // couper les alertes vélos ou trains sans toucher aux appareils ni aux alertes.
   await addColumn(db, 'users', 'notify_bikes', 'INTEGER NOT NULL DEFAULT 1');
   await addColumn(db, 'users', 'notify_trains', 'INTEGER NOT NULL DEFAULT 1');
+  // v1.9 — fonctionnalités utilisées par le compte (Paramètres › Préférences) : vélos et / ou
+  // trains, au moins l'une des deux. Une fonctionnalité désactivée disparaît de l'interface
+  // et ses alertes ne sont plus envoyées (elles sont conservées).
+  await addColumn(db, 'users', 'use_bikes', 'INTEGER NOT NULL DEFAULT 1');
+  await addColumn(db, 'users', 'use_trains', 'INTEGER NOT NULL DEFAULT 1');
   const pg = db.dialect === 'postgres';
   const id = pg ? 'SERIAL PRIMARY KEY' : 'INTEGER PRIMARY KEY AUTOINCREMENT';
   const created = pg ? 'TIMESTAMPTZ DEFAULT NOW()' : 'DATETIME DEFAULT CURRENT_TIMESTAMP';

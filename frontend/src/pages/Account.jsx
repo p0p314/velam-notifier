@@ -8,9 +8,11 @@ import Icon from "../components/Icon";
 import { APP_VERSION } from "../theme";
 import { shareApp } from "../lib/share";
 import { fmtLastSeen, exportFileName, downloadJson } from "../lib/devices";
-import { BIKE_TYPES, LANDINGS, getBikePref, setBikePref, getLandingPref, setLandingPref } from "../lib/prefs";
+import { BIKE_TYPES, landingsFor, getBikePref, setBikePref, getLandingPref, setLandingPref } from "../lib/prefs";
+import { canDisable } from "../lib/modules";
 import { useTheme, THEME_MODES } from "../useTheme";
 import Tutorial from "../components/Tutorial";
+import { tutorialSlides } from "../lib/tutorial";
 
 const TABS = [
   { value: "preferences",   label: "Préférences" },
@@ -231,31 +233,92 @@ function Field({ label, hint, children }) {
   );
 }
 
-/** Préférences de cet appareil : thème, type de vélo par défaut, page d'ouverture. */
+const MODULES = [
+  { name: "bikes",  title: "Vélos",  text: "Stations Vélam d'Amiens : disponibilités, carte, favoris et alertes." },
+  { name: "trains", title: "Trains", text: "Trains SNCF : recherche, trajets suivis, carte et alertes." },
+];
+
+/**
+ * Fonctionnalités du compte (tous ses appareils) : vélos et / ou trains. La dernière
+ * active ne peut pas être désactivée (interrupteur grisé, explication).
+ */
+function ModulesCard() {
+  const { modules, updateModules } = useAuth();
+  const [error, setError] = useState(null);
+  const toggle = async (name) => {
+    setError(null);
+    try { await updateModules({ [name]: !modules[name] }); } catch (e) { setError(e.message); }
+  };
+  const locked = MODULES.find((m) => !canDisable(modules, m.name));
+  return (
+    <div className="account-card">
+      <div className="form-title">Fonctionnalités</div>
+      <p className="account-text">
+        Pour tous vos appareils. Une fonctionnalité désactivée disparaît de l'application et ses
+        alertes ne sont plus envoyées ; rien n'est supprimé : favoris et alertes reviennent si vous la réactivez.
+      </p>
+      {MODULES.map((m) => {
+        const on = modules[m.name];
+        const disabled = !canDisable(modules, m.name);
+        return (
+          <div className="settings-row" key={m.name}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div className="account-text"><b>{m.title}</b></div>
+              <p className="account-text">{m.text}</p>
+            </div>
+            <button role="switch" aria-checked={on} aria-label={m.title} disabled={disabled}
+              title={disabled ? "Au moins une fonctionnalité doit rester active" : undefined}
+              className={"switch" + (on ? " on" : "")} onClick={() => toggle(m.name)}>
+              <span className="switch-knob" />
+            </button>
+          </div>
+        );
+      })}
+      {locked && <p className="form-hint">Au moins une fonctionnalité reste active : réactivez l'autre pour pouvoir couper « {locked.title} ».</p>}
+      {error && <div className="form-error" role="alert">{error}</div>}
+    </div>
+  );
+}
+
+/**
+ * Préférences : fonctionnalités du compte, puis réglages de cet appareil (thème, type
+ * de vélo par défaut, page d'ouverture) — sans ceux d'une fonctionnalité désactivée.
+ */
 function PreferencesTab() {
+  const { modules } = useAuth();
   const { mode, setMode } = useTheme();
   const [bike, setBike] = useState(getBikePref);
   const [landing, setLanding] = useState(getLandingPref);
   const [tutorial, setTutorial] = useState(false);
+  const landings = landingsFor(modules);
+  // Page d'ouverture d'une fonctionnalité désactivée : l'app ouvre Mes trajets.
+  const shownLanding = landings.some((o) => o.value === landing) ? landing : "trajets";
+  const autoHint = modules.bikes ? "Mes trajets sur téléphone, Vélos sur ordinateur." : "Mes trajets.";
   return (
+    <>
+    <ModulesCard />
     <div className="account-card">
+      <div className="form-title">Cet appareil</div>
       <Field label="Thème" hint={mode === "system" ? "Suit le réglage clair / sombre de votre appareil." : null}>
         <Seg label="Thème" options={THEME_MODES} value={mode} onChange={setMode} />
       </Field>
-      <Field label="Type de vélo par défaut" hint="Pré-remplit les alertes et les filtres des pages Stations et Carte.">
-        <Seg label="Type de vélo par défaut" options={BIKE_TYPES} value={bike}
-          onChange={(v) => { setBike(v); setBikePref(v); }} />
-      </Field>
-      <Field label="Page d'ouverture" hint={landing === "auto" ? "Mes trajets sur téléphone, Vélos sur ordinateur." : null}>
-        <Seg label="Page d'ouverture" options={LANDINGS} value={landing}
+      {modules.bikes && (
+        <Field label="Type de vélo par défaut" hint="Pré-remplit les alertes et les filtres des pages Stations et Carte.">
+          <Seg label="Type de vélo par défaut" options={BIKE_TYPES} value={bike}
+            onChange={(v) => { setBike(v); setBikePref(v); }} />
+        </Field>
+      )}
+      <Field label="Page d'ouverture" hint={shownLanding === "auto" ? autoHint : null}>
+        <Seg label="Page d'ouverture" options={landings} value={shownLanding}
           onChange={(v) => { setLanding(v); setLandingPref(v); }} />
       </Field>
       <p className="account-text">Ces préférences sont propres à cet appareil.</p>
       <button type="button" className="cancel-btn" onClick={() => setTutorial(true)}>
         <Icon name="bike" size={16} /> Revoir le tutoriel
       </button>
-      {tutorial && <Tutorial onClose={() => setTutorial(false)} />}
+      {tutorial && <Tutorial slides={tutorialSlides(modules)} onClose={() => setTutorial(false)} />}
     </div>
+    </>
   );
 }
 
@@ -276,10 +339,12 @@ function Seg({ options, value, onChange, label }) {
 /** Types d'alertes envoyés au compte (tous les appareils) : vélos, trains. */
 function AlertKinds() {
   const { prefs, toggle, error } = useNotificationPrefs();
+  const { modules } = useAuth();
+  // Une fonctionnalité désactivée n'envoie rien : pas d'interrupteur pour elle.
   const rows = [
     { kind: "bikes",  title: "Alertes vélos",  text: "Disponibilité des stations et résumés à heure fixe." },
     { kind: "trains", title: "Alertes trains", text: "Retards, suppressions et perturbations de vos trains et lignes." },
-  ];
+  ].filter((r) => modules[r.kind]);
   return (
     <div className="account-card">
       <div className="form-title">Alertes envoyées</div>

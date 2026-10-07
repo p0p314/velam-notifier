@@ -6,6 +6,7 @@ import Logo from "./Logo";
 import { STEPS as INSTALL_STEPS, isIOS } from "./PwaInstallModal";
 import { usePwaInstall } from "./PwaInstallContext";
 import { useFavorites } from "../hooks";
+import { useModules } from "../auth";
 import { pushPermission, enablePush } from "../push";
 import { isOnboardingDone, markOnboardingDone, onboardingSteps } from "../lib/onboarding";
 import { markPwaDismissedToday } from "../usePwaInstallPrompt";
@@ -30,6 +31,7 @@ function OnboardingFlow() {
   const navigate = useNavigate();
   const { isMobile, isInstalled } = usePwaInstall();
   const { favorites, loading } = useFavorites();
+  const modules = useModules();
   const [steps, setSteps] = useState(null); // figées au premier calcul
   const [index, setIndex] = useState(0);
   const [perm, setPerm] = useState(pushPermission);
@@ -37,7 +39,7 @@ function OnboardingFlow() {
 
   useEffect(() => {
     if (steps || loading || isOnboardingDone()) return;
-    const s = onboardingSteps({ isMobile, isInstalled, permission: pushPermission(), favoritesCount: favorites.length });
+    const s = onboardingSteps({ isMobile, isInstalled, permission: pushPermission(), favoritesCount: modules.bikes ? favorites.length : 1 }); // sans vélos : pas d'étape « stations »
     if (s.length === 0) markOnboardingDone();
     setSteps(s);
   }, [steps, loading, favorites.length, isMobile, isInstalled]);

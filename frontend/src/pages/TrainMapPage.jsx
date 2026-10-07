@@ -8,6 +8,7 @@ import Freshness from "../components/trains/Freshness";
 import { useTrainJourney, useTrainRoute, useNow } from "../trainHooks";
 import { useStations } from "../hooks";
 import { useTheme } from "../useTheme";
+import { useModules } from "../auth";
 import { DEFAULT_CENTER, MAPBOX_TOKEN } from "../lib/mapConfig";
 import { fmtDayLong } from "../lib/trains";
 import {
@@ -65,6 +66,7 @@ export default function TrainMapPage() {
   const { data, error, loading, refresh, refreshing, load } = useTrainJourney(id, { refreshMs: mapRefreshMs });
   const routeRes = useTrainRoute(id);
   const { theme } = useTheme();
+  const modules = useModules();
   const now = useNow(10_000);
   const mapRef = useRef(null);
   const [showBikes, setShowBikes] = useState(false);
@@ -94,7 +96,8 @@ export default function TrainMapPage() {
   const route = routeRes.data?.route ?? null;
   const vehicle = data?.position?.vehicle ?? null;
   const rNote = routeNote(route, data?.provider ?? routeRes.data?.provider);
-  const nearAmiens = routeNear(route, DEFAULT_CENTER);
+  // Couche Vélam : seulement si la fonctionnalité vélos est active et le trajet passe par Amiens.
+  const nearAmiens = modules.bikes && routeNear(route, DEFAULT_CENTER);
 
   return (
     <div className="train-map-page">

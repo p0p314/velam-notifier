@@ -37,10 +37,21 @@ export const setBikePref = (v) => write(BIKE_KEY, v);
 export const getLandingPref = () => read(LANDING_KEY, LANDINGS, "auto");
 export const setLandingPref = (v) => write(LANDING_KEY, v);
 
-/** Chemin d'ouverture de l'app selon la préférence et le format d'écran. */
-export function landingPath(pref, isMobile) {
-  if (pref === "auto") return isMobile ? "/trajets" : "/velos";
-  return `/${pref}`;
+/** Page d'ouverture désignant une fonctionnalité (vélos / trains). */
+const LANDING_MODULE = { velos: "bikes", trains: "trains" };
+
+/** Pages d'ouverture proposées : sans celles des fonctionnalités désactivées. */
+export const landingsFor = (modules = { bikes: true, trains: true }) =>
+  LANDINGS.filter((o) => !LANDING_MODULE[o.value] || modules[LANDING_MODULE[o.value]]);
+
+/**
+ * Chemin d'ouverture de l'app selon la préférence, le format d'écran et les
+ * fonctionnalités actives (une page désactivée → Mes trajets).
+ */
+export function landingPath(pref, isMobile, modules = { bikes: true, trains: true }) {
+  let page = pref === "auto" ? (isMobile ? "trajets" : "velos") : pref;
+  if (LANDING_MODULE[page] && !modules[LANDING_MODULE[page]]) page = "trajets";
+  return `/${page}`;
 }
 
 /** Filtre des pages Stations / Carte ("all" | "elec" | "meca") correspondant au type préféré. */

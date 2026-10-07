@@ -184,7 +184,7 @@ Erreurs upstream/proxy → **HTTP 502** `{ ok:false, error }`. Toutes les répon
 enveloppe `ok` ; le client `api()` lève sur `!res.ok || data.ok === false`. Routes protégées
 (`/api/favorites` (+ `PATCH /:id` label, `PUT /order`), `/api/alerts` (+ `PUT /pause`),
 `/api/push/subscribe|unsubscribe|test`, `/api/auth/me` (GET ; DELETE = suppression du compte),
-`POST /api/auth/tutorial`,
+`POST /api/auth/tutorial`, `PUT /api/auth/modules`,
 `PUT /api/auth/password`, `POST /api/auth/logout|logout-others`, `/api/auth/sessions` (GET, DELETE `/:id`),
 `GET /api/auth/export`,
 `POST /api/stations/refresh`, `/api/trains/favorites` (GET, POST, PATCH/DELETE `/:id`),
@@ -279,6 +279,19 @@ React + `react-router-dom`. `main.jsx` enregistre `/sw.js`, injecte le CSS globa
 (`ThemeProvider` → `AuthProvider` → `PwaInstallProvider`) et les routes ; les routes applicatives
 sont derrière `<Protected>` + `<Layout>` (header mobile / navbar desktop / bottom-nav). La **carte
 est lazy-loadée** (`React.lazy`) pour garder mapbox-gl hors du bundle principal.
+
+**Fonctionnalités du compte (v1.9)** — vélos et / ou trains, **au moins une** :
+`users.use_bikes|use_trains`, `PUT /api/auth/modules` (400 si les deux seraient coupées), portées
+par l'utilisateur renvoyé au client (`user.modules = { bikes, trains }`, comme `tutorial_done`),
+réglées dans Paramètres › Préférences (`ModulesCard`, mise à jour optimiste `updateModules` de
+`auth.jsx`, rétablie en cas d'échec). Une fonctionnalité coupée : alertes conservées mais **non
+envoyées** (les deux boucles filtrent `use_*`), onglet masqué (`BottomNav` / `Navbar`), routes
+redirigées vers `/trajets` (`RequireModule`, `App.jsx`), pas de bascule dans Mes trajets ni dans
+Alertes et **aucune donnée chargée** pour elle, réglages associés masqués (type de vélo, page
+d'ouverture via `landingsFor` / `landingPath(pref, isMobile, modules)`, interrupteur d'alertes),
+diapositive du tutoriel retirée (`tutorialSlides`), couche Vélam de la carte d'un train masquée.
+`useModules()` (`auth.jsx`) / `lib/modules.js` (`modulesOf`, `canDisable`) : hors `AuthProvider`,
+les deux sont actives.
 
 **Navigation (v1.7) — 4 onglets, organisés par usage et non par mode de transport** :
 `/trajets` **Mes trajets** (`pages/MyTrips.jsx` : **une catégorie à la fois**, bascule
@@ -394,7 +407,8 @@ se fait dans `push.js` (`countForType`) et `routes/stations.js` (`extractCount`)
 Tables (créées/migrées par `database/migrations.js`, dialecte selon `DATABASE_URL`) :
 `stations` (référentiel statique), `config` (clé/valeur : secret JWT, clés VAPID),
 `users` (+ `alerts_paused_until`, `token_version`, `tutorial_done`, `notify_bikes` / `notify_trains` — types
-d'alertes envoyés au compte, `GET|PUT /api/notifications/preferences`, respectés par les deux boucles d'alerte), `sessions` (appareils connectés, horodatages
+d'alertes envoyés au compte, `GET|PUT /api/notifications/preferences`, respectés par les deux boucles d'alerte ;
+`use_bikes` / `use_trains` — fonctionnalités utilisées, voir « Fonctionnalités du compte »), `sessions` (appareils connectés, horodatages
 en ms), `push_subscriptions.session_id` (appareil de rattachement), `favorites` (unique `user_id+station_id`, `label`, `sort_order`
 — NULL tant que l'utilisateur n'a jamais ordonné : ordre alphabétique), `push_subscriptions`
 (unique `endpoint`), `alerts` (cf. modèle ci-dessus ; `group_stations` stocké en JSON texte,

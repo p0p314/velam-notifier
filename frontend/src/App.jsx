@@ -1,6 +1,6 @@
 import { lazy, Suspense } from "react";
 import { Routes, Route, Navigate, Outlet, useNavigate } from "react-router-dom";
-import { AuthProvider, useAuth } from "./auth";
+import { AuthProvider, useAuth, useModules } from "./auth";
 import { useIsMobile } from "./hooks";
 import { ThemeProvider } from "./useTheme";
 import { PwaInstallProvider, usePwaInstall } from "./components/PwaInstallContext";
@@ -18,7 +18,7 @@ import Privacy from "./pages/Privacy";
 import { OnlineOnly } from "./components/Offline";
 import Onboarding from "./components/Onboarding";
 import Tutorial from "./components/Tutorial";
-import { tutorialPending } from "./lib/tutorial";
+import { tutorialPending, tutorialSlides } from "./lib/tutorial";
 
 // Module Trains, lui aussi chargé à la demande (hors du bundle principal).
 const Trains = lazy(() => import("./pages/Trains"));
@@ -35,7 +35,14 @@ function Protected() {
 // Mes trajets (ce qu'on suit, vélo et train), desktop → Vélos (tableau de bord complet).
 function Landing() {
   const isMobile = useIsMobile();
-  return <Navigate to={landingPath(getLandingPref(), isMobile)} replace />;
+  const modules = useModules();
+  return <Navigate to={landingPath(getLandingPref(), isMobile, modules)} replace />;
+}
+
+/** Page d'une fonctionnalité désactivée (lien, raccourci, notification) → Mes trajets. */
+function RequireModule({ name, children }) {
+  const modules = useModules();
+  return modules[name] ? children : <Navigate to="/trajets" replace />;
 }
 
 /**
@@ -44,8 +51,8 @@ function Landing() {
  * n'a pas confirmé l'état du tutoriel (utilisateur mémorisé sans le champ), rien.
  */
 function FirstRun() {
-  const { user, completeTutorial } = useAuth();
-  if (tutorialPending(user)) return <Tutorial onClose={completeTutorial} />;
+  const { user, completeTutorial, modules } = useAuth();
+  if (tutorialPending(user)) return <Tutorial slides={tutorialSlides(modules)} onClose={completeTutorial} />;
   return user?.tutorial_done ? <Onboarding /> : null;
 }
 
@@ -94,15 +101,15 @@ export default function App() {
               <Route element={<Layout />}>
                 <Route path="/" element={<Landing />} />
                 <Route path="/trajets" element={<MyTrips />} />
-                <Route path="/velos" element={<Bikes />} />
+                <Route path="/velos" element={<RequireModule name="bikes"><Bikes /></RequireModule>} />
                 {/* Adresses d'avant la v1.7 (favoris enregistrés, raccourcis, notifications). */}
                 <Route path="/favoris" element={<Navigate to="/trajets" replace />} />
                 <Route path="/stations" element={<Navigate to="/velos?vue=liste" replace />} />
                 <Route path="/carte" element={<Navigate to="/velos?vue=carte" replace />} />
                 <Route path="/alertes" element={<OnlineOnly><Alerts /></OnlineOnly>} />
-                <Route path="/trains" element={<OnlineOnly><Suspense fallback={trainsFallback}><Trains /></Suspense></OnlineOnly>} />
-                <Route path="/trains/trajet" element={<OnlineOnly><Suspense fallback={trainsFallback}><TrainJourney /></Suspense></OnlineOnly>} />
-                <Route path="/trains/carte" element={<OnlineOnly><Suspense fallback={trainsFallback}><TrainMapPage /></Suspense></OnlineOnly>} />
+                <Route path="/trains" element={<RequireModule name="trains"><OnlineOnly><Suspense fallback={trainsFallback}><Trains /></Suspense></OnlineOnly></RequireModule>} />
+                <Route path="/trains/trajet" element={<RequireModule name="trains"><OnlineOnly><Suspense fallback={trainsFallback}><TrainJourney /></Suspense></OnlineOnly></RequireModule>} />
+                <Route path="/trains/carte" element={<RequireModule name="trains"><OnlineOnly><Suspense fallback={trainsFallback}><TrainMapPage /></Suspense></OnlineOnly></RequireModule>} />
                 <Route path="/compte" element={<OnlineOnly><Account /></OnlineOnly>} />
               </Route>
             </Route>

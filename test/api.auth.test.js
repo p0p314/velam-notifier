@@ -59,7 +59,7 @@ test('/api/auth/me renvoie un jeton neuf (session glissante)', async () => {
   const { token, user } = await registerUser(api, 'alice');
   const res = await api.get('/api/auth/me', { token });
   assert.equal(res.status, 200);
-  assert.deepEqual(res.body.user, { id: user.id, username: 'alice', tutorial_done: false });
+  assert.deepEqual(res.body.user, { id: user.id, username: 'alice', tutorial_done: false, modules: { bikes: true, trains: true } });
   const payload = jwt.decode(res.body.token);
   assert.equal(payload.id, user.id);
   // Durée par défaut : 30 jours
@@ -74,6 +74,32 @@ test('tutoriel : proposé au nouveau compte, puis plus après POST /api/auth/tut
   assert.equal((await api.get('/api/auth/me', { token })).body.user.tutorial_done, true);
   const login = await api.post('/api/auth/login', { body: { username: 'alice', password: 'motdepasse1' } });
   assert.equal(login.body.user.tutorial_done, true);
+});
+
+test('fonctionnalités : vélos et trains par défaut, une seule désactivable, partout sur le compte', async () => {
+  const { token, user } = await registerUser(api, 'alice');
+  assert.deepEqual(user.modules, { bikes: true, trains: true });
+  assert.equal((await api.put('/api/auth/modules', { body: { trains: false } })).status, 401);
+
+  const off = await api.put('/api/auth/modules', { token, body: { trains: false } });
+  assert.equal(off.status, 200, off.text);
+  assert.deepEqual(off.body.user.modules, { bikes: true, trains: false });
+  assert.deepEqual((await api.get('/api/auth/me', { token })).body.user.modules, { bikes: true, trains: false });
+  const login = await api.post('/api/auth/login', { body: { username: 'alice', password: 'motdepasse1' } });
+  assert.deepEqual(login.body.user.modules, { bikes: true, trains: false });
+
+  // Jamais les deux à la fois.
+  const both = await api.put('/api/auth/modules', { token, body: { bikes: false } });
+  assert.equal(both.status, 400);
+  assert.match(both.body.error, /au moins/);
+  assert.equal((await api.put('/api/auth/modules', { token, body: { bikes: false, trains: false } })).status, 400);
+  assert.equal((await api.put('/api/auth/modules', { token, body: { bikes: 'non' } })).status, 400);
+  assert.equal((await api.put('/api/auth/modules', { token, body: {} })).status, 400);
+
+  // Bascule en une requête : trains seuls.
+  const swap = await api.put('/api/auth/modules', { token, body: { bikes: false, trains: true } });
+  assert.deepEqual(swap.body.user.modules, { bikes: false, trains: true });
+  assert.deepEqual((await api.get('/api/auth/export', { token })).body.export.account.modules, { bikes: false, trains: true });
 });
 
 test('/api/auth/me : compte supprimé → 401', async () => {

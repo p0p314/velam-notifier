@@ -14,7 +14,7 @@ export default function Privacy() {
 
       <h2>Ce que VéloPulse enregistre</h2>
       <ul>
-        <li><b>Votre compte</b> : un nom d'utilisateur et votre mot de passe <b>chiffré</b> (haché, jamais lisible), si vous avez déjà vu le tutoriel de présentation, et les types d'alertes que vous souhaitez recevoir (vélos, trains). Aucune adresse e-mail, aucun nom réel.</li>
+        <li><b>Votre compte</b> : un nom d'utilisateur et votre mot de passe <b>chiffré</b> (haché, jamais lisible), si vous avez déjà vu le tutoriel de présentation, les fonctionnalités que vous utilisez (vélos, trains) et les types d'alertes que vous souhaitez recevoir. Aucune adresse e-mail, aucun nom réel.</li>
         <li><b>Vos favoris</b> et le nom que vous leur donnez, ainsi que leur ordre.</li>
         <li><b>Vos alertes</b> : stations, seuils, horaires (dont les heures d'envoi de vos résumés), jours, le nom éventuel de vos groupes de stations, et la date de pause éventuelle.</li>
         <li><b>Vos trains</b> : les trajets favoris (gares, ligne, numéro et heure du train, nom éventuel), vos alertes trains (seuil de retard, motifs, jours, créneau) et l'historique des notifications envoyées pendant 45 jours, pour ne jamais vous prévenir deux fois du même événement.</li>
