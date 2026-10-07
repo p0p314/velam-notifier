@@ -1,6 +1,6 @@
 // Routes Web Push : clé publique VAPID (publique) + enregistrement d'une subscription.
 const express = require('express');
-const { addSubscription, removeSubscriptionByEndpoint } = require('../db');
+const { addSubscription, removeSubscriptionByEndpoint, getNotificationPrefs, setNotificationPrefs } = require('../db');
 const { requireAuth } = require('../auth');
 const rateLimit = require('express-rate-limit');
 const { getVapidPublicKey, sendToUser, buildTestPayload } = require('../push');
@@ -58,6 +58,33 @@ router.post('/api/push/unsubscribe', requireAuth, async (req, res) => {
  * POST /api/push/test — envoie une notification de test à tous les appareils du compte.
  * 409 si aucun appareil n'est enregistré, 502 si aucun envoi n'a abouti.
  */
+/**
+ * Types d'alertes notifiés pour le compte (tous les appareils) : { bikes, trains }.
+ * Couper un type ne supprime aucune alerte : elles ne sont simplement plus envoyées.
+ */
+router.get('/api/notifications/preferences', requireAuth, async (req, res) => {
+  try {
+    res.json({ ok: true, preferences: await getNotificationPrefs(req.user.id) });
+  } catch (err) {
+    console.error('[GET /api/notifications/preferences]', err.message);
+    res.status(500).json({ ok: false, error: 'Erreur serveur' });
+  }
+});
+
+router.put('/api/notifications/preferences', requireAuth, async (req, res) => {
+  try {
+    const { bikes, trains } = req.body ?? {};
+    const bad = [bikes, trains].some((v) => v !== undefined && typeof v !== 'boolean');
+    if (bad || (bikes === undefined && trains === undefined)) {
+      return res.status(400).json({ ok: false, error: 'bikes / trains : booléens attendus' });
+    }
+    res.json({ ok: true, preferences: await setNotificationPrefs(req.user.id, { bikes, trains }) });
+  } catch (err) {
+    console.error('[PUT /api/notifications/preferences]', err.message);
+    res.status(500).json({ ok: false, error: 'Erreur serveur' });
+  }
+});
+
 router.post('/api/push/test', requireAuth, testLimiter, async (req, res) => {
   try {
     const { total, sent } = await sendToUser(req.user.id, buildTestPayload());

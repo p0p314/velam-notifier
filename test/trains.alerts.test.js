@@ -9,6 +9,7 @@ const { getProvider } = require('../trains');
 const { checkTrainAlerts, tripEvents, cleanAlertText } = require('../trains/alertLoop');
 const {
   createUser, addSubscription, addTrainFavorite, createTrainAlert, setAlertsPause, recordTrainNotification, updateTrainAlert,
+  setNotificationPrefs,
 } = require('../db');
 const { buildGtfs, tripUpdatesFeed, alertsFeed, area, LINES, tripId, parisTime } = require('./trainsFixture');
 
@@ -175,6 +176,16 @@ describe('alerte de trajet', () => {
     await setAlertsPause(userId, '2026-10-09');
     assert.equal(await cycle('16:30', { delayMin: 30 }), 'aucune_due');
     assert.equal(sent.length, 0);
+  });
+
+  test('notifications trains coupées pour le compte : rien (les vélos ne sont pas concernés)', async () => {
+    await tripAlert();
+    await setNotificationPrefs(userId, { bikes: false });
+    await cycle('16:30', { delayMin: 30 });
+    assert.equal(sent.length, 1);
+    await setNotificationPrefs(userId, { trains: false });
+    assert.equal(await cycle('16:50', { delayMin: 45 }), 'aucune_due');
+    assert.equal(sent.length, 1);
   });
 
   test('alerte désactivée : rien', async () => {

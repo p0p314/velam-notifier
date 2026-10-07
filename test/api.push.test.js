@@ -1,6 +1,6 @@
 // Intégration : clé VAPID, enregistrement / réattribution / retrait des subscriptions.
 const { resetDb, startServer, client, registerUser, fakeSubscription, dbc } = require('./helpers');
-const { test, before, after, beforeEach } = require('node:test');
+const { test, before, after, beforeEach, describe } = require('node:test');
 const assert = require('node:assert/strict');
 const webpush = require('web-push');
 
@@ -119,4 +119,23 @@ test('notification de test : limitée à 5 par tranche de 10 min et par compte',
   const other = await registerUser(api);
   await api.post('/api/push/subscribe', { token: other.token, body: { subscription: fakeSubscription('autre') } });
   assert.equal((await api.post('/api/push/test', { token: other.token })).status, 200);
+});
+
+describe('types d\'alertes notifiés (compte)', () => {
+  const start = startServer; const cl = client; const reg = registerUser;
+  test('par défaut tout est notifié ; couper les trains ou les vélos', async () => {
+    const srv = await start();
+    try {
+      const api = cl(srv.url);
+      const { token } = await reg(api);
+      assert.equal((await api.get('/api/notifications/preferences')).status, 401);
+      assert.deepEqual((await api.get('/api/notifications/preferences', { token })).body.preferences, { bikes: true, trains: true });
+      const put = await api.put('/api/notifications/preferences', { token, body: { trains: false } });
+      assert.deepEqual(put.body.preferences, { bikes: true, trains: false });
+      assert.equal((await api.put('/api/notifications/preferences', { token, body: { bikes: 'non' } })).status, 400);
+      assert.equal((await api.put('/api/notifications/preferences', { token, body: {} })).status, 400);
+      const exp = await api.get('/api/auth/export', { token });
+      assert.deepEqual(exp.body.export.account.notifications, { bikes: true, trains: false });
+    } finally { await srv.close(); }
+  });
 });

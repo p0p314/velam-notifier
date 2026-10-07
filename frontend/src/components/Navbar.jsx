@@ -20,11 +20,10 @@ export default function Navbar() {
         <span className="app-version">v{APP_VERSION}</span>
       </div>
       <nav className="nav-links">
-        <NavLink to="/stations" className={cls}>Stations</NavLink>
-        <NavLink to="/carte" className={cls}>Carte</NavLink>
-        <NavLink to="/favoris" className={cls}>Favoris</NavLink>
-        <NavLink to="/alertes" className={cls}>Alertes</NavLink>
+        <NavLink to="/trajets" className={cls}>Mes trajets</NavLink>
+        <NavLink to="/velos" className={cls}>Vélos</NavLink>
         <NavLink to="/trains" className={cls}>Trains</NavLink>
+        <NavLink to="/alertes" className={cls}>Alertes</NavLink>
       </nav>
       <div className="nav-right">
         {/* Installation PWA : uniquement sur mobile (jamais sur desktop), et pas si déjà installée. */}

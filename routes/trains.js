@@ -313,9 +313,24 @@ router.post('/api/trains/alerts', requireAuth, async (req, res) => {
   } catch (err) { fail(res, err, 'POST /api/trains/alerts'); }
 });
 
+/** GET /api/trains/alerts — alertes trains ; une alerte de trajet porte le résumé de son favori. */
 router.get('/api/trains/alerts', requireAuth, async (req, res) => {
   try {
-    res.json({ ok: true, alerts: await getTrainAlerts(req.user.id) });
+    const [alerts, favorites] = await Promise.all([getTrainAlerts(req.user.id), getTrainFavorites(req.user.id)]);
+    const byId = new Map(favorites.map((f) => [Number(f.id), f]));
+    res.json({
+      ok: true,
+      alerts: alerts.map((a) => {
+        const f = a.favorite_id ? byId.get(Number(a.favorite_id)) : null;
+        return f ? {
+          ...a,
+          favorite: {
+            id: f.id, label: f.label, line_name: f.line_name, departure_time: f.departure_time,
+            origin_name: f.origin_name, destination_name: f.destination_name,
+          },
+        } : a;
+      }),
+    });
   } catch (err) { fail(res, err, 'GET /api/trains/alerts'); }
 });
 

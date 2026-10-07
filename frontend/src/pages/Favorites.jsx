@@ -91,9 +91,23 @@ function OrganizeItem({ fav, index, count, onMove, onRename }) {
   );
 }
 
+/**
+ * Stations favorites. Page autonome (ancienne route) ou section de « Mes trajets »
+ * (`embedded`), qui fournit alors l'état des stations (`st`) pour n'en charger qu'un.
+ */
 export default function Favorites() {
-  const { stations, loading, stale, staleReason, lastUpd, reload: reloadStations } = useStations();
-  const { favorites, favIds, toggleFav, rename, reorder, loading: favLoading, stale: favStale, reload: reloadFavorites } = useFavorites();
+  const st = useStations();
+  const fav = useFavorites();
+  return (
+    <PullToRefresh onRefresh={() => Promise.all([st.reload(), fav.reload()])}>
+      <div className="view-pad"><FavoriteStations st={st} fav={fav} /></div>
+    </PullToRefresh>
+  );
+}
+
+export function FavoriteStations({ st, fav, embedded = false }) {
+  const { stations, loading, stale, staleReason, lastUpd } = st;
+  const { favorites, favIds, toggleFav, rename, reorder, loading: favLoading, stale: favStale } = fav;
   const { coords, status: geoStatus, locate } = useGeolocation();
   const [selId, setSelId] = useState(null);
   const [sort, setSort] = useState(loadSortPref);
@@ -122,10 +136,11 @@ export default function Favorites() {
   const selected = stations.find((s) => s.station_id === selId) ?? null;
 
   return (
-    <PullToRefresh onRefresh={() => Promise.all([reloadStations(), reloadFavorites()])}>
-    <div className="view-pad">
+    <>
       <div className="page-head">
-        <h2 className="page-title">Mes favoris</h2>
+        {embedded
+          ? <h2 className="section-title">Stations Vélam</h2>
+          : <h2 className="page-title">Mes favoris</h2>}
         {favStations.length > 0 && <span className="page-count">{favStations.length} station{favStations.length !== 1 ? "s" : ""}</span>}
         {favorites.length > 1 && (
           <button type="button" className="organize-toggle" onClick={() => setOrganizing((o) => !o)}>
@@ -155,7 +170,7 @@ export default function Favorites() {
         <div className="empty-state">
           <Icon name="star" size={40} />
           <div className="empty-title">Ajoutez des stations en favoris</div>
-          <div className="empty-sub">Depuis l'onglet Stations, ouvrez une station puis « Ajouter aux favoris ».</div>
+          <div className="empty-sub">Depuis l'onglet Vélos, touchez l'étoile d'une station (maison, travail…).</div>
         </div>
       ) : organizing ? (
         <div className="organize-list">
@@ -184,7 +199,6 @@ export default function Favorites() {
         isFav={selected ? favIds.has(selected.station_id) : false}
         onToggleFav={toggleFav}
       />
-    </div>
-    </PullToRefresh>
+    </>
   );
 }

@@ -59,7 +59,7 @@ function OnboardingFlow() {
     setBusy(true);
     try { setPerm(await enablePush()); } finally { setBusy(false); }
   };
-  const browse = () => { finish(); navigate("/stations"); };
+  const browse = () => { finish(); navigate("/velos?vue=liste"); };
 
   return (
     <BottomSheet open onClose={finish} heightVh={62} labelledBy="onboarding-title">

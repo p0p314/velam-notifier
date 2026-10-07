@@ -183,7 +183,8 @@ const delayMin = (est, sched) => (est === null || est === undefined ? null : Mat
 
 function stationRef(index, s) {
   const st = index.stations[s];
-  return { id: st.id, name: st.name };
+  // Coordonnées : le client propose la station Vélam la plus proche de la gare.
+  return { id: st.id, name: st.name, lat: st.lat, lon: st.lon };
 }
 
 function lineRef(index, l) {

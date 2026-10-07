@@ -53,6 +53,14 @@ const alertBase = {
 };
 
 describe('déclenchement', () => {
+  test('notifications vélos coupées pour le compte : aucune alerte vélo évaluée', async () => {
+    await createAlert(userId, alertBase);
+    await require('../db').setNotificationPrefs(userId, { bikes: false });
+    await setBikes(0);
+    assert.equal(await checkAlerts(WED_0830), 'aucune_due');
+    assert.equal(sent.length, 0);
+  });
+
   test('aucune alerte active → aucun appel GBFS', async () => {
     await createAlert(userId, { ...alertBase, active: 0 });
     await checkAlerts(WED_0830);

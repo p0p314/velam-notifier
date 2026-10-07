@@ -168,7 +168,7 @@ function tripMessage(event, j, tz) {
 
 /** Notification d'alerte de ligne : « Ligne K44 · Perturbation » / « Ligne K44 · Train supprimé ». */
 function lineMessage(event, alert, index) {
-  const url = `${appBase()}/trains?onglet=mes-trains`;
+  const url = `${appBase()}/alertes?type=trains`;
   const line = `Ligne ${alert.line_name || ''}`.trim();
   if (event.type === 'line_cancel') {
     const t = event.tripIdx;

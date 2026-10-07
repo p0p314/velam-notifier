@@ -137,6 +137,10 @@ async function migrateV15(db) {
  *    (unique par alerte + clé d'événement) ⇒ jamais deux notifications pour le même événement.
  */
 async function migrateTrains(db) {
+  // v1.7 — types d'alertes notifiés, par compte (Paramètres › Notifications) :
+  // couper les alertes vélos ou trains sans toucher aux appareils ni aux alertes.
+  await addColumn(db, 'users', 'notify_bikes', 'INTEGER NOT NULL DEFAULT 1');
+  await addColumn(db, 'users', 'notify_trains', 'INTEGER NOT NULL DEFAULT 1');
   const pg = db.dialect === 'postgres';
   const id = pg ? 'SERIAL PRIMARY KEY' : 'INTEGER PRIMARY KEY AUTOINCREMENT';
   const created = pg ? 'TIMESTAMPTZ DEFAULT NOW()' : 'DATETIME DEFAULT CURRENT_TIMESTAMP';

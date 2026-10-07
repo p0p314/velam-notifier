@@ -34,10 +34,10 @@
   ],
   "shortcuts": [
     {
-      "name": "Mes favoris",
-      "short_name": "Favoris",
-      "description": "Disponibilités de vos stations favorites",
-      "url": "/favoris",
+      "name": "Mes trajets",
+      "short_name": "Mes trajets",
+      "description": "Vos trains et stations favoris, en direct",
+      "url": "/trajets",
       "icons": [
         {
           "src": "/icon-192.png",
@@ -49,8 +49,21 @@
     {
       "name": "Carte des stations",
       "short_name": "Carte",
-      "description": "Stations autour de vous",
-      "url": "/carte",
+      "description": "Stations Vélam autour de vous",
+      "url": "/velos?vue=carte",
+      "icons": [
+        {
+          "src": "/icon-192.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
+    },
+    {
+      "name": "Trains",
+      "short_name": "Trains",
+      "description": "Horaires et retards des trains",
+      "url": "/trains",
       "icons": [
         {
           "src": "/icon-192.png",
@@ -62,7 +75,7 @@
     {
       "name": "Mes alertes",
       "short_name": "Alertes",
-      "description": "Gérer vos alertes de disponibilité",
+      "description": "Vos alertes vélos et trains",
       "url": "/alertes",
       "icons": [
         {

@@ -208,8 +208,8 @@ describe("Paramètres — Préférences", () => {
 
     fireEvent.click(within(screen.getByRole("group", { name: "Type de vélo par défaut" })).getByRole("button", { name: "Électrique" }));
     expect(localStorage.getItem("velopulse-pref-bike")).toBe("ebike");
-    fireEvent.click(within(screen.getByRole("group", { name: "Page d'ouverture" })).getByRole("button", { name: "Carte" }));
-    expect(localStorage.getItem("velopulse-pref-landing")).toBe("carte");
+    fireEvent.click(within(screen.getByRole("group", { name: "Page d'ouverture" })).getByRole("button", { name: "Trains" }));
+    expect(localStorage.getItem("velopulse-pref-landing")).toBe("trains");
   });
 
   test("« Revoir le tutoriel » l'ouvre, sans rien renvoyer au serveur", async () => {
@@ -282,7 +282,22 @@ describe("Paramètres — Notifications", () => {
     mockApi();
     renderAt(NOTIF);
     expect(screen.getByText(/bloquées pour VéloPulse/)).toBeTruthy();
-    expect(screen.queryByRole("switch")).toBeNull();
+    expect(screen.queryByRole("switch", { name: "Notifications sur cet appareil" })).toBeNull();
+  });
+
+  test("alertes vélos / trains coupées séparément, pour le compte", async () => {
+    push.state = "on";
+    mockApi({
+      "GET /api/notifications/preferences": () => jsonResponse({ ok: true, preferences: { bikes: true, trains: true } }),
+      "PUT /api/notifications/preferences": (body) => jsonResponse({ ok: true, preferences: { bikes: true, trains: true, ...body } }),
+    });
+    renderAt(NOTIF);
+    const trains = await screen.findByRole("switch", { name: "Alertes trains" });
+    await waitFor(() => expect(trains.getAttribute("aria-checked")).toBe("true"));
+    fireEvent.click(trains);
+    await waitFor(() => expect(calls.some((c) => c.method === "PUT" && c.path === "/api/notifications/preferences" && c.body.trains === false)).toBe(true));
+    await waitFor(() => expect(trains.getAttribute("aria-checked")).toBe("false"));
+    expect(screen.getByRole("switch", { name: "Alertes vélos" }).getAttribute("aria-checked")).toBe("true");
   });
 });
 

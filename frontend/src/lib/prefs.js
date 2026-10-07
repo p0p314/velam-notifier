@@ -10,15 +10,18 @@ export const BIKE_TYPES = [
   { value: "mechanical", label: "Mécanique" },
 ];
 export const LANDINGS = [
-  { value: "auto",     label: "Automatique" },
-  { value: "favoris",  label: "Favoris" },
-  { value: "stations", label: "Stations" },
-  { value: "carte",    label: "Carte" },
+  { value: "auto",    label: "Automatique" },
+  { value: "trajets", label: "Mes trajets" },
+  { value: "velos",   label: "Vélos" },
+  { value: "trains",  label: "Trains" },
 ];
+// Pages d'avant la v1.7 (4 onglets) → page équivalente.
+const LEGACY_LANDING = { favoris: "trajets", stations: "velos", carte: "velos" };
 
 function read(key, allowed, fallback) {
   try {
-    const v = localStorage.getItem(key);
+    let v = localStorage.getItem(key);
+    if (key === LANDING_KEY) v = LEGACY_LANDING[v] ?? v;
     return allowed.some((o) => o.value === v) ? v : fallback;
   } catch { return fallback; }
 }
@@ -30,13 +33,13 @@ function write(key, value) {
 export const getBikePref = () => read(BIKE_KEY, BIKE_TYPES, "any");
 export const setBikePref = (v) => write(BIKE_KEY, v);
 
-/** Page d'ouverture : "auto" (mobile → Favoris, ordinateur → Stations) ou une page. */
+/** Page d'ouverture : "auto" (mobile → Mes trajets, ordinateur → Vélos) ou une page. */
 export const getLandingPref = () => read(LANDING_KEY, LANDINGS, "auto");
 export const setLandingPref = (v) => write(LANDING_KEY, v);
 
 /** Chemin d'ouverture de l'app selon la préférence et le format d'écran. */
 export function landingPath(pref, isMobile) {
-  if (pref === "auto") return isMobile ? "/favoris" : "/stations";
+  if (pref === "auto") return isMobile ? "/trajets" : "/velos";
   return `/${pref}`;
 }
 

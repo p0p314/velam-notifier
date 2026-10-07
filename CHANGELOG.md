@@ -9,6 +9,27 @@ Toutes les évolutions notables de VéloPulse. Format inspiré de
 section `## [x.y.z] - AAAA-MM-JJ` ci-dessous, puis merger sur `main` : le workflow
 `release.yml` crée le tag `vx.y.z` et la release GitHub à partir de cette section.
 
+## [1.7.0] - 2026-10-07
+
+### Nouvelle organisation : 4 onglets
+- **Mes trajets** (accueil) : tout ce que vous suivez, vélo et train, avec l'état actuel —
+  vos trains favoris (retard, prochaines circulations, alerte) puis vos stations Vélam.
+- **Correspondance train ↔ Vélam** : pour chaque train, la station Vélam la plus proche
+  de la gare de départ (places libres pour déposer votre vélo) et de la gare d'arrivée
+  (vélos pour repartir), à moins d'1 km.
+- **Vélos** : les stations en liste ou sur la carte (dernier affichage mémorisé).
+- **Trains** : la recherche (les trains suivis sont dans Mes trajets).
+- **Alertes** : alertes vélos et alertes trains (trajets et lignes suivies) au même
+  endroit ; « Suivre une ligne » depuis l'onglet ; pause et notifications communes.
+- Les anciennes adresses (favoris, stations, carte, Mes trains) redirigent vers la
+  nouvelle page ; page d'ouverture (Paramètres) : Mes trajets, Vélos ou Trains ;
+  raccourcis de l'app et tutoriel mis à jour.
+
+### Notifications
+- **Paramètres › Notifications** : couper séparément les **alertes vélos** ou les
+  **alertes trains**, pour tous vos appareils (les alertes sont conservées, simplement
+  plus envoyées). La page Alertes le rappelle quand un type est coupé.
+
 ## [1.6.2] - 2026-10-07
 
 ### Trains
