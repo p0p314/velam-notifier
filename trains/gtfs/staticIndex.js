@@ -45,6 +45,31 @@ async function readAll(reader, name, columns) {
   return rows;
 }
 
+/** shapes.txt → Map shape_id → Float64Array [lon, lat, lon, lat…] (ordre de passage). */
+async function readShapes(reader, wanted) {
+  const out = new Map();
+  if (!wanted.size || !reader.has('shapes.txt')) return out;
+  const pts = new Map(); // shape_id → [[seq, lon, lat]]
+  await parseCsvStream(reader.stream('shapes.txt'),
+    ['shape_id', 'shape_pt_lat', 'shape_pt_lon', 'shape_pt_sequence'], (r) => {
+      if (!wanted.has(r.shape_id)) return;
+      const lat = Number(r.shape_pt_lat);
+      const lon = Number(r.shape_pt_lon);
+      if (!Number.isFinite(lat) || !Number.isFinite(lon)) return;
+      let list = pts.get(r.shape_id);
+      if (!list) pts.set(r.shape_id, (list = []));
+      list.push([Number(r.shape_pt_sequence) || 0, lon, lat]);
+    });
+  for (const [id, list] of pts) {
+    if (list.length < 2) continue;
+    list.sort((a, b) => a[0] - b[0]);
+    const arr = new Float64Array(list.length * 2);
+    list.forEach(([, lon, lat], i) => { arr[2 * i] = lon; arr[2 * i + 1] = lat; });
+    out.set(id, arr);
+  }
+  return out;
+}
+
 /** Conventions par défaut (GTFS générique) ; un fournisseur peut les surcharger. */
 const DEFAULT_CONVENTIONS = {
   trainNumber: (trip) => trip.trip_short_name || '',
@@ -167,9 +192,10 @@ async function buildIndex(reader, conventions = {}) {
   const tripRoad = new IntBuf(Uint8Array);
   const tripNumber = [];
   const tripHeadsign = [];
+  const tripShape = []; // shape_id GTFS ('' : aucun tracé publié — cas de la SNCF)
   const aliasTrips = new Map();
   await parseCsvStream(reader.stream('trips.txt'),
-    ['route_id', 'service_id', 'trip_id', 'trip_headsign', 'trip_short_name', 'direction_id'], (t) => {
+    ['route_id', 'service_id', 'trip_id', 'trip_headsign', 'trip_short_name', 'direction_id', 'shape_id'], (t) => {
       const line = lineById.get(t.route_id);
       const svc = serviceIdx.get(t.service_id);
       if (line === undefined || svc === undefined || tripIndex.has(t.trip_id)) return;
@@ -182,6 +208,7 @@ async function buildIndex(reader, conventions = {}) {
       tripRoad.push(conv.isRoad(t, routeRows.get(t.route_id)) ? 1 : 0);
       tripNumber.push(conv.trainNumber(t));
       tripHeadsign.push(t.trip_headsign || '');
+      tripShape.push(t.shape_id || '');
       for (const alias of conv.realtimeAliases(t.trip_id)) {
         let list = aliasTrips.get(alias);
         if (!list) aliasTrips.set(alias, (list = []));
@@ -189,6 +216,11 @@ async function buildIndex(reader, conventions = {}) {
       }
     });
   const tripCount = tripIds.length;
+
+  // ── Tracés (shapes.txt, facultatif) ────────────────────────────────────────
+  // Seuls les tracés utilisés par un trajet sont gardés, en Float64Array [lon, lat, …]
+  // triés par shape_pt_sequence. La SNCF n'en publie pas (shape_id vide partout).
+  const shapes = await readShapes(reader, new Set(tripShape.filter(Boolean)));
 
   // ── Passages en gare (le gros fichier, lu en flux) ─────────────────────────
   const stTrip = new IntBuf(Int32Array, 1 << 16);
@@ -292,10 +324,11 @@ async function buildIndex(reader, conventions = {}) {
       count: tripCount,
       ids: tripIds, index: tripIndex,
       line: tripLineArr, service: tripService.done(), direction: tripDirection.done(), road: tripRoad.done(),
-      number: tripNumber, headsign: tripHeadsign,
+      number: tripNumber, headsign: tripHeadsign, shape: tripShape,
       start: tripStart,
     },
     aliasTrips,
+    shapes,
     stopTimes: { count: n, trip: tripOf, seq, station, point, arr, dep, flags },
     stationStops: { start: stationStart, list: stationStops },
     points: { ids: pointIds, index: pointIdx },

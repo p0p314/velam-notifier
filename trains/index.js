@@ -23,7 +23,10 @@ function createProvider(config, env = process.env) {
     attribution: config.attribution,
     conventions: config.conventions,
     schedule: createStaticSchedule({ id: config.id, url: config.gtfsUrl, conventions: config.conventions, env }),
-    realtime: createRealtimeProvider({ tripUpdatesUrl: config.tripUpdatesUrl, serviceAlertsUrl: config.serviceAlertsUrl, env }),
+    realtime: createRealtimeProvider({
+      tripUpdatesUrl: config.tripUpdatesUrl, serviceAlertsUrl: config.serviceAlertsUrl,
+      vehiclePositionsUrl: config.vehiclePositionsUrl ?? null, env,
+    }),
   };
   provider.service = createTrainService(provider, env);
   return provider;
@@ -62,7 +65,7 @@ function initTrains(env = process.env) {
 /** État de chaque fournisseur, sans appel réseau (pour /api/health). */
 function trainsHealth(now = Date.now()) {
   return listProviders().map((p) => {
-    const { tripUpdates, serviceAlerts } = p.realtime.peek();
+    const { tripUpdates, serviceAlerts, vehicles } = p.realtime.peek();
     const feed = (snap) => snap && {
       upstream_ok: snap.upstreamOk,
       data_updated_at: snap.feedTimestamp ? new Date(snap.feedTimestamp).toISOString() : null,
@@ -74,6 +77,10 @@ function trainsHealth(now = Date.now()) {
       schedule: p.schedule.status(),
       trip_updates: feed(tripUpdates),
       service_alerts: feed(serviceAlerts),
+      // Positions des trains : null si le fournisseur n'en publie pas (SNCF).
+      vehicle_positions: p.realtime.hasVehiclePositions
+        ? (vehicles ? { ...feed(vehicles), count: vehicles.vehicles?.length ?? 0 } : { upstream_ok: null, note: 'pas encore interrogé' })
+        : null,
     };
   });
 }

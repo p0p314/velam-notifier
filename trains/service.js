@@ -5,6 +5,8 @@
 const { runsOn, normalize } = require('./gtfs/staticIndex');
 const { ymdToInt, addDaysYmd, gtfsToEpoch, localParts, hhmmToMin } = require('./gtfs/time');
 const { buildRealtimeIndex, buildJourney } = require('./merge');
+const { getTripRoute } = require('./route');
+const { buildVehicleIndex, vehicleView, journeyProgress, journeyIsLive } = require('./vehicles');
 
 /** Erreur métier portant son code HTTP (404 gare inconnue, 503 horaires en chargement…). */
 class TrainsError extends Error {
@@ -270,12 +272,53 @@ function createTrainService(provider, env = process.env) {
     return { tripIdx, date, fromK, toK };
   }
 
-  /** Détail d'un trajet (tous les arrêts, événements). */
+  /**
+   * Position du train et progression le long du trajet :
+   *   { available, upstream_ok, vehicle, progress }
+   * `available` : le fournisseur publie-t-il des positions ? Le flux n'est lu que si
+   * oui, et seulement autour de l'heure du trajet (journeyIsLive) : jamais pour un
+   * train de demain. Sans position fraîche, la progression vient des horaires.
+   */
+  async function journeyPosition(index, ref, journey, { force = false, now = Date.now() } = {}) {
+    const out = { available: realtime.hasVehiclePositions, upstream_ok: null, vehicle: null, progress: null };
+    if (realtime.hasVehiclePositions && journeyIsLive(journey, now)) {
+      const snap = await realtime.getVehicles({ force });
+      const raw = buildVehicleIndex(index, snap).map.get(`${ref.tripIdx}|${ref.date}`);
+      out.upstream_ok = !!snap?.upstreamOk;
+      out.vehicle = vehicleView(raw, snap?.feedTimestamp, now);
+    }
+    out.progress = journeyProgress(journey, out.vehicle, now);
+    return out;
+  }
+
+  /** Détail d'un trajet (tous les arrêts, événements, position / progression). */
   async function getJourney(id, { force = false, now = Date.now() } = {}) {
     const index = requireIndex();
     const ref = locateJourney(index, id);
     const { rt, meta } = await realtimeContext(index, [ref.date], { force, now });
-    return { journey: buildJourney(index, ref, { rt, now, withStops: true, conventions }), realtime: meta };
+    const journey = buildJourney(index, ref, { rt, now, withStops: true, conventions });
+    const position = await journeyPosition(index, ref, journey, { force, now });
+    return { journey, realtime: meta, position };
+  }
+
+  /**
+   * Itinéraire géographique (TrainRoute) du trajet d'un TrainJourney : ne dépend que
+   * du trajet et de la version des horaires (mis en cache, jamais de temps réel).
+   * `segment` : positions, dans `stops`, des gares de montée et de descente.
+   */
+  function getJourneyRoute(id) {
+    const index = requireIndex();
+    const ref = locateJourney(index, id);
+    const route = getTripRoute(index, ref.tripIdx);
+    const a = index.trips.start[ref.tripIdx];
+    const line = index.lines[index.trips.line[ref.tripIdx]];
+    return {
+      ...route,
+      trainNumber: index.trips.number[ref.tripIdx] || null,
+      line: { id: line.id, name: line.shortName, longName: line.longName, color: line.color, textColor: line.textColor },
+      segment: { from: ref.fromK - a, to: ref.toK - a },
+      datasetVersion: index.feed.version ?? null,
+    };
   }
 
   // ── Favoris : retrouver « le 16:53 Lille Flandres → Amiens » à une date ──────
@@ -379,7 +422,7 @@ function createTrainService(provider, env = process.env) {
   return {
     provider,
     requireIndex, today, realtimeContext,
-    searchStations, searchLines, resolveLines, searchJourneys, getJourney, locateJourney,
+    searchStations, searchLines, resolveLines, searchJourneys, getJourney, getJourneyRoute, locateJourney,
     matchFavorite, nextOccurrences, favoriteFromJourney, lineForAlert,
   };
 }

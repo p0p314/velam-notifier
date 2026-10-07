@@ -222,7 +222,7 @@ function journeyAlerts(index, rtIndex, tripIdx, stations, from, to) {
  */
 function buildJourney(index, { tripIdx, date, fromK, toK }, { rt = null, now = Date.now(), withStops = false, conventions = {} } = {}) {
   const tz = index.tz;
-  const { arr, dep, station } = index.stopTimes;
+  const { arr, dep, station, seq, point } = index.stopTimes;
   const tripId = index.trips.ids[tripIdx];
   const schedDep = gtfsToEpoch(date, dep[fromK], tz);
   const schedArr = gtfsToEpoch(date, arr[toK], tz);
@@ -294,6 +294,9 @@ function buildJourney(index, { tripIdx, date, fromK, toK }, { rt = null, now = D
       const e = est?.get(k);
       journey.stops.push({
         station: stationRef(index, station[k]),
+        // Identifiants GTFS de l'arrêt : rapprochement avec une position de véhicule.
+        seq: seq[k],
+        stopId: index.points.ids[point[k]],
         scheduledArrival: iso(sa),
         scheduledDeparture: iso(sd),
         estimatedArrival: tripCancelled ? null : iso(e?.arr ?? null),

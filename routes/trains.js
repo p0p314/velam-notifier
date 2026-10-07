@@ -3,6 +3,7 @@
 //  Protégées (JWT) : trajets favoris et alertes (de trajet / de ligne).
 //  Cron (CRON_SECRET) : revalidation quotidienne du dataset GTFS.
 // Le frontend n'appelle jamais la SNCF : tout passe par ce backend (cache mutualisé).
+const crypto = require('crypto');
 const express = require('express');
 const {
   getTrainFavorites, getTrainFavorite, countTrainFavorites, addTrainFavorite, setTrainFavoriteLabel, removeTrainFavorite,
@@ -126,9 +127,29 @@ router.get('/api/trains/journey', async (req, res) => {
     const id = text(req.query.id, 600);
     if (!id) return res.status(400).json({ ok: false, error: 'id requis' });
     const provider = providerOf(req);
-    const { journey, realtime } = await provider.service.getJourney(id, { force: req.query.refresh === '1' });
-    res.json({ ok: true, provider: provider.id, journey, realtime });
+    const { journey, realtime, position } = await provider.service.getJourney(id, { force: req.query.refresh === '1' });
+    res.json({ ok: true, provider: provider.id, journey, realtime, position });
   } catch (err) { fail(res, err, 'GET /api/trains/journey'); }
+});
+
+/**
+ * GET /api/trains/route?id=… — itinéraire géographique du trajet (tracé + gares).
+ * Statique pour une version des horaires : mis en cache par le navigateur (1 h) et
+ * revalidé par ETag (version du dataset + trajet).
+ */
+router.get('/api/trains/route', (req, res) => {
+  try {
+    const id = text(req.query.id, 600);
+    if (!id) return res.status(400).json({ ok: false, error: 'id requis' });
+    const provider = providerOf(req);
+    const route = provider.service.getJourneyRoute(id);
+    const tag = crypto.createHash('sha1')
+      .update(`${provider.id}|${provider.schedule.status().loaded_at}|${id}`).digest('base64url').slice(0, 20);
+    res.set('Cache-Control', 'public, max-age=3600');
+    res.set('ETag', `"${tag}"`);
+    if (req.fresh) return res.status(304).end();
+    res.json({ ok: true, provider: provider.id, route });
+  } catch (err) { fail(res, err, 'GET /api/trains/route'); }
 });
 
 // ── Favoris (trajets précis) ────────────────────────────────────────────────

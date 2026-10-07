@@ -91,8 +91,9 @@ const sncf = {
   lastModified: 'Wed, 07 Oct 2026 08:00:00 GMT',
   tripUpdates: null,    // Buffer protobuf (null → 503)
   alerts: null,         // Buffer protobuf (null → 503)
+  vehicles: null,       // Buffer protobuf des positions (flux fictif : la SNCF n'en publie pas)
   failRealtime: false,  // true → les flux GTFS-RT répondent 503
-  calls: { gtfs: 0, tripUpdates: 0, alerts: 0, conditional: 0 },
+  calls: { gtfs: 0, tripUpdates: 0, alerts: 0, vehicles: 0, conditional: 0 },
 };
 
 function sncfResponse(url, init) {
@@ -104,7 +105,7 @@ function sncfResponse(url, init) {
     if (!sncf.gtfs) return new Response('absent', { status: 404 });
     return new Response(sncf.gtfs, { status: 200, headers: { 'Last-Modified': sncf.lastModified } });
   }
-  const kind = url.includes('trip-updates') ? 'tripUpdates' : 'alerts';
+  const kind = url.includes('trip-updates') ? 'tripUpdates' : url.includes('vehicle-positions') ? 'vehicles' : 'alerts';
   sncf.calls[kind]++;
   if (sncf.failRealtime || !sncf[kind]) return new Response('indisponible', { status: 503 });
   return new Response(sncf[kind], { status: 200, headers: { 'Content-Type': 'application/x-protobuf' } });
@@ -120,8 +121,9 @@ function resetSncf() {
   sncf.lastModified = 'Wed, 07 Oct 2026 08:00:00 GMT';
   sncf.tripUpdates = null;
   sncf.alerts = null;
+  sncf.vehicles = null;
   sncf.failRealtime = false;
-  sncf.calls = { gtfs: 0, tripUpdates: 0, alerts: 0, conditional: 0 };
+  sncf.calls = { gtfs: 0, tripUpdates: 0, alerts: 0, vehicles: 0, conditional: 0 };
 }
 
 global.fetch = async (input, init) => {

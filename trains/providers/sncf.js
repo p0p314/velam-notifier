@@ -10,6 +10,8 @@
 //    il change donc à chaque période / version du dataset (cf. favoris) ;
 //  - numéro de train = trip_headsign (zéros de tête retirés) ;
 //  - stop_id de quai « StopPoint:OCE<marque>-<UIC 8 chiffres> », gare « StopArea:OCE<UIC> » ;
+//  - aucun tracé : pas de shapes.txt, shape_id vide pour tous les trajets (tracé de gare
+//    en gare, approximatif) ; aucun flux de positions (VehiclePosition) publié ;
 //  - le GTFS-RT désigne parfois un train par son identifiant interne court
 //    « OCESN843940F » (préfixe des trip_id statiques de ce train), avec start_date.
 
@@ -52,6 +54,9 @@ function sncfConfig(env = process.env) {
     gtfsUrl: env.TRAINS_GTFS_URL || GTFS_URL,
     tripUpdatesUrl: env.TRAINS_RT_TRIP_UPDATES_URL || TRIP_UPDATES_URL,
     serviceAlertsUrl: env.TRAINS_RT_ALERTS_URL || SERVICE_ALERTS_URL,
+    // Positions des trains : la SNCF ne publie AUCUN flux GTFS-RT VehiclePosition (seuls
+    // Trip Updates et Service Alerts existent sur le PAN). Activable si une source apparaît.
+    vehiclePositionsUrl: env.TRAINS_RT_VEHICLES_URL || null,
     conventions,
   };
 }
