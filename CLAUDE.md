@@ -309,7 +309,11 @@ ou `MapPage` selon `?vue=liste|carte`, dernier choix en `localStorage`), `/train
 `/stations` → `/velos?vue=liste`, `/carte` → `/velos?vue=carte`, `/trains?onglet=mes-trains` →
 `/trajets`. Landing (Paramètres › Préférences) : `auto` = mobile → `/trajets`, desktop → `/velos`
 (anciennes valeurs `favoris|stations|carte` converties par `lib/prefs.js`).
-`components/PullToRefresh` : tirer pour actualiser (seuil en distance, ~72 px).
+`components/PullToRefresh` : tirer pour actualiser (seuil en distance, ~72 px) — **seul moyen
+manuel d'actualiser** (plus de bouton « Actualiser » ; `Freshness` n'affiche que « mis à jour il y a X »).
+Glisser pour supprimer (favoris, alertes) : `useSwipeReveal.js`, **axe verrouillé** au premier
+mouvement net (horizontal ⇒ défilement vertical bloqué par un `touchmove` natif non passif ;
+vertical ⇒ la ligne ne bouge plus).
 
 - **api.js** — client `api(path, {method, body, auth})` unique : injecte le Bearer, normalise
   les erreurs, gère token/user en `localStorage`. Base = `VITE_API_URL`. Rejoue les GET sur
@@ -359,7 +363,9 @@ ou `MapPage` selon `?vue=liste|carte`, dernier choix en `localStorage`), `/train
   favoris), uniquement les étapes encore utiles ; rien n'est monté une fois terminé. Monté
   par `FirstRun` (`App.jsx`) **après** le tutoriel, jamais en même temps.
 - **Trains** — `pages/Trains.jsx` (`/trains` : recherche, paramètres d'URL), `pages/TrainJourney.jsx`
-  (`/trains/trajet?id=` : détail, favori, alerte), tous deux **lazy-loadés** ;
+  (`/trains/trajet?id=` : détail, favori, alerte), tous deux **lazy-loadés** ; recherche par ligne :
+choix de la **direction** (`directionId` de chaque `TrainJourney`, `directions` de la réponse :
+terminus le plus fréquent de chaque sens, seulement s'il y en a deux) ;
   `components/trains/` (`Autocomplete` gares/lignes servies par l'API, `JourneyCard`, `Freshness`
   « Temps réel — mis à jour il y a 1 min » + Actualiser, `TrainFilters`, `TrainAlertForm`,
   `MyTrains` (section de Mes trajets), `TrainAlertsList` (page Alertes)) ; `trainHooks.js` (actualisation 2 min si visible) ; `lib/trains.js` (logique pure :

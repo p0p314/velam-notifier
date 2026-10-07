@@ -89,6 +89,16 @@ describe('recherche', () => {
     assert.equal(lyon.terminus, 'Lille Flandres');
   });
 
+  test('recherche par ligne : sens de chaque trajet et directions proposées (terminus le plus fréquent)', async () => {
+    const r = await search({ line: LINES.K44 });
+    assert.deepEqual(r.directions, [{ id: 0, label: 'Lille Flandres' }, { id: 1, label: 'Amiens' }]);
+    const dir = Object.fromEntries(r.journeys.map((j) => [j.trainNumber, j.directionId]));
+    assert.deepEqual(dir, { 843924: 1, 843925: 0, 843990: 1, 843998: 1 });
+    // Un seul sens dans les résultats, ou pas de ligne : pas de choix proposé.
+    assert.equal((await search({ from: LILLE, to: AMIENS, line: 'K44' })).directions, null);
+    assert.equal((await search({ from: LILLE, to: AMIENS })).directions, null);
+  });
+
   test('heure de départ minimale', async () => {
     const r = await search({ from: LILLE, to: AMIENS, after: '18:00' });
     assert.deepEqual(r.journeys.map((j) => j.trainNumber), ['843990', '843998']);

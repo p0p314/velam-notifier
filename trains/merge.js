@@ -269,6 +269,8 @@ function buildJourney(index, { tripIdx, date, fromK, toK }, { rt = null, now = D
     brand: conventions.brand?.(tripId) ?? null,
     mode: index.trips.road[tripIdx] ? 'car' : 'train',
     terminus: index.stations[station[lastK]].name,
+    // Sens sur la ligne (direction_id GTFS : 0 / 1), null s'il n'est pas publié.
+    directionId: index.trips.direction[tripIdx] === -1 ? null : index.trips.direction[tripIdx],
     departureStation: stationRef(index, station[fromK]),
     arrivalStation: stationRef(index, station[toK]),
     scheduledDeparture: iso(schedDep),

@@ -42,7 +42,7 @@ export default function TrainJourney() {
   const [params] = useSearchParams();
   const navigate = useNavigate();
   const id = params.get("id");
-  const { data, loading, error, refresh, refreshing, load } = useTrainJourney(id);
+  const { data, loading, error, refresh, load } = useTrainJourney(id);
   const my = useMyTrains();
   const [alertOpen, setAlertOpen] = useState(false);
   const [actionError, setActionError] = useState(null);
@@ -100,7 +100,7 @@ export default function TrainJourney() {
         {fmtDayLong(j.serviceDate)}{j.terminus !== j.arrivalStation.name ? ` · terminus ${j.terminus}` : ""}{j.line?.longName ? ` · ${j.line.longName}` : ""}
       </div>
 
-      <Freshness realtime={data.realtime} onRefresh={data.realtime?.applicable ? refresh : null} refreshing={refreshing} />
+      <Freshness realtime={data.realtime} />
 
       <div className="journey-card">
         <div className="journey-times">

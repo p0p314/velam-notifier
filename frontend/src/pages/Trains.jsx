@@ -8,6 +8,7 @@ import TrainFilters from "../components/trains/TrainFilters";
 import JourneyCard from "../components/trains/JourneyCard";
 import Freshness from "../components/trains/Freshness";
 import TrainAlertForm from "../components/trains/TrainAlertForm";
+import Seg from "../components/Seg";
 import { useTrainSearch, useMyTrains } from "../trainHooks";
 import { useIsMobile } from "../hooks";
 import {
@@ -39,10 +40,11 @@ function FollowLine({ line }) {
 function Results({ search }) {
   const isMobile = useIsMobile();
   const query = apiSearchQuery(search);
-  const { data, loading, error, refresh, refreshing, load } = useTrainSearch(query);
+  const { data, loading, error, refresh, load } = useTrainSearch(query);
   const [filters, setFilters] = useState(DEFAULT_FILTERS);
+  const [direction, setDirection] = useState("all"); // recherche par ligne : sens choisi
   const [sheet, setSheet] = useState(false);
-  useEffect(() => setFilters(DEFAULT_FILTERS), [query]);
+  useEffect(() => { setFilters(DEFAULT_FILTERS); setDirection("all"); }, [query]);
 
   if (loading) return <div className="view-state">Recherche des trains…</div>;
   if (error && !data) {
@@ -53,7 +55,11 @@ function Results({ search }) {
       </div>
     );
   }
-  const journeys = data.journeys;
+  // Recherche par ligne avec les deux sens : choix de la direction (terminus le plus fréquent).
+  const directions = data.directions ?? null;
+  const journeys = directions && direction !== "all"
+    ? data.journeys.filter((j) => String(j.directionId) === direction)
+    : data.journeys;
   const shown = applyFilters(journeys, filters);
   const nFilters = activeFilterCount(filters);
   const singleLine = data.lines?.length === 1 ? data.lines[0] : null;
@@ -75,7 +81,11 @@ function Results({ search }) {
           </button>
         )}
       </div>
-      <Freshness realtime={data.realtime} onRefresh={data.realtime?.applicable ? refresh : null} refreshing={refreshing} />
+      <Freshness realtime={data.realtime} />
+      {directions && (
+        <Seg label="Direction" value={direction} onChange={setDirection}
+          options={[{ value: "all", label: "Les deux sens" }, ...directions.map((d) => ({ value: String(d.id), label: `Vers ${d.label}` }))]} />
+      )}
       {singleLine && <FollowLine line={singleLine} />}
       {data.out_of_coverage && (
         <div className="offline-banner"><Icon name="calendar" size={16} />

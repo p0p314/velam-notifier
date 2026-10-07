@@ -97,6 +97,33 @@ describe("carte d'alerte", () => {
     await waitFor(() => expect(calls.some((c) => c.method === "DELETE" && c.path === "/api/alerts/5")).toBe(true));
   });
 
+  test("glissement : axe verrouillé (vertical = la carte ne bouge pas ; horizontal = pas de défilement)", async () => {
+    alerts = [base];
+    renderPage();
+    await screen.findByText("≤ 1 · 08:00–09:00");
+    window.PointerEvent ??= class extends MouseEvent {
+      constructor(type, init = {}) { super(type, init); this.pointerId = init.pointerId; }
+    };
+    const fg = document.querySelector(".swipe-fg");
+    // Geste d'abord vertical : la page défile, la carte reste en place même si le doigt part ensuite à gauche.
+    fireEvent.pointerDown(fg, { clientX: 300, clientY: 10, pointerId: 1 });
+    fireEvent.pointerMove(fg, { clientX: 298, clientY: 60, pointerId: 1 });
+    fireEvent.pointerMove(fg, { clientX: 150, clientY: 70, pointerId: 1 });
+    expect(fg.style.transform).toBe("translateX(0px)");
+    fireEvent.pointerUp(fg, { pointerId: 1 });
+    // Geste horizontal : la carte suit le doigt et le défilement vertical est annulé.
+    fireEvent.pointerDown(fg, { clientX: 300, clientY: 10, pointerId: 1 });
+    fireEvent.pointerMove(fg, { clientX: 260, clientY: 12, pointerId: 1 });
+    expect(fg.style.transform).toBe("translateX(-40px)");
+    const scroll = new Event("touchmove", { bubbles: true, cancelable: true });
+    fg.dispatchEvent(scroll);
+    expect(scroll.defaultPrevented).toBe(true);
+    fireEvent.pointerUp(fg, { pointerId: 1 });
+    const after = new Event("touchmove", { bubbles: true, cancelable: true });
+    fg.dispatchEvent(after);
+    expect(after.defaultPrevented).toBe(false); // geste terminé : la page défile de nouveau
+  });
+
   test("supprimer : carte retirée tout de suite ; déjà supprimée (404) → aucun message d'erreur", async () => {
     alerts = [base];
     renderPage();

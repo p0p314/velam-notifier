@@ -1,4 +1,5 @@
-import { useState, useRef } from "react";
+import { useState } from "react";
+import { useSwipeReveal } from "../useSwipeReveal";
 import PullToRefresh from "../components/PullToRefresh";
 import StationListItem from "../components/StationListItem";
 import StationDetailSheet from "../components/StationDetailSheet";
@@ -10,40 +11,21 @@ import { SORTS, loadSortPref, saveSortPref, moveItem, displayStation, sortFavori
 
 const REVEAL = 84;
 
-/** Card favori avec swipe gauche → bouton supprimer (pointer events natifs). */
+/**
+ * Card favori : glisser à gauche révèle « Supprimer ». Axe verrouillé (useSwipeReveal) :
+ * un glissement horizontal bloque le défilement de la page, et inversement.
+ */
 function FavoriteItem({ s, onOpen, onDelete, dist }) {
-  const [tx, setTx] = useState(0);
-  const base = useRef(0);
-  const startX = useRef(null);
-  const moved = useRef(false);
-
-  const down = (e) => {
-    startX.current = e.clientX;
-    base.current = tx;
-    moved.current = false;
-    e.currentTarget.setPointerCapture?.(e.pointerId);
-  };
-  const move = (e) => {
-    if (startX.current == null) return;
-    const dx = e.clientX - startX.current;
-    if (Math.abs(dx) > 6) moved.current = true;
-    setTx(Math.max(-REVEAL, Math.min(0, base.current + dx)));
-  };
-  const up = () => {
-    if (startX.current == null) return;
-    setTx(tx < -REVEAL / 2 ? -REVEAL : 0);
-    startX.current = null;
-  };
+  const { tx, dragging, revealed, moved, close, bind } = useSwipeReveal(REVEAL);
   const click = () => {
-    if (moved.current) return;       // c'était un swipe, pas un tap
-    if (tx < 0) { setTx(0); return; } // refermer si déjà révélé
+    if (moved.current) { moved.current = false; return; } // c'était un glissement, pas un appui
+    if (revealed) { close(); return; }                    // refermer si déjà révélé
     onOpen();
   };
 
-  const revealed = tx < 0;
   return (
     <div className="swipe-wrap">
-      {/* Mobile : bouton révélé par le swipe */}
+      {/* Mobile : bouton révélé par le glissement */}
       <button
         className={"swipe-delete" + (revealed ? " shown" : "")}
         onClick={() => onDelete(s)}
@@ -57,11 +39,8 @@ function FavoriteItem({ s, onOpen, onDelete, dist }) {
       <button className="fav-trash" aria-label="Retirer des favoris" onClick={() => onDelete(s)}><Icon name="trash" /></button>
       <div
         className="swipe-fg"
-        style={{ transform: `translateX(${tx}px)`, transition: startX.current == null ? "transform 0.2s ease" : "none", touchAction: "pan-y" }}
-        onPointerDown={down}
-        onPointerMove={move}
-        onPointerUp={up}
-        onPointerCancel={up}
+        style={{ transform: `translateX(${tx}px)`, transition: dragging ? "none" : "transform 0.2s ease", touchAction: "pan-y" }}
+        {...bind}
         onClick={click}
       >
         <StationListItem s={s} dist={dist} />

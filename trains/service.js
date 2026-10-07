@@ -243,10 +243,29 @@ function createTrainService(provider, env = process.env) {
       journeys,
       truncated,
       lines: lines ? [...lines].map((l) => lineView(index.lines[l])) : null,
+      directions: lines ? directionsOf(journeys) : null,
       realtime: meta,
       coverage: coverage(index),
       outOfCoverage: !!(index.feed.start && index.feed.end && (date < index.feed.start || date > index.feed.end)),
     };
+  }
+
+  /**
+   * Sens d'une recherche par ligne : [{ id, label }] (label = terminus le plus fréquent
+   * de ce sens, « Amiens »), seulement s'il y en a au moins deux ; sinon null.
+   */
+  function directionsOf(journeys) {
+    const byDir = new Map();
+    for (const j of journeys) {
+      if (j.directionId === null) continue;
+      let counts = byDir.get(j.directionId);
+      if (!counts) byDir.set(j.directionId, (counts = new Map()));
+      counts.set(j.terminus, (counts.get(j.terminus) ?? 0) + 1);
+    }
+    if (byDir.size < 2) return null;
+    return [...byDir.entries()]
+      .sort((a, b) => a[0] - b[0])
+      .map(([id, counts]) => ({ id, label: [...counts.entries()].sort((a, b) => b[1] - a[1])[0][0] }));
   }
 
   /** Décode l'identifiant d'un TrainJourney (« trip_id|date|gare|gare »). */
