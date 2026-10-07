@@ -913,6 +913,14 @@ select option { background: var(--surface); color: var(--text); }
 .train-card:hover { border-color: var(--border-strong); box-shadow: var(--shadow-card-hover); }
 .train-card.cancelled { background: color-mix(in srgb, var(--danger) 4%, var(--surface)); }
 .train-card-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+/* Lien étiré : toute la carte ouvre le détail ; « Carte » reste un lien distinct au-dessus. */
+.train-card { position: relative; }
+.train-card-link { text-decoration: none; }
+.train-card-link::after { content: ""; position: absolute; inset: 0; border-radius: inherit; }
+.train-card-link:focus-visible { outline: none; }
+.train-card-link:focus-visible::after { box-shadow: var(--focus-ring); }
+.train-card-map { position: relative; z-index: 1; margin-left: auto; align-self: center; display: inline-flex; align-items: center; gap: 5px; min-height: 30px; padding: 0 10px; border-radius: var(--r-sm); border: 1px solid var(--border-strong); background: var(--surface); color: var(--accent); font-size: 12px; font-weight: 600; text-decoration: none; }
+.train-card-map:hover { background: var(--inset); }
 .line-badge { display: inline-flex; align-items: center; gap: 4px; min-width: 34px; justify-content: center; padding: 2px 7px; border-radius: var(--r-xs); background: var(--accent); color: var(--on-accent); font-family: var(--font-mono); font-size: 12px; font-weight: 700; }
 .line-badge .ic { width: 13px; height: 13px; }
 .train-num { flex: 1; min-width: 0; font-size: 12px; color: var(--text-3); font-family: var(--font-mono); }
@@ -991,7 +999,53 @@ select option { background: var(--surface); color: var(--text); }
 .journey-stop-flag { color: var(--danger); text-decoration: none; display: inline; }
 .journey-stop-time { font-size: 13px; }
 
+/* Progression dans le détail d'un trajet */
+.journey-progress { display: flex; flex-direction: column; gap: 2px; padding-top: 10px; border-top: 1px solid var(--hairline); }
+.journey-progress-title { font-size: 14px; font-weight: 600; color: var(--text); }
+a.detail-cta { text-decoration: none; }
+
+/* Carte d'un train */
+.train-map-page { display: flex; flex-direction: column; gap: 12px; padding: 12px 16px; }
+.tm-map { position: relative; }
+.train-map.map-container { height: 52dvh; min-height: 300px; }
+.tm-map-actions { position: absolute; left: 10px; bottom: 10px; z-index: 5; display: flex; gap: 8px; }
+.tm-map-btn { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 0 12px; border-radius: var(--r-pill); border: 1px solid var(--border); background: var(--surface); color: var(--text); font-size: 13px; font-weight: 600; box-shadow: var(--shadow-pop); cursor: pointer; }
+.tm-map-btn .ic { color: var(--accent); }
+.tm-panel { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.tm-title { font-size: 18px; }
+.tm-progress { display: flex; flex-direction: column; gap: 6px; padding: 14px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-md); box-shadow: var(--shadow-card); }
+.tm-progress-title { font-size: 16px; font-weight: 600; color: var(--text); }
+.tm-progress-sub { font-size: 13px; color: var(--text-2); }
+.tm-basis { font-size: 12px; color: var(--text-3); }
+.tm-basis.position { color: var(--ok); }
+.tm-position { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-2); }
+.tm-position.ok .ic { color: var(--ok); }
+.tm-position.warn .ic { color: var(--warn); }
+.tm-next { list-style: none; margin: 4px 0 0; padding: 0; display: flex; flex-direction: column; }
+.tm-next li { display: flex; justify-content: space-between; gap: 10px; padding: 7px 0; border-top: 1px solid var(--hairline); font-size: 13px; color: var(--text-3); }
+.tm-next li.in { color: var(--text); }
+.tm-next-time { white-space: nowrap; }
+.tm-toggle { display: inline-flex; align-items: center; gap: 8px; font-size: 14px; color: var(--text-2); cursor: pointer; }
+.tm-toggle input { width: 18px; height: 18px; accent-color: var(--accent); }
+.train-marker { position: relative; width: 26px; height: 26px; }
+.train-marker-dot { position: absolute; inset: 4px; border-radius: 50%; background: var(--accent); border: 3px solid #fff; box-shadow: 0 1px 6px rgba(0,0,0,.4); }
+.train-marker-arrow { position: absolute; inset: -9px; }
+.train-marker-arrow::before { content: ""; position: absolute; left: 50%; top: 0; transform: translateX(-50%); border: 6px solid transparent; border-bottom: 9px solid var(--accent); border-top: 0; }
+.train-marker.stale .train-marker-dot { background: var(--neutral-bar); }
+.train-marker.stale .train-marker-arrow::before { border-bottom-color: var(--neutral-bar); }
+.tp-status { font-size: 12px; color: var(--text-3); margin-top: 2px; }
+.tp-rows { display: flex; flex-direction: column; gap: 2px; margin-top: 8px; }
+.tp-row { display: flex; gap: 8px; font-size: 13px; color: var(--text-2); }
+.tp-row span { width: 52px; color: var(--text-3); }
+.tp-row b { font-family: var(--font-mono); color: var(--text); }
+.tp-row b.old { text-decoration: line-through; color: var(--text-3); font-weight: 400; }
+.tp-delay { margin-top: 6px; font-size: 12px; font-weight: 600; color: var(--warn); }
+
 @media (min-width: 769px) {
+  .train-map-page { flex-direction: row; align-items: flex-start; }
+  .tm-map { flex: 1; min-width: 0; }
+  .train-map.map-container { height: calc(100dvh - 110px); }
+  .tm-panel { width: 340px; flex-shrink: 0; }
   .trains-layout { display: grid; grid-template-columns: 340px 1fr; align-items: start; gap: 20px; }
   .trains-layout > .train-search { position: sticky; top: 76px; }
   .journey-actions { flex-direction: row; flex-wrap: wrap; align-items: center; }

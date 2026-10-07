@@ -35,7 +35,7 @@ function useVisibleRefresh(fn, ms, enabled) {
  * Chargement d'une ressource trains (`path` null = rien à charger). Seule la réponse
  * de la dernière requête est appliquée (changement rapide de recherche).
  */
-function useTrainResource(path, { auth = false } = {}) {
+function useTrainResource(path, { auth = false, cache } = {}) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(!!path);
   const [refreshing, setRefreshing] = useState(false);
@@ -48,7 +48,7 @@ function useTrainResource(path, { auth = false } = {}) {
     if (force) setRefreshing(true);
     try {
       const url = force ? `${path}${path.includes("?") ? "&" : "?"}refresh=1` : path;
-      const res = await api(url, { auth });
+      const res = await api(url, { auth, ...(cache ? { cache } : {}) });
       if (id !== seq.current) return;
       setData(res);
       setError(null);
@@ -58,7 +58,7 @@ function useTrainResource(path, { auth = false } = {}) {
     } finally {
       if (id === seq.current) { setLoading(false); setRefreshing(false); }
     }
-  }, [path, auth]);
+  }, [path, auth, cache]);
 
   useEffect(() => {
     setData(null);
@@ -77,11 +77,20 @@ export function useTrainSearch(query) {
   return { ...res, refresh: () => res.load({ force: true }) };
 }
 
-/** Détail d'un trajet. */
-export function useTrainJourney(id) {
+/**
+ * Détail d'un trajet. `refreshMs(data)` : fréquence d'actualisation (carte : 30 s
+ * quand le fournisseur publie des positions pour un train en route), 2 min sinon.
+ */
+export function useTrainJourney(id, { refreshMs = null } = {}) {
   const res = useTrainResource(id ? `/api/trains/journey?id=${encodeURIComponent(id)}` : null);
-  useVisibleRefresh(() => res.load(), TRAIN_REFRESH_MS, !!res.data?.realtime?.applicable);
+  const ms = refreshMs ? refreshMs(res.data, TRAIN_REFRESH_MS) : TRAIN_REFRESH_MS;
+  useVisibleRefresh(() => res.load(), ms, !!res.data?.realtime?.applicable || !!res.data?.position?.available);
   return { ...res, refresh: () => res.load({ force: true }) };
+}
+
+/** Itinéraire géographique d'un trajet (statique : mis en cache par le navigateur). */
+export function useTrainRoute(id) {
+  return useTrainResource(id ? `/api/trains/route?id=${encodeURIComponent(id)}` : null, { cache: "default" });
 }
 
 /**

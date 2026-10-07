@@ -8,11 +8,11 @@ import {
 
 mapboxgl.accessToken = MAPBOX_TOKEN;
 
-const esc = (s) =>
+export const esc = (s) =>
   String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
 /** Contenu HTML du popup station (nom, vélos dispo, places, détail par type). */
-function popupHTML(s) {
+export function popupHTML(s) {
   const offline = s.is_renting === false;
   const elec = s.electrical ?? 0;
   const meca = s.mechanical ?? 0;

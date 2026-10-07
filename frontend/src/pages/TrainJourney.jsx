@@ -9,6 +9,7 @@ import Freshness from "../components/trains/Freshness";
 import TrainAlertForm from "../components/trains/TrainAlertForm";
 import { useTrainJourney, useMyTrains } from "../trainHooks";
 import { fmtClock, fmtDayLong, timeInfo, describeTrainAlert, statusInfo, delayLabel } from "../lib/trains";
+import { trainMapPath, progressInfo } from "../lib/trainMap";
 
 /** Bloc « Départ » / « Arrivée » : prévu, estimé (seulement s'il diffère) et retard. */
 function TimeBlock({ title, station, scheduled, estimated, delay, cancelled }) {
@@ -84,6 +85,7 @@ export default function TrainJourney() {
     setAlertOpen(false);
   };
   const s = statusInfo(j);
+  const progress = progressInfo(j, data.position?.progress ?? null);
 
   return (
     <PullToRefresh onRefresh={refresh}>
@@ -110,6 +112,12 @@ export default function TrainJourney() {
           <TrainStatus journey={j} />
         </div>
         {cancelled && j.cancellation?.reason && <div className="train-note danger">{j.cancellation.reason}</div>}
+        {progress && j.phase === "en_route" && (
+          <div className="journey-progress">
+            <span className="journey-progress-title">{progress.title}</span>
+            <span className="form-hint">{progress.basisLabel}</span>
+          </div>
+        )}
         {s.tone === "neutral" && data.realtime?.applicable && data.realtime?.available && (
           <div className="form-hint">Aucune information temps réel pour ce train pour l'instant : horaire théorique.</div>
         )}
@@ -122,6 +130,9 @@ export default function TrainJourney() {
         <button type="button" className="detail-cta secondary" onClick={() => setAlertOpen(true)}>
           <Icon name="bell-plus" size={16} /> {alert ? "Modifier l'alerte" : "Créer une alerte"}
         </button>
+        <Link className="detail-cta secondary" to={trainMapPath(j.id)}>
+          <Icon name="map" size={16} /> Voir sur la carte
+        </Link>
         {alert && <div className="form-hint">Alerte : {describeTrainAlert(alert)}{alert.active ? "" : " (désactivée)"}</div>}
         {fav && <Link className="form-hint" to="/trajets">Voir dans Mes trajets</Link>}
         {actionError && <div className="form-error" role="alert">{actionError}</div>}
