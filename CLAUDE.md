@@ -12,6 +12,9 @@ cette convention (commentaires, libellés UI, messages d'erreur).
   auth JWT, favoris par utilisateur et **alertes de disponibilité** notifiées par **Web Push**.
 - **Frontend** : application **React / Vite** multi-pages (PWA installable), carte **Mapbox**,
   thème clair/sombre, expérience mobile-first.
+- **Trains** (v1.6) : recherche et suivi de trains SNCF (TER, Intercités, TGV — ex. Lille ↔
+  Amiens, K44) à partir des données ouvertes **GTFS / GTFS-RT** ; favoris de trajets précis et
+  alertes (retard, suppression, perturbation, ligne). Guide complet : **`docs/TRAINS.md`**.
 - **Déploiement** : service web unique sur **Render** (front + back même domaine).
   Base **PostgreSQL** (Supabase) en prod, **SQLite** en dev.
 
@@ -77,6 +80,9 @@ Backend (voir `render.yaml`) :
 - `DATABASE_SSL=false` — désactive SSL vers Postgres (Postgres local / CI uniquement).
 - `SQLITE_PATH` — fichier SQLite (défaut `data/velam.db` ; `:memory:` pour les tests).
 - `RATE_LIMIT_DISABLED=1` — **tests uniquement** : coupe le rate-limit login/register.
+- `TRAINS_*` — module Trains, toutes facultatives (sources SNCF publiques, sans clé) :
+  `TRAINS_ENABLED=0` (désactive), `TRAINS_GTFS_URL`, `TRAINS_RT_TRIP_UPDATES_URL`,
+  `TRAINS_RT_ALERTS_URL`, `TRAINS_CACHE_DIR` (défaut `data/gtfs`), TTL / délais — voir `docs/TRAINS.md`.
 
 Frontend (préfixe `VITE_`, injectées au build) :
 
@@ -132,8 +138,18 @@ Modules CommonJS, séparation nette des responsabilités :
   middlewares de sécurité, montage des routers `routes/` (un par domaine : validation
   `validateAlertPayload` dans `routes/alerts.js`, fusion `mergeWithStatus` dans
   `routes/stations.js`…), service du build SPA en prod.
+- **trains/** — module Trains (voir `docs/TRAINS.md`), fournisseurs de transport extensibles :
+  `index.js` (registre `getProvider`, `initTrains`, santé), `providers/sncf.js` (URL + **toutes**
+  les conventions du flux SNCF : numéro = `trip_headsign`, alias temps réel `OCESN…F`, mode `_R:`),
+  `gtfs/` (`staticSchedule.js` = StaticScheduleProvider : zip téléchargé conditionnellement,
+  cache disque, **index mémoire compact** — rien en base ; `realtime.js` = RealtimeTrainProvider :
+  GTFS-RT décodé avec le `.proto` officiel via `protobufjs`, cache TTL 2 min / 5 min, dernière
+  réponse valide ; `zip.js`, `csv.js`, `time.js`), `merge.js` (fusion pure → `TrainJourney`),
+  `service.js` (recherche, détail, rapprochement des favoris), `alertLoop.js` (boucle 60 s,
+  idempotente via `train_notifications`), `notifier.js` (canal Web Push → `push.sendToUser`).
+  Sans temps réel frais : horaires théoriques, **jamais** « supprimé », aucune notification.
 - **server.js** — boot séquentiel : `initialize()` → `initAuth()` → `initPush()` →
-  `startPolling()` → `listen`.
+  `startPolling()` → `initTrains()` (arrière-plan, non bloquant) → `startTrainAlerts()` → `listen`.
 
 ### Invariant clé du flux de données
 
@@ -167,10 +183,12 @@ enveloppe `ok` ; le client `api()` lève sur `!res.ok || data.ok === false`. Rou
 `POST /api/auth/tutorial`,
 `PUT /api/auth/password`, `POST /api/auth/logout|logout-others`, `/api/auth/sessions` (GET, DELETE `/:id`),
 `GET /api/auth/export`,
-`POST /api/stations/refresh`) : Bearer requis. Publiques : login/register,
-`GET /api/stations`, `GET /api/rental-apps`, `GET /api/push/vapid-public-key`.
-Cron (`CRON_SECRET`) : `/cron/sync-rental-apps`, `/cron/refresh-stations` (workflow
-`sync-rental-apps.yml`, 02:00 UTC).
+`POST /api/stations/refresh`, `/api/trains/favorites` (GET, POST, PATCH/DELETE `/:id`),
+`/api/trains/alerts` (GET, POST, PATCH/DELETE `/:id`)) : Bearer requis. Publiques : login/register,
+`GET /api/stations`, `GET /api/rental-apps`, `GET /api/push/vapid-public-key`,
+`GET /api/trains/status|stations|lines|search|journey`.
+Cron (`CRON_SECRET`) : `/cron/sync-rental-apps`, `/cron/refresh-stations`, `/cron/sync-trains`
+(workflow `sync-rental-apps.yml`, 02:00 UTC).
 
 ### Invariant de la boucle d'alerte
 
@@ -306,6 +324,14 @@ différenciée (réglable dans Paramètres › Préférences) : par défaut mobi
 - **components/Onboarding.jsx** — accueil au premier lancement (installer / notifications /
   favoris), uniquement les étapes encore utiles ; rien n'est monté une fois terminé. Monté
   par `FirstRun` (`App.jsx`) **après** le tutoriel, jamais en même temps.
+- **Trains** — `pages/Trains.jsx` (`/trains` : onglets Rechercher / Mes trains via
+  `?onglet=mes-trains` ; recherche en paramètres d'URL), `pages/TrainJourney.jsx`
+  (`/trains/trajet?id=` : détail, favori, alerte), tous deux **lazy-loadés** ;
+  `components/trains/` (`Autocomplete` gares/lignes servies par l'API, `JourneyCard`, `Freshness`
+  « Temps réel — mis à jour il y a 1 min » + Actualiser, `TrainFilters`, `TrainAlertForm`,
+  `MyTrains`) ; `trainHooks.js` (actualisation 2 min si visible) ; `lib/trains.js` (logique pure :
+  heures affichées en Europe/Paris, estimé masqué s'il est identique au prévu, filtres, tris).
+  `components/DayPicker` et `components/Seg` sont partagés avec la page Alertes.
 - **pages/** — `Login` (connexion / inscription : présentation, `validateAuth` avant envoi —
   confirmation du mot de passe à l'inscription —, afficher le mot de passe, champs 16 px), `Stations` (recherche/tri/filtre + détail), `Favorites` (swipe-to-delete,
   tri proximité / ordre choisi, mode « Organiser »), `MapPage` (carte + filtres + « Autour de moi » : position mesurée au clic, 3 stations les plus proches recalculées en continu selon les filtres),
@@ -347,7 +373,10 @@ en ms), `push_subscriptions.session_id` (appareil de rattachement), `favorites` 
 — NULL tant que l'utilisateur n'a jamais ordonné : ordre alphabétique), `push_subscriptions`
 (unique `endpoint`), `alerts` (cf. modèle ci-dessus ; `group_stations` stocké en JSON texte,
 parsé par `db.js` → tableau ; `send_times` en CSV → tableau (résumés) ; `threshold` a remplacé `min_count`,
-`last_notified_key` a remplacé `last_notified_count`), `rental_apps` (deep links par plateforme).
+`last_notified_key` a remplacé `last_notified_count`), `rental_apps` (deep links par plateforme),
+`train_favorites` (trajet précis : gares + heure théorique + numéro + ligne ; jamais seulement le
+`trip_id`, qui change à chaque version GTFS), `train_alerts` (`scope` trip | line),
+`train_notifications` (journal d'idempotence, unique `alert_id + event_key`).
 Helpers de migration portables : `columnsOf` / `addColumn` / `dropColumn` (`migrations.js`).
 
 ## Conventions & bonnes pratiques

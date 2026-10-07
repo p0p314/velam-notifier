@@ -860,3 +860,141 @@ select option { background: var(--surface); color: var(--text); }
 .device-badge { font-size: 11px; font-weight: 600; color: var(--accent); background: var(--inset); border-radius: var(--r-pill); padding: 2px 8px; }
 .device-meta { font-size: 12px; color: var(--text-3); margin-top: 2px; }
 .device-btn { min-height: 34px; padding: 0 12px; background: var(--surface); color: var(--danger); border: 1px solid var(--border-strong); border-radius: var(--r-sm); font-size: 13px; font-weight: 600; cursor: pointer; }
+
+/* ── Trains ──────────────────────────────────────────────────────────────── */
+.trains-page { max-width: 1100px; margin: 0 auto; width: 100%; }
+.trains-layout { display: flex; flex-direction: column; gap: 16px; }
+.section-title { font-size: 13px; font-weight: 600; color: var(--text-2); text-transform: uppercase; letter-spacing: .04em; margin: 8px 0 4px; }
+.link-btn { background: none; border: none; padding: 0; font: inherit; font-size: 13px; color: var(--accent); cursor: pointer; text-align: left; text-decoration: none; display: inline-flex; align-items: center; gap: 6px; }
+.link-btn:hover { text-decoration: underline; }
+.danger-text { color: var(--danger) !important; }
+.old { text-decoration: line-through; color: var(--text-3); }
+
+/* Recherche */
+.train-search { display: flex; flex-direction: column; gap: 10px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg); padding: 14px; box-shadow: var(--shadow-card); }
+.train-search-route { display: flex; align-items: center; gap: 8px; }
+.train-search-stations { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+.train-swap { flex-shrink: 0; border: 1px solid var(--border); }
+.train-search-when { display: flex; gap: 10px; }
+.train-field { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.train-field .field { width: 100%; font-size: 16px; }
+.ac { position: relative; }
+.ac-box { height: 44px; }
+.ac-box .search-input { font-size: 16px; }
+.ac-clear { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border: none; background: none; color: var(--text-3); cursor: pointer; border-radius: var(--r-sm); }
+.ac-list { position: absolute; z-index: 40; left: 0; right: 0; top: calc(100% + 4px); margin: 0; padding: 4px; list-style: none; background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--r-md); box-shadow: var(--shadow-pop); max-height: 280px; overflow-y: auto; }
+.ac-item { padding: 10px 12px; border-radius: var(--r-sm); font-size: 14px; color: var(--text); cursor: pointer; }
+.ac-item.active, .ac-item:hover { background: var(--inset); }
+.ac-empty { padding: 10px 12px; font-size: 13px; color: var(--text-3); }
+.ac-line { display: flex; align-items: baseline; gap: 8px; }
+.ac-line span { font-size: 12px; color: var(--text-3); }
+
+/* Fraîcheur des données */
+.freshness { display: flex; align-items: center; gap: 8px; padding: 8px 10px 8px 12px; border-radius: var(--r-sm); background: var(--inset); border: 1px solid var(--border); font-size: 13px; color: var(--text-2); }
+.freshness > span { flex: 1; }
+.freshness.ok > .ic { color: var(--ok); }
+.freshness.warn > .ic { color: var(--warn); }
+.freshness.neutral > .ic { color: var(--text-3); }
+.freshness-btn { display: inline-flex; align-items: center; gap: 6px; min-height: 32px; padding: 0 10px; border-radius: var(--r-sm); border: 1px solid var(--border-strong); background: var(--surface); color: var(--accent); font-size: 12px; font-weight: 600; cursor: pointer; }
+.freshness-btn:disabled { opacity: .6; cursor: default; }
+.spin { animation: spin 1s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Résultats */
+.train-results { display: flex; flex-direction: column; gap: 10px; }
+.train-results-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.train-results-title { font-size: 18px; }
+.train-results-body { display: flex; gap: 16px; align-items: flex-start; }
+.train-list { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 10px; }
+.train-filters-aside { width: 260px; flex-shrink: 0; position: sticky; top: 76px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-md); padding: 14px; }
+
+/* Carte d'un train */
+.train-card { display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-md); box-shadow: var(--shadow-card); text-decoration: none; color: inherit; }
+.train-card:hover { border-color: var(--border-strong); box-shadow: var(--shadow-card-hover); }
+.train-card.cancelled { background: color-mix(in srgb, var(--danger) 4%, var(--surface)); }
+.train-card-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.line-badge { display: inline-flex; align-items: center; gap: 4px; min-width: 34px; justify-content: center; padding: 2px 7px; border-radius: var(--r-xs); background: var(--accent); color: var(--on-accent); font-family: var(--font-mono); font-size: 12px; font-weight: 700; }
+.line-badge .ic { width: 13px; height: 13px; }
+.train-num { flex: 1; min-width: 0; font-size: 12px; color: var(--text-3); font-family: var(--font-mono); }
+.train-status { display: inline-flex; align-items: center; gap: 6px; }
+.status-pill.neutral { color: var(--text-3); }
+.status-pill.neutral .dot { background: var(--text-3); }
+.train-phase { font-size: 11px; color: var(--text-3); padding: 1px 6px; border: 1px solid var(--border); border-radius: var(--r-pill); }
+.train-route { font-size: 15px; font-weight: 600; color: var(--text); }
+.train-date { font-weight: 400; font-size: 13px; color: var(--text-3); }
+.train-times { display: flex; gap: 18px; flex-wrap: wrap; }
+.train-time { display: flex; align-items: baseline; gap: 6px; font-family: var(--font-mono); font-size: 14px; color: var(--text); }
+.train-time-label { font-family: var(--font-ui); font-size: 12px; color: var(--text-3); }
+.t-sched.old { text-decoration: line-through; color: var(--text-3); }
+.t-est { color: var(--warn); font-weight: 600; }
+.t-delay { color: var(--warn); font-size: 12px; font-weight: 600; }
+.train-note { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-2); }
+.train-note.warn .ic { color: var(--warn); flex-shrink: 0; }
+.train-note.danger { color: var(--danger); font-weight: 500; }
+.train-note > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Mes trains */
+.my-trains { display: flex; flex-direction: column; gap: 12px; }
+.my-trains-section { display: flex; flex-direction: column; gap: 10px; }
+.my-train { display: flex; flex-direction: column; gap: 10px; padding: 14px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-md); box-shadow: var(--shadow-card); }
+.my-train.off { opacity: .6; }
+.my-train .train-card { box-shadow: none; background: var(--inset); }
+.my-train-head { display: flex; align-items: center; gap: 10px; }
+.my-train-title { flex: 1; min-width: 0; }
+.my-train-name { font-size: 14px; font-weight: 600; color: var(--text); }
+.my-train-sub { font-size: 12px; color: var(--text-3); margin-top: 2px; }
+.my-train-next { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.my-train-next a { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 2px; border-bottom: 1px solid var(--hairline); text-decoration: none; font-size: 13px; color: var(--text-2); font-family: var(--font-mono); }
+.my-train-next li:last-child a { border-bottom: none; }
+.my-train-alert { display: flex; align-items: center; gap: 8px; color: var(--text-3); }
+.my-train-alert-text { flex: 1; color: var(--text-2); }
+
+/* Formulaires d'alerte et filtres */
+.train-alert-form, .train-filters { display: flex; flex-direction: column; gap: 14px; }
+.train-alert-form .seg button, .train-filters .seg button { font-size: 12px; padding-left: 4px; padding-right: 4px; }
+
+/* Détail d'un trajet */
+.journey-page { max-width: 760px; margin: 0 auto; width: 100%; }
+.back-link { color: var(--text-2); font-size: 14px; }
+.journey-head { display: flex; align-items: center; gap: 8px; }
+.journey-title { font-size: 20px; }
+.journey-card { display: flex; flex-direction: column; gap: 12px; padding: 16px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg); box-shadow: var(--shadow-card); }
+.journey-times { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.journey-time-title { font-size: 12px; font-weight: 600; color: var(--text-3); text-transform: uppercase; letter-spacing: .04em; }
+.journey-time-station { font-size: 14px; color: var(--text-2); margin: 2px 0 6px; }
+.journey-time-main { font-size: 26px; font-weight: 600; letter-spacing: -.02em; color: var(--text); }
+.journey-time-rows { margin: 0; display: flex; flex-direction: column; gap: 2px; }
+.journey-time-rows > div { display: flex; gap: 8px; align-items: baseline; }
+.journey-time-rows dt { width: 52px; font-size: 12px; color: var(--text-3); }
+.journey-time-rows dd { margin: 0; font-size: 18px; font-weight: 600; color: var(--text); }
+.journey-time-rows dd.t-delay { font-size: 14px; color: var(--warn); }
+.journey-status { display: flex; align-items: center; gap: 10px; padding-top: 10px; border-top: 1px solid var(--hairline); }
+.journey-actions { display: flex; flex-direction: column; gap: 8px; }
+.journey-actions .detail-cta.secondary { margin-top: 0; }
+.journey-section { display: flex; flex-direction: column; gap: 8px; }
+.journey-event { display: flex; gap: 10px; padding: 12px; border-radius: var(--r-md); background: var(--inset); border: 1px solid var(--border); }
+.journey-event > .ic { flex-shrink: 0; color: var(--text-3); margin-top: 1px; }
+.journey-event.major > .ic { color: var(--warn); }
+.journey-event-title { font-size: 14px; font-weight: 600; color: var(--text); }
+.journey-event-text { font-size: 13px; color: var(--text-2); margin: 4px 0; white-space: pre-line; }
+.journey-stops { list-style: none; margin: 0; padding: 0; }
+.journey-stop { position: relative; display: flex; align-items: center; gap: 12px; padding: 9px 0 9px 4px; font-size: 14px; color: var(--text-3); }
+.journey-stop::before { content: ""; position: absolute; left: 8px; top: 0; bottom: 0; width: 2px; background: var(--border); }
+.journey-stop:first-child::before { top: 50%; }
+.journey-stop:last-child::before { bottom: 50%; }
+.journey-stop.in { color: var(--text); }
+.journey-stop.in::before { background: var(--accent); }
+.journey-stop-dot { position: relative; z-index: 1; width: 10px; height: 10px; border-radius: 50%; background: var(--surface); border: 2px solid var(--border-strong); flex-shrink: 0; }
+.journey-stop.in .journey-stop-dot { border-color: var(--accent); }
+.journey-stop-name { flex: 1; min-width: 0; }
+.journey-stop.skipped .journey-stop-name { text-decoration: line-through; }
+.journey-stop-flag { color: var(--danger); text-decoration: none; display: inline; }
+.journey-stop-time { font-size: 13px; }
+
+@media (min-width: 769px) {
+  .trains-layout { display: grid; grid-template-columns: 340px 1fr; align-items: start; gap: 20px; }
+  .trains-layout > .train-search { position: sticky; top: 76px; }
+  .journey-actions { flex-direction: row; flex-wrap: wrap; align-items: center; }
+  .journey-actions .detail-cta { width: auto; padding: 0 18px; }
+}
+@media (prefers-reduced-motion: reduce) { .spin { animation: none; } }

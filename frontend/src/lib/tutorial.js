@@ -51,6 +51,15 @@ export const TUTORIAL_SLIDES = [
     ],
   },
   {
+    icon: "train",
+    title: "Prenez aussi le train",
+    text: "Dans Trains, cherchez un trajet (Lille Flandres → Amiens) ou une ligne (K44) : horaires du jour, retards et suppressions en temps réel.",
+    points: [
+      "Ajoutez votre train en favori pour voir son état d'un coup d'œil",
+      "Alerte en cas de retard, de suppression ou de perturbation",
+    ],
+  },
+  {
     icon: "sliders",
     title: "À votre main",
     text: "Dans Paramètres : thème, type de vélo par défaut, page d'ouverture, notifications et appareils connectés.",

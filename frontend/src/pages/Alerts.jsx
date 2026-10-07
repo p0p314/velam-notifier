@@ -11,6 +11,8 @@ import {
 import BottomSheet from "../components/BottomSheet";
 import SwipeRow from "../components/SwipeRow";
 import Icon from "../components/Icon";
+import DayPicker from "../components/DayPicker";
+import Seg from "../components/Seg";
 
 const BIKE_OPTIONS = [
   { value: "mechanical", label: "Mécanique" },
@@ -37,46 +39,6 @@ const COMPARISON_OPTIONS = [
   { value: "at_most",  label: "Il en reste peu" },
   { value: "at_least", label: "Il y en a de nouveau" },
 ];
-
-const DAYS = [
-  { label: "Lu", value: 1 }, { label: "Ma", value: 2 }, { label: "Me", value: 3 },
-  { label: "Je", value: 4 }, { label: "Ve", value: 5 }, { label: "Sa", value: 6 },
-  { label: "Di", value: 7 },
-];
-
-const DAY_NAMES = ["lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche"];
-
-/** Jours de la semaine (au moins un reste coché). Formulaire et cartes de la liste. */
-function DayPicker({ value, onChange }) {
-  const toggle = (day) => {
-    if (value.includes(day) && value.length === 1) return;
-    const next = value.includes(day) ? value.filter((d) => d !== day) : [...value, day];
-    onChange(next.sort((a, b) => a - b));
-  };
-  return (
-    <div className="day-picker" role="group" aria-label="Jours">
-      {DAYS.map(({ label, value: day }) => (
-        <button key={day} type="button" aria-pressed={value.includes(day)} aria-label={DAY_NAMES[day - 1]}
-          className={value.includes(day) ? "active" : ""} onClick={() => toggle(day)}>
-          {label}
-        </button>
-      ))}
-    </div>
-  );
-}
-
-function Seg({ options, value, onChange, label }) {
-  return (
-    <div className="seg" role="group" aria-label={label}>
-      {options.map((o) => (
-        <button key={o.value} type="button" aria-pressed={value === o.value}
-          className={value === o.value ? "active" : ""} onClick={() => onChange(o.value)}>
-          {o.label}
-        </button>
-      ))}
-    </div>
-  );
-}
 
 /**
  * Notifications de cet appareil : activation sur clic (exigé par iOS, jamais

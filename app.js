@@ -54,6 +54,7 @@ app.use(require('./routes/auth'));
 app.use(require('./routes/favorites'));
 app.use(require('./routes/push'));
 app.use(require('./routes/alerts'));
+app.use(require('./routes/trains'));
 
 // ── Production : sert le build Vite (SPA) après toutes les routes /api ───────────
 

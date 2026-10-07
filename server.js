@@ -4,6 +4,8 @@ const { app, ALLOWED_ORIGINS } = require('./app');
 const { initialize } = require('./db');
 const { initAuth } = require('./auth');
 const { initPush, startPolling } = require('./push');
+const { initTrains } = require('./trains');
+const { startTrainAlerts } = require('./trains/alertLoop');
 
 const PORT = process.env.PORT ?? 3001;
 
@@ -14,6 +16,8 @@ const PORT = process.env.PORT ?? 3001;
   await initAuth();     // résout le secret JWT
   await initPush();     // configure les clés VAPID
   startPolling();
+  initTrains();         // horaires des trains : chargement en arrière-plan (non bloquant)
+  startTrainAlerts();
 
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`\nVéloPulse server → port ${PORT} (0.0.0.0)`);
@@ -21,7 +25,8 @@ const PORT = process.env.PORT ?? 3001;
     console.log(`  CORS autorisé pour : ${ALLOWED_ORIGINS.join(', ')}`);
     console.log(`  GET  /health                — anti-sleep`);
     console.log(`  GET  /api/stations          — infos + statut live`);
-    console.log(`  CRUD /api/favorites /api/alerts /api/push/* — protégées (JWT)\n`);
+    console.log(`  CRUD /api/favorites /api/alerts /api/push/* — protégées (JWT)`);
+    console.log(`  GET  /api/trains/*            — module Trains (GTFS + GTFS-RT)\n`);
   });
 })().catch((err) => {
   console.error('[boot] échec du démarrage :', err);

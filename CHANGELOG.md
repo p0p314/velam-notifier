@@ -9,6 +9,37 @@ Toutes les évolutions notables de VéloPulse. Format inspiré de
 section `## [x.y.z] - AAAA-MM-JJ` ci-dessous, puis merger sur `main` : le workflow
 `release.yml` crée le tag `vx.y.z` et la release GitHub à partir de cette section.
 
+## [1.6.0] - 2026-10-07
+
+### Trains (nouveau)
+- Nouvel onglet **Trains** : recherche par trajet (Lille Flandres → Amiens, sens
+  inversable), par gare seule, ou par ligne (K44), pour le jour choisi, avec une heure de
+  départ minimale facultative. Gares et lignes proposées depuis les données SNCF
+  (autocomplétion), jamais une liste en dur.
+- Pour chaque train : ligne, numéro, gares, heures prévues et — seulement si elles
+  diffèrent — estimées, retard en minutes, statut (à l'heure, en retard, supprimé,
+  horaire théorique), suppression et perturbations annoncées.
+- Temps réel SNCF (GTFS-RT) actualisé automatiquement toutes les 2 min tant que la page
+  est visible, bouton **Actualiser**, et origine des données toujours indiquée
+  (« Temps réel — mis à jour il y a 1 min » / « Horaires théoriques »).
+- Filtres (heures, ligne, gares, état) et tris (départ, arrivée, retard).
+- Page de détail d'un train : horaires, retard, événements, tous les arrêts.
+- **Mes trains** : trajets favoris précis (un train à une heure, pas une ligne) avec leur
+  état actuel et leurs prochaines circulations, retrouvés même quand la SNCF publie de
+  nouveaux horaires.
+- **Alertes trains** (notifications) : retard au-delà d'un seuil (+5, +10, +15, +30 min,
+  puis à chaque aggravation de 10 min et quand le retard se résorbe), suppression,
+  perturbation ; suivi d'une **ligne entière** (perturbations importantes, trains
+  supprimés, créneau horaire facultatif). Jamais deux notifications pour le même
+  événement.
+
+### Technique
+- Module `trains/` (fournisseurs de transport extensibles) : horaires GTFS indexés en
+  mémoire (aucune copie en base), GTFS-RT décodé avec le schéma officiel, cache
+  mutualisé côté serveur ; nouvelles tables `train_favorites`, `train_alerts`,
+  `train_notifications` ; `POST /cron/sync-trains` (synchronisation quotidienne).
+- Export RGPD et suppression du compte incluent les données trains.
+
 ## [1.5.2] - 2026-09-30
 
 ### Alertes
