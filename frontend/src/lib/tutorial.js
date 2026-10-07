@@ -8,55 +8,46 @@ export const TUTORIAL_SLIDES = [
   {
     icon: "bike",
     title: "Bienvenue sur VéloPulse",
-    text: "Les vélos Vélam d'Amiens en temps réel, station par station.",
+    text: "Vos trajets du quotidien en temps réel : les vélos Vélam d'Amiens et les trains SNCF.",
     points: [
-      "Vélos mécaniques, électriques et places libres",
-      "Données officielles Vélam, rafraîchies toutes les minutes",
-    ],
-  },
-  {
-    icon: "map-pin",
-    title: "Trouvez une station",
-    text: "Dans Stations, cherchez par nom et triez par distance. La Carte montre d'un coup d'œil où il reste des vélos.",
-    points: [
-      "Filtres par type de vélo et nombre minimum",
-      "« Autour de moi » : les 3 stations utiles les plus proches",
+      "Vélos mécaniques, électriques et places libres, station par station",
+      "Horaires, retards et suppressions des TER, Intercités et TGV",
     ],
   },
   {
     icon: "star",
-    title: "Gardez vos favoris",
-    text: "Touchez l'étoile d'une station (maison, travail…) : elle apparaît dans Favoris, triée par proximité ou dans votre ordre.",
+    title: "Mes trajets",
+    text: "Votre page d'accueil : vos trains et vos stations favoris, avec leur état actuel.",
     points: [
-      "Renommez-les (« Maison ») et réorganisez-les",
-      "Depuis la fiche d'une station, créez une alerte en un geste",
+      "Pour chaque train : retard éventuel et prochaines circulations",
+      "Les stations Vélam près de vos gares : places au départ, vélos à l'arrivée",
     ],
   },
   {
-    icon: "bell",
-    title: "Soyez alerté",
-    text: "Une alerte de disponibilité vous prévient quand votre station se vide ou se remplit, sur le créneau et les jours choisis.",
+    icon: "map-pin",
+    title: "Vélos",
+    text: "Toutes les stations en liste ou sur la carte. Touchez l'étoile d'une station pour la suivre.",
     points: [
-      "Trajet : vérifie aussi les places à l'arrivée",
-      "Groupe : plusieurs stations proches, une seule alerte",
-    ],
-  },
-  {
-    icon: "clock",
-    title: "Recevez un résumé",
-    text: "Le résumé à heure fixe vous envoie le nombre de vélos de vos stations, à une ou plusieurs heures de la journée.",
-    points: [
-      "Par exemple à 7 h 45 avant de partir et à 18 h pour le retour",
-      "Depuis une notification, ouvrez l'app Vélam pour louer",
+      "Recherche par nom, tri par distance, filtres par type de vélo",
+      "« Autour de moi » : les 3 stations utiles les plus proches",
     ],
   },
   {
     icon: "train",
-    title: "Prenez aussi le train",
-    text: "Dans Trains, cherchez un trajet (Lille Flandres → Amiens) ou une ligne (K44) : horaires du jour, retards et suppressions en temps réel.",
+    title: "Trains",
+    text: "Cherchez un trajet (Lille Flandres → Amiens), une gare ou une ligne (K44) : les trains du jour, avec les retards en temps réel.",
     points: [
-      "Ajoutez votre train en favori pour voir son état d'un coup d'œil",
-      "Alerte en cas de retard, de suppression ou de perturbation",
+      "Ouvrez un train pour l'ajouter à vos trajets",
+      "Tirez la page vers le bas pour l'actualiser",
+    ],
+  },
+  {
+    icon: "bell",
+    title: "Alertes",
+    text: "Soyez prévenu au bon moment, pour vos vélos comme pour vos trains.",
+    points: [
+      "Vélos : station qui se vide ou se remplit, résumé à heure fixe",
+      "Trains : retard, suppression, perturbation, ou toute une ligne",
     ],
   },
   {
@@ -64,7 +55,7 @@ export const TUTORIAL_SLIDES = [
     title: "À votre main",
     text: "Dans Paramètres : thème, type de vélo par défaut, page d'ouverture, notifications et appareils connectés.",
     points: [
-      "Activez les notifications pour recevoir alertes et résumés",
+      "Activez les notifications pour recevoir vos alertes",
       "Ce tutoriel reste disponible dans Paramètres › Préférences",
     ],
   },

@@ -208,8 +208,8 @@ describe("Paramètres — Préférences", () => {
 
     fireEvent.click(within(screen.getByRole("group", { name: "Type de vélo par défaut" })).getByRole("button", { name: "Électrique" }));
     expect(localStorage.getItem("velopulse-pref-bike")).toBe("ebike");
-    fireEvent.click(within(screen.getByRole("group", { name: "Page d'ouverture" })).getByRole("button", { name: "Carte" }));
-    expect(localStorage.getItem("velopulse-pref-landing")).toBe("carte");
+    fireEvent.click(within(screen.getByRole("group", { name: "Page d'ouverture" })).getByRole("button", { name: "Trains" }));
+    expect(localStorage.getItem("velopulse-pref-landing")).toBe("trains");
   });
 
   test("« Revoir le tutoriel » l'ouvre, sans rien renvoyer au serveur", async () => {

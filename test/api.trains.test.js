@@ -191,6 +191,12 @@ describe('alertes', () => {
 
     const list = await api.get('/api/trains/favorites', { token });
     assert.equal(list.body.favorites[0].alert.id, id);
+    // La liste des alertes indique le trajet surveillé.
+    const alertsList = await api.get('/api/trains/alerts', { token });
+    assert.deepEqual(
+      { ...alertsList.body.alerts[0].favorite, id: undefined },
+      { id: undefined, label: null, line_name: 'K45', departure_time: '17:53', origin_name: 'Lille Flandres', destination_name: 'Amiens' },
+    );
 
     assert.equal((await api.delete(`/api/trains/alerts/${id}`, { token })).status, 200);
     assert.equal((await api.get('/api/trains/alerts', { token })).body.alerts.length, 0);

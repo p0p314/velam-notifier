@@ -30,8 +30,8 @@ export function OnlineOnly({ children }) {
       <Icon name="wifi-off" size={40} />
       <div className="empty-title">Cette page nécessite une connexion</div>
       <div className="empty-sub">
-        Hors ligne, vous pouvez consulter la <NavLink to="/stations">liste des stations</NavLink> et
-        vos <NavLink to="/favoris">favoris</NavLink> (dernières données connues).
+        Hors ligne, vous pouvez consulter la <NavLink to="/velos?vue=liste">liste des stations</NavLink> et
+        vos <NavLink to="/trajets">stations favorites</NavLink> (dernières données connues).
       </div>
     </div>
   );

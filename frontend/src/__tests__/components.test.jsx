@@ -48,13 +48,13 @@ describe("OnlineOnly", () => {
     wrap(<OnlineOnly><p>Carte</p></OnlineOnly>);
     expect(screen.getByText("Carte")).toBeTruthy();
   });
-  test("hors ligne : message + liens vers stations et favoris", () => {
+  test("hors ligne : message + liens vers la liste des stations et les favoris", () => {
     setOnline(false, { emit: false });
     wrap(<OnlineOnly><p>Carte</p></OnlineOnly>);
     expect(screen.queryByText("Carte")).toBeNull();
     expect(screen.getByText("Cette page nécessite une connexion")).toBeTruthy();
-    expect(screen.getByRole("link", { name: "liste des stations" }).getAttribute("href")).toBe("/stations");
-    expect(screen.getByRole("link", { name: "favoris" }).getAttribute("href")).toBe("/favoris");
+    expect(screen.getByRole("link", { name: "liste des stations" }).getAttribute("href")).toBe("/velos?vue=liste");
+    expect(screen.getByRole("link", { name: "stations favorites" }).getAttribute("href")).toBe("/trajets");
   });
 });
 

@@ -185,7 +185,9 @@ ne renseigne pas toujours l'effet) ou sévérité `SEVERE`.
 
 **Canal** : Web Push (PWA) via l'envoi existant (`push.js` → tous les appareils du
 compte). `trains/notifier.js` est le seul point à étendre pour un autre canal (e-mail…).
-Les notifications ouvrent le détail du trajet (`/trains/trajet?id=…`) ou « Mes trains ».
+Les notifications ouvrent le détail du trajet (`/trains/trajet?id=…`) ou, pour une ligne, la page Alertes (`/alertes?type=trains`).
+
+Texte des notifications : titre court qui identifie le train et son état (`K44 16:53 Lille Flandres → Amiens · +12 min` / `· Supprimé` / `· Perturbé` / `· À l'heure`, `Ligne K44 · Perturbation` / `· Train supprimé`) ; corps factuel rédigé par l'app (nouvelles heures, cause). Le texte SNCF n'est qu'un complément : converti en texte brut (les messages SNCF contiennent du HTML, jamais rendu), sans lignes génériques ni liens, 140 caractères au plus.
 
 ## 7. API
 
@@ -212,7 +214,7 @@ Protégées (JWT) :
 | `POST /api/trains/favorites` `{ journey_id }` | ajoute (données relues côté serveur) |
 | `PATCH /api/trains/favorites/:id` `{ label }` | renomme |
 | `DELETE /api/trains/favorites/:id` | retire (et son alerte) |
-| `GET /api/trains/alerts` | alertes trains |
+| `GET /api/trains/alerts` | alertes trains (une alerte de trajet porte le résumé de son favori : `favorite`) |
 | `POST /api/trains/alerts` | trajet : `{ scope:'trip', favorite_id | journey_id, delay_threshold, on_cancel, on_disruption, days }` ; ligne : `{ scope:'line', line, on_cancel, on_disruption, time_start, time_end, days }` |
 | `PATCH /api/trains/alerts/:id` | modifie (portée et favori non modifiables) |
 | `DELETE /api/trains/alerts/:id` | supprime |

@@ -10,18 +10,23 @@ describe("préférences de l'appareil", () => {
     expect(getBikePref()).toBe("any");
     expect(getLandingPref()).toBe("auto");
     setBikePref("ebike");
-    setLandingPref("carte");
+    setLandingPref("trains");
     expect(getBikePref()).toBe("ebike");
-    expect(getLandingPref()).toBe("carte");
+    expect(getLandingPref()).toBe("trains");
+    // Choix d'avant la v1.7 : convertis vers la page équivalente.
+    localStorage.setItem("velopulse-pref-landing", "favoris");
+    expect(getLandingPref()).toBe("trajets");
+    localStorage.setItem("velopulse-pref-landing", "carte");
+    expect(getLandingPref()).toBe("velos");
     localStorage.setItem("velopulse-pref-bike", "tandem");
     expect(getBikePref()).toBe("any");
   });
 
   test("page d'ouverture", () => {
-    expect(landingPath("auto", true)).toBe("/favoris");
-    expect(landingPath("auto", false)).toBe("/stations");
-    expect(landingPath("carte", true)).toBe("/carte");
-    expect(landingPath("favoris", false)).toBe("/favoris");
+    expect(landingPath("auto", true)).toBe("/trajets");
+    expect(landingPath("auto", false)).toBe("/velos");
+    expect(landingPath("trains", true)).toBe("/trains");
+    expect(landingPath("trajets", false)).toBe("/trajets");
   });
 
   test("filtre Stations / Carte et formulaire d'alerte suivent le type préféré", () => {

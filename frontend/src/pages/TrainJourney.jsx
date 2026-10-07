@@ -123,7 +123,7 @@ export default function TrainJourney() {
           <Icon name="bell-plus" size={16} /> {alert ? "Modifier l'alerte" : "Créer une alerte"}
         </button>
         {alert && <div className="form-hint">Alerte : {describeTrainAlert(alert)}{alert.active ? "" : " (désactivée)"}</div>}
-        {fav && <Link className="form-hint" to="/trains?onglet=mes-trains">Voir dans Mes trains</Link>}
+        {fav && <Link className="form-hint" to="/trajets">Voir dans Mes trajets</Link>}
         {actionError && <div className="form-error" role="alert">{actionError}</div>}
       </div>
 

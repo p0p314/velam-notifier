@@ -182,9 +182,9 @@ describe("géolocalisation : une seule mesure partagée", () => {
 });
 
 describe("raccourcis de l'app (manifest)", () => {
-  test("Favoris, Carte, Alertes vers des routes existantes", () => {
+  test("Mes trajets, Carte, Trains, Alertes vers des routes existantes", () => {
     const manifest = JSON.parse(readFileSync(join(process.cwd(), "public/manifest.json"), "utf8"));
-    expect(manifest.shortcuts.map((s) => s.url)).toEqual(["/favoris", "/carte", "/alertes"]);
+    expect(manifest.shortcuts.map((s) => s.url)).toEqual(["/trajets", "/velos?vue=carte", "/trains", "/alertes"]);
     for (const s of manifest.shortcuts) {
       expect(s.name).toBeTruthy();
       expect(s.icons[0].src).toMatch(/^\/icon-/);

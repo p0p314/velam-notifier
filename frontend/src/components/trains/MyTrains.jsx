@@ -2,14 +2,13 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import Icon from "../Icon";
 import BottomSheet from "../BottomSheet";
-import PullToRefresh from "../PullToRefresh";
 import LineBadge from "./LineBadge";
 import JourneyCard from "./JourneyCard";
 import TrainStatus from "./TrainStatus";
 import Freshness from "./Freshness";
 import TrainAlertForm from "./TrainAlertForm";
-import { useMyTrains } from "../../trainHooks";
-import { describeTrainAlert, favoriteTitle, fmtClock } from "../../lib/trains";
+import { describeTrainAlert, favoriteTitle, fmtClock, nearbyVelam } from "../../lib/trains";
+import { fmtDistance } from "../../hooks";
 
 /** Bouton en deux temps (« Retirer » puis « Confirmer ») : pas de suppression par erreur. */
 function ConfirmButton({ label, confirmLabel, onConfirm }) {
@@ -23,7 +22,7 @@ function ConfirmButton({ label, confirmLabel, onConfirm }) {
 }
 
 /** Interrupteur actif / en pause d'une alerte. */
-function AlertSwitch({ alert, onToggle }) {
+export function AlertSwitch({ alert, onToggle }) {
   return (
     <button type="button" role="switch" aria-checked={alert.active} aria-label={alert.active ? "Désactiver l'alerte" : "Activer l'alerte"}
       className={"switch" + (alert.active ? " on" : "")} onClick={() => onToggle(alert)}>
@@ -32,12 +31,36 @@ function AlertSwitch({ alert, onToggle }) {
   );
 }
 
-function FavoriteTrain({ f, onEditAlert, onRemove, onToggleAlert }) {
+/**
+ * Correspondance Vélam d'un train : places libres près de la gare de départ (on y
+ * dépose son vélo), vélos près de la gare d'arrivée (on repart à vélo). Rien si la
+ * gare est loin de toute station (hors d'Amiens).
+ */
+function VelamLinks({ journey, stations }) {
+  const rows = [
+    { label: "Au départ", hit: nearbyVelam(stations, journey.departureStation, "docks"), unit: (n) => `${n} place${n > 1 ? "s" : ""}` },
+    { label: "À l'arrivée", hit: nearbyVelam(stations, journey.arrivalStation, "bikes"), unit: (n) => `${n} vélo${n > 1 ? "s" : ""}` },
+  ].filter((r) => r.hit);
+  if (!rows.length) return null;
+  return (
+    <ul className="velam-links" aria-label="Stations Vélam proches">
+      {rows.map((r) => (
+        <li key={r.label}>
+          <Icon name="bike" size={15} />
+          <span>{r.label} : <b>{r.hit.station.name}</b> · {r.hit.count ? r.unit(r.hit.count) : "vide"} · {fmtDistance(r.hit.km)}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function FavoriteTrain({ f, stations, onEditAlert, onRemove, onToggleAlert }) {
   const [current, ...later] = f.next ?? [];
   return (
     <article className="my-train">
       <div className="my-train-head">
-        <LineBadge line={current?.line ?? { name: f.line_name }} />
+        {/* Le badge de ligne figure déjà sur la carte du prochain train. */}
+        {!current && <LineBadge line={{ name: f.line_name }} />}
         <div className="my-train-title">
           <div className="my-train-name">{favoriteTitle(f)}</div>
           {f.label && <div className="my-train-sub">{f.departure_time} {f.origin_name} → {f.destination_name}</div>}
@@ -53,6 +76,7 @@ function FavoriteTrain({ f, onEditAlert, onRemove, onToggleAlert }) {
             <div className="train-note warn"><Icon name="clock" size={14} /><span>Horaire modifié : départ à {fmtClock(current.scheduledDeparture)} au lieu de {f.departure_time}</span></div>
           )}
           <JourneyCard j={current} showDate />
+          <VelamLinks journey={current} stations={stations} />
           {later.length > 0 && (
             <ul className="my-train-next" aria-label="Prochaines circulations">
               {later.map((j) => (
@@ -85,10 +109,12 @@ function FavoriteTrain({ f, onEditAlert, onRemove, onToggleAlert }) {
   );
 }
 
-/** « Mes trains » : trajets favoris (état actuel, prochaines circulations, alerte) et lignes suivies. */
-export default function MyTrains() {
-  const t = useMyTrains();
-  const [editing, setEditing] = useState(null); // { scope, alert, favorite?, subject }
+/**
+ * Trains favoris (section de « Mes trajets ») : état actuel, prochaines circulations,
+ * correspondance Vélam, alerte. `t` : état de useMyTrains ; `stations` : stations Vélam.
+ */
+export default function MyTrains({ t, stations = [] }) {
+  const [editing, setEditing] = useState(null); // favori dont on crée / modifie l'alerte
   const [error, setError] = useState(null);
 
   const act = async (fn) => {
@@ -97,9 +123,8 @@ export default function MyTrains() {
   };
   const toggleAlert = (a) => act(() => t.updateAlert(a.id, { active: !a.active }));
   const save = async (payload) => {
-    const { scope, alert, favorite } = editing;
-    if (alert) await t.updateAlert(alert.id, payload);
-    else await t.createAlert({ scope, favorite_id: favorite.id, ...payload });
+    if (editing.alert) await t.updateAlert(editing.alert.id, payload);
+    else await t.createAlert({ scope: "trip", favorite_id: editing.id, ...payload });
     setEditing(null);
   };
   const remove = async () => {
@@ -107,71 +132,42 @@ export default function MyTrains() {
     setEditing(null);
   };
 
-  if (t.loading) return <div className="view-state">Chargement…</div>;
-  if (t.error && !t.data) {
-    return (
-      <div className="error-box">
-        <div className="error-title">{t.error}</div>
-        <button className="error-retry" onClick={() => t.load()}>Réessayer</button>
-      </div>
-    );
-  }
-
-  const empty = !t.favorites.length && !t.lineAlerts.length;
   return (
-    <PullToRefresh onRefresh={t.refresh}>
-    <div className="my-trains">
-      {t.favorites.length > 0 && <Freshness realtime={t.data?.realtime} onRefresh={t.refresh} refreshing={t.refreshing} />}
-      {error && <div className="form-error" role="alert">{error}</div>}
-
-      {empty ? (
-        <div className="empty-state">
-          <Icon name="train" size={40} />
-          <div className="empty-title">Aucun trajet suivi</div>
-          <div className="empty-sub">Recherchez un train (par exemple Lille Flandres → Amiens), ouvrez-le puis touchez « Ajouter aux favoris ».</div>
+    <section className="my-trains-section" aria-label="Trains">
+      <div className="page-head">
+        <h2 className="section-title">Trains</h2>
+        {t.favorites.length > 0 && <Link to="/trains" className="link-btn section-link">Chercher un train</Link>}
+      </div>
+      {t.loading ? (
+        <div className="view-state">Chargement…</div>
+      ) : t.error && !t.data ? (
+        <div className="error-box">
+          <div className="error-title">{t.error}</div>
+          <button className="error-retry" onClick={() => t.load()}>Réessayer</button>
+        </div>
+      ) : t.favorites.length === 0 ? (
+        <div className="empty-inline">
+          <Icon name="train" size={22} />
+          <span>Aucun train suivi. <Link to="/trains">Cherchez un train</Link> (Lille Flandres → Amiens…) puis ajoutez-le aux favoris.</span>
         </div>
       ) : (
         <>
-          {t.favorites.length > 0 && (
-            <section className="my-trains-section">
-              <h3 className="section-title">Trajets favoris</h3>
-              {t.favorites.map((f) => (
-                <FavoriteTrain key={f.id} f={f} onToggleAlert={toggleAlert}
-                  onRemove={(fav) => act(() => t.removeFavorite(fav.id))}
-                  onEditAlert={(fav) => setEditing({ scope: "trip", alert: fav.alert, favorite: fav, subject: favoriteTitle(fav) })} />
-              ))}
-            </section>
-          )}
-          {t.lineAlerts.length > 0 && (
-            <section className="my-trains-section">
-              <h3 className="section-title">Lignes suivies</h3>
-              {t.lineAlerts.map((a) => (
-                <article key={a.id} className={"my-train" + (a.active ? "" : " off")}>
-                  <div className="my-train-head">
-                    <LineBadge line={{ name: a.line_name }} />
-                    <div className="my-train-title">
-                      <div className="my-train-name">{a.line_long_name || `Ligne ${a.line_name}`}</div>
-                      <button type="button" className="link-btn my-train-alert-text"
-                        onClick={() => setEditing({ scope: "line", alert: a, subject: `${a.line_name} — ${a.line_long_name}` })}>
-                        {describeTrainAlert(a)}
-                      </button>
-                    </div>
-                    <AlertSwitch alert={a} onToggle={toggleAlert} />
-                  </div>
-                </article>
-              ))}
-            </section>
-          )}
+          <Freshness realtime={t.data?.realtime} onRefresh={t.refresh} refreshing={t.refreshing} />
+          {error && <div className="form-error" role="alert">{error}</div>}
+          {t.favorites.map((f) => (
+            <FavoriteTrain key={f.id} f={f} stations={stations} onToggleAlert={toggleAlert}
+              onRemove={(fav) => act(() => t.removeFavorite(fav.id))}
+              onEditAlert={(fav) => setEditing(fav)} />
+          ))}
         </>
       )}
 
       <BottomSheet open={!!editing} onClose={() => setEditing(null)} heightVh={80}>
         {editing && (
-          <TrainAlertForm key={`${editing.scope}-${editing.alert?.id ?? editing.favorite?.id}`} scope={editing.scope} alert={editing.alert}
-            subject={editing.subject} onSubmit={save} onCancel={() => setEditing(null)} onDelete={remove} />
+          <TrainAlertForm key={editing.id} scope="trip" alert={editing.alert} subject={favoriteTitle(editing)}
+            onSubmit={save} onCancel={() => setEditing(null)} onDelete={remove} />
         )}
       </BottomSheet>
-    </div>
-    </PullToRefresh>
+    </section>
   );
 }

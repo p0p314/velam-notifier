@@ -1027,3 +1027,24 @@ html { overscroll-behavior-y: contain; } /* pas de rechargement natif de toute l
 .ptr-fill { stroke: var(--accent); stroke-linecap: round; transition: stroke-dashoffset .05s linear; }
 .ptr.busy .ptr-ring { animation: spin 1s linear infinite; }
 @media (prefers-reduced-motion: reduce) { .ptr.busy .ptr-ring { animation: none; } }
+
+/* ── Navigation v1.7 : Mes trajets, Vélos (liste / carte), Alertes vélos + trains ── */
+.view-switch { padding: 12px 16px 0; }
+.view-switch .seg { max-width: 320px; }
+.bikes-page.carte .map-container { height: calc(100dvh - 250px); }
+.trips-page { max-width: 1100px; margin: 0 auto; width: 100%; gap: 16px; }
+.section-link { margin-left: auto; font-size: 13px; }
+.empty-inline { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border: 1px dashed var(--border-strong); border-radius: var(--r-md); font-size: 13px; color: var(--text-2); }
+.empty-inline .ic { flex-shrink: 0; color: var(--text-3); }
+.empty-inline a { color: var(--accent); font-weight: 600; }
+.velam-links { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.velam-links li { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-2); }
+.velam-links .ic { flex-shrink: 0; color: var(--accent); }
+.velam-links b { font-weight: 600; color: var(--text); }
+.train-alerts { display: flex; flex-direction: column; gap: 10px; }
+.follow-line { align-self: flex-start; display: inline-flex; align-items: center; gap: 6px; }
+@media (min-width: 769px) {
+  .view-switch { padding: 20px 0 0; }
+  .bikes-page.carte .map-container { height: calc(100dvh - 170px); }
+  .alertes-layout.single { grid-template-columns: minmax(0, 760px); }
+}

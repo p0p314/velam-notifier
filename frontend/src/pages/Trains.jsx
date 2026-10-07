@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { Navigate, useSearchParams } from "react-router-dom";
 import Icon from "../components/Icon";
-import Seg from "../components/Seg";
 import PullToRefresh from "../components/PullToRefresh";
 import BottomSheet from "../components/BottomSheet";
 import TrainSearchForm from "../components/trains/TrainSearchForm";
@@ -9,18 +8,12 @@ import TrainFilters from "../components/trains/TrainFilters";
 import JourneyCard from "../components/trains/JourneyCard";
 import Freshness from "../components/trains/Freshness";
 import TrainAlertForm from "../components/trains/TrainAlertForm";
-import MyTrains from "../components/trains/MyTrains";
 import { useTrainSearch, useMyTrains } from "../trainHooks";
 import { useIsMobile } from "../hooks";
 import {
   searchFromQuery, queryFromSearch, apiSearchQuery, searchError, searchTitle, fmtDayLong,
   applyFilters, activeFilterCount, DEFAULT_FILTERS,
 } from "../lib/trains";
-
-const TABS = [
-  { value: "search", label: "Rechercher" },
-  { value: "mine",   label: "Mes trains" },
-];
 
 /** Bouton « Suivre cette ligne » d'une recherche par ligne (alerte de ligne). */
 function FollowLine({ line }) {
@@ -113,24 +106,21 @@ function Results({ search }) {
   );
 }
 
-/** Onglet Trains : recherche (trajet, ligne) + filtres + liste, et « Mes trains ». */
+/** Onglet Trains : recherche (trajet, gare, ligne) + filtres + liste. Les trains suivis sont dans « Mes trajets ». */
 export default function Trains() {
   const [params, setParams] = useSearchParams();
-  const tab = params.get("onglet") === "mes-trains" ? "mine" : "search";
   const search = searchFromQuery(params);
   const ready = !searchError(search);
-
-  const setTab = (v) => setParams(v === "mine" ? { onglet: "mes-trains" } : queryFromSearch(search));
   const onSearch = (s) => setParams(queryFromSearch(s));
+  // Ancien onglet « Mes trains » (liens et notifications d'avant la v1.7).
+  if (params.get("onglet") === "mes-trains") return <Navigate to="/trajets" replace />;
 
   return (
     <div className="view-pad trains-page">
       <div className="page-head">
         <h1 className="page-title">Trains</h1>
       </div>
-      <Seg label="Section" options={TABS} value={tab} onChange={setTab} />
-      {tab === "mine" ? <MyTrains /> : (
-        <div className="trains-layout">
+      <div className="trains-layout">
           <TrainSearchForm key={params.toString()} initial={search} onSearch={onSearch} />
           {ready ? <Results search={search} /> : (
             <div className="empty-state">
@@ -139,8 +129,7 @@ export default function Trains() {
               <div className="empty-sub">Par trajet (Lille Flandres → Amiens), par gare, ou par ligne (K44). Les horaires sont ceux du jour choisi, avec les retards en temps réel.</div>
             </div>
           )}
-        </div>
-      )}
+      </div>
     </div>
   );
 }

@@ -10,8 +10,8 @@ import Navbar from "./components/Navbar";
 import Icon from "./components/Icon";
 import Logo from "./components/Logo";
 import Login from "./pages/Login";
-import Stations from "./pages/Stations";
-import Favorites from "./pages/Favorites";
+import MyTrips from "./pages/MyTrips";
+import Bikes from "./pages/Bikes";
 import Alerts from "./pages/Alerts";
 import Account from "./pages/Account";
 import Privacy from "./pages/Privacy";
@@ -20,8 +20,6 @@ import Onboarding from "./components/Onboarding";
 import Tutorial from "./components/Tutorial";
 import { tutorialPending } from "./lib/tutorial";
 
-// Carte chargée à la demande : mapbox-gl (~1,5 Mo) reste hors du bundle principal.
-const MapPage = lazy(() => import("./pages/MapPage"));
 // Module Trains, lui aussi chargé à la demande (hors du bundle principal).
 const Trains = lazy(() => import("./pages/Trains"));
 const TrainJourney = lazy(() => import("./pages/TrainJourney"));
@@ -33,7 +31,7 @@ function Protected() {
 }
 
 // Page d'ouverture : choisie dans Paramètres › Préférences ; par défaut, mobile →
-// Favoris (expérience centrée favoris), desktop → Stations (tableau de bord complet).
+// Mes trajets (ce qu'on suit, vélo et train), desktop → Vélos (tableau de bord complet).
 function Landing() {
   const isMobile = useIsMobile();
   return <Navigate to={landingPath(getLandingPref(), isMobile)} replace />;
@@ -94,9 +92,12 @@ export default function App() {
             <Route element={<Protected />}>
               <Route element={<Layout />}>
                 <Route path="/" element={<Landing />} />
-                <Route path="/stations" element={<Stations />} />
-                <Route path="/carte" element={<OnlineOnly><Suspense fallback={<div className="view-state">Chargement de la carte…</div>}><MapPage /></Suspense></OnlineOnly>} />
-                <Route path="/favoris" element={<Favorites />} />
+                <Route path="/trajets" element={<MyTrips />} />
+                <Route path="/velos" element={<Bikes />} />
+                {/* Adresses d'avant la v1.7 (favoris enregistrés, raccourcis, notifications). */}
+                <Route path="/favoris" element={<Navigate to="/trajets" replace />} />
+                <Route path="/stations" element={<Navigate to="/velos?vue=liste" replace />} />
+                <Route path="/carte" element={<Navigate to="/velos?vue=carte" replace />} />
                 <Route path="/alertes" element={<OnlineOnly><Alerts /></OnlineOnly>} />
                 <Route path="/trains" element={<OnlineOnly><Suspense fallback={trainsFallback}><Trains /></Suspense></OnlineOnly>} />
                 <Route path="/trains/trajet" element={<OnlineOnly><Suspense fallback={trainsFallback}><TrainJourney /></Suspense></OnlineOnly>} />

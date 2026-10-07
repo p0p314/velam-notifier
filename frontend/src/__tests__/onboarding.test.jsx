@@ -52,7 +52,7 @@ describe("<Onboarding />", () => {
     <MemoryRouter initialEntries={["/favoris"]}>
       <Routes>
         <Route path="/favoris" element={<Onboarding />} />
-        <Route path="/stations" element={<p>Page stations</p>} />
+        <Route path="/velos" element={<p>Page stations</p>} />
       </Routes>
     </MemoryRouter>
   );

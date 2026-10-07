@@ -273,3 +273,34 @@ export function describeTrainAlert(a) {
 
 /** Nom d'un trajet favori : nom personnalisé, sinon « 16:53 Lille Flandres → Amiens ». */
 export const favoriteTitle = (f) => f.label || `${f.departure_time} ${f.origin_name} → ${f.destination_name}`;
+
+// ── Correspondance train ↔ Vélam ────────────────────────────────────────────
+
+/** Distance à vol d'oiseau (km). */
+function km(a, b) {
+  const R = 6371, rad = (d) => (d * Math.PI) / 180;
+  const h = Math.sin(rad(b.lat - a.lat) / 2) ** 2
+    + Math.cos(rad(a.lat)) * Math.cos(rad(b.lat)) * Math.sin(rad(b.lon - a.lon) / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(h));
+}
+
+export const VELAM_MAX_KM = 1;
+
+/**
+ * Station Vélam utile près d'une gare (≤ 1 km) : `need` = "bikes" (vélos pour repartir
+ * à l'arrivée) ou "docks" (places pour déposer son vélo au départ). La plus proche qui en
+ * a au moins un, sinon la plus proche tout court (affichée « vide ») ; null si aucune
+ * station dans le rayon (gare hors d'Amiens).
+ */
+export function nearbyVelam(stations, gare, need = "bikes") {
+  if (!gare || gare.lat == null || gare.lon == null || !stations?.length) return null;
+  const count = (s) => (need === "docks"
+    ? (s.is_returning === false ? 0 : s.docks_available ?? 0)
+    : (s.is_renting === false ? 0 : s.total_bikes ?? 0));
+  const near = stations
+    .filter((s) => s.lat != null && s.lon != null)
+    .map((s) => ({ station: s, km: km(gare, s), count: count(s) }))
+    .filter((x) => x.km <= VELAM_MAX_KM)
+    .sort((a, b) => a.km - b.km);
+  return near.find((x) => x.count > 0) ?? near[0] ?? null;
+}

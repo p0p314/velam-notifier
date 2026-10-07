@@ -274,8 +274,20 @@ React + `react-router-dom`. `main.jsx` enregistre `/sw.js`, injecte le CSS globa
 `<BrowserRouter><App/></BrowserRouter>`. `App.jsx` empile les providers
 (`ThemeProvider` → `AuthProvider` → `PwaInstallProvider`) et les routes ; les routes applicatives
 sont derrière `<Protected>` + `<Layout>` (header mobile / navbar desktop / bottom-nav). La **carte
-est lazy-loadée** (`React.lazy`) pour garder mapbox-gl hors du bundle principal. Landing
-différenciée (réglable dans Paramètres › Préférences) : par défaut mobile → `/favoris`, desktop → `/stations`.
+est lazy-loadée** (`React.lazy`) pour garder mapbox-gl hors du bundle principal.
+
+**Navigation (v1.7) — 4 onglets, organisés par usage et non par mode de transport** :
+`/trajets` **Mes trajets** (`pages/MyTrips.jsx` : trains favoris via `components/trains/MyTrains`
++ stations favorites via `FavoriteStations` de `pages/Favorites.jsx`, une seule lecture de
+`useStations` partagée ; correspondance Vélam d'un train = `nearbyVelam` de `lib/trains.js`,
+≤ 1 km : places au départ, vélos à l'arrivée), `/velos` **Vélos** (`pages/Bikes.jsx` : `Stations`
+ou `MapPage` selon `?vue=liste|carte`, dernier choix en `localStorage`), `/trains` **Trains**
+(recherche seule), `/alertes` **Alertes** (`?type=velos|trains` ; trains =
+`components/trains/TrainAlertsList`). Anciennes routes redirigées : `/favoris` → `/trajets`,
+`/stations` → `/velos?vue=liste`, `/carte` → `/velos?vue=carte`, `/trains?onglet=mes-trains` →
+`/trajets`. Landing (Paramètres › Préférences) : `auto` = mobile → `/trajets`, desktop → `/velos`
+(anciennes valeurs `favoris|stations|carte` converties par `lib/prefs.js`).
+`components/PullToRefresh` : tirer pour actualiser (seuil en distance, ~72 px).
 
 - **api.js** — client `api(path, {method, body, auth})` unique : injecte le Bearer, normalise
   les erreurs, gère token/user en `localStorage`. Base = `VITE_API_URL`. Rejoue les GET sur
@@ -324,12 +336,11 @@ différenciée (réglable dans Paramètres › Préférences) : par défaut mobi
 - **components/Onboarding.jsx** — accueil au premier lancement (installer / notifications /
   favoris), uniquement les étapes encore utiles ; rien n'est monté une fois terminé. Monté
   par `FirstRun` (`App.jsx`) **après** le tutoriel, jamais en même temps.
-- **Trains** — `pages/Trains.jsx` (`/trains` : onglets Rechercher / Mes trains via
-  `?onglet=mes-trains` ; recherche en paramètres d'URL), `pages/TrainJourney.jsx`
+- **Trains** — `pages/Trains.jsx` (`/trains` : recherche, paramètres d'URL), `pages/TrainJourney.jsx`
   (`/trains/trajet?id=` : détail, favori, alerte), tous deux **lazy-loadés** ;
   `components/trains/` (`Autocomplete` gares/lignes servies par l'API, `JourneyCard`, `Freshness`
   « Temps réel — mis à jour il y a 1 min » + Actualiser, `TrainFilters`, `TrainAlertForm`,
-  `MyTrains`) ; `trainHooks.js` (actualisation 2 min si visible) ; `lib/trains.js` (logique pure :
+  `MyTrains` (section de Mes trajets), `TrainAlertsList` (page Alertes)) ; `trainHooks.js` (actualisation 2 min si visible) ; `lib/trains.js` (logique pure :
   heures affichées en Europe/Paris, estimé masqué s'il est identique au prévu, filtres, tris).
   `components/DayPicker` et `components/Seg` sont partagés avec la page Alertes.
 - **pages/** — `Login` (connexion / inscription : présentation, `validateAuth` avant envoi —

@@ -140,3 +140,21 @@ export function useSuggestions(kind, text, { enabled = true } = {}) {
   }, [kind, text, enabled]);
   return { items, loading };
 }
+
+/** Alertes trains (page Alertes) : liste + actions, rechargée après chaque modification. */
+export function useTrainAlerts(enabled = true) {
+  const res = useTrainResource(enabled ? "/api/trains/alerts" : null, { auth: true });
+  const { load } = res;
+  const run = useCallback(async (request) => {
+    const out = await request();
+    await load();
+    return out;
+  }, [load]);
+  return {
+    ...res,
+    alerts: res.data?.alerts ?? [],
+    createAlert: (body) => run(() => api("/api/trains/alerts", { method: "POST", body })),
+    updateAlert: (id, body) => run(() => api(`/api/trains/alerts/${id}`, { method: "PATCH", body })),
+    deleteAlert: (id) => run(() => api(`/api/trains/alerts/${id}`, { method: "DELETE" })),
+  };
+}

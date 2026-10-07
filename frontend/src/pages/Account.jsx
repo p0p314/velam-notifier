@@ -246,7 +246,7 @@ function PreferencesTab() {
         <Seg label="Type de vélo par défaut" options={BIKE_TYPES} value={bike}
           onChange={(v) => { setBike(v); setBikePref(v); }} />
       </Field>
-      <Field label="Page d'ouverture" hint={landing === "auto" ? "Favoris sur téléphone, Stations sur ordinateur." : null}>
+      <Field label="Page d'ouverture" hint={landing === "auto" ? "Mes trajets sur téléphone, Vélos sur ordinateur." : null}>
         <Seg label="Page d'ouverture" options={LANDINGS} value={landing}
           onChange={(v) => { setLanding(v); setLandingPref(v); }} />
       </Field>

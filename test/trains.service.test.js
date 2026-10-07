@@ -60,6 +60,7 @@ describe('recherche', () => {
     ]);
     const j = r.journeys[0];
     assert.equal(j.departureStation.name, 'Lille Flandres');
+    assert.deepEqual([j.arrivalStation.lat, j.arrivalStation.lon], [49.890584, 2.308277]); // station Vélam la plus proche
     assert.equal(j.arrivalStation.name, 'Amiens');
     assert.equal(j.brand, 'TER');
     assert.equal(j.lineId, LINES.K44);

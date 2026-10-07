@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { Link, useLocation, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { useFavorites, useIsMobile } from "../hooks";
 import { usePushState } from "../components/PushControls";
@@ -11,6 +11,8 @@ import {
 import BottomSheet from "../components/BottomSheet";
 import SwipeRow from "../components/SwipeRow";
 import Icon from "../components/Icon";
+import TrainAlertsList from "../components/trains/TrainAlertsList";
+import { useTrainAlerts } from "../trainHooks";
 import DayPicker from "../components/DayPicker";
 import Seg from "../components/Seg";
 
@@ -422,7 +424,16 @@ function ListControls({ prefs, onChange, showFilter }) {
   );
 }
 
+const TYPE_OPTIONS = [
+  { value: "velos",  label: "Vélos" },
+  { value: "trains", label: "Trains" },
+];
+
 export default function Alerts() {
+  // Vélos ou trains (?type=trains) : notifications et pause globale sont communes.
+  const [params, setParams] = useSearchParams();
+  const type = params.get("type") === "trains" ? "trains" : "velos";
+  const trains = useTrainAlerts(type === "trains");
   const { favorites } = useFavorites();
   const isMobile = useIsMobile();
   const location = useLocation();
@@ -562,15 +573,18 @@ export default function Alerts() {
 
   return (
     <>
-      <div className="alertes-layout">
+      <div className={"alertes-layout" + (type === "trains" ? " single" : "")}>
         <div className="alertes-list">
           <div className="page-head">
             <h2 className="page-title">Mes alertes</h2>
-            {alerts.length > 0 && <span className="page-count">{activeCount} active{activeCount !== 1 ? "s" : ""}</span>}
+            {type === "velos" && alerts.length > 0 && <span className="page-count">{activeCount} active{activeCount !== 1 ? "s" : ""}</span>}
           </div>
 
+          <Seg label="Type d'alertes" options={TYPE_OPTIONS} value={type}
+            onChange={(v) => setParams(v === "trains" ? { type: "trains" } : {}, { replace: true })} />
           <PushBanner />
-          {alerts.length > 0 && <PauseControl pausedUntil={pausedUntil} onChange={setPausedUntil} />}
+          {(alerts.length > 0 || trains.alerts.length > 0) && <PauseControl pausedUntil={pausedUntil} onChange={setPausedUntil} />}
+          {type === "trains" ? <TrainAlertsList t={trains} paused={!!pausedUntil} /> : (<>
           {alerts.length > 1 && <ListControls prefs={listPrefs} onChange={changeListPrefs} showFilter={showFilter} />}
 
           {alerts.length === 0 ? (
@@ -588,16 +602,19 @@ export default function Alerts() {
           )}
 
           {error && !sheetOpen && <div className="form-error">{error}</div>}
+          </>)}
         </div>
 
-        <div className="alert-form-panel">
-          <AlertForm {...formProps} />
-        </div>
+        {type === "velos" && (
+          <div className="alert-form-panel">
+            <AlertForm {...formProps} />
+          </div>
+        )}
       </div>
 
-      <button className="fab" aria-label="Créer une alerte" onClick={() => { cancelEdit(); setSheetOpen(true); }}>
+      {type === "velos" && <button className="fab" aria-label="Créer une alerte" onClick={() => { cancelEdit(); setSheetOpen(true); }}>
         <Icon name="plus" />
-      </button>
+      </button>}
       <BottomSheet open={sheetOpen} onClose={cancelEdit} heightVh={88}>
         <AlertForm {...formProps} />
       </BottomSheet>

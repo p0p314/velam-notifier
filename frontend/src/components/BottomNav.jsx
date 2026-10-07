@@ -3,10 +3,9 @@ import Icon from "./Icon";
 import { useOnline } from "../hooks";
 
 const TABS = [
-  { to: "/stations", label: "Stations", end: false, icon: "parking" },
-  { to: "/carte",    label: "Carte",    end: false, icon: "map-pin", needsNetwork: true },
-  { to: "/favoris", label: "Favoris",  end: false, icon: "star" },
-  { to: "/trains",  label: "Trains",   end: false, icon: "train",   needsNetwork: true },
+  { to: "/trajets", label: "Mes trajets", end: false, icon: "star" },
+  { to: "/velos",   label: "Vélos",       end: false, icon: "bike" },
+  { to: "/trains",  label: "Trains",      end: false, icon: "train",   needsNetwork: true },
   { to: "/alertes", label: "Alertes",  end: false, icon: "bell",    needsNetwork: true },
 ];
 
