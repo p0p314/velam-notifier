@@ -12,12 +12,15 @@
 //  - stop_id de quai « StopPoint:OCE<marque>-<UIC 8 chiffres> », gare « StopArea:OCE<UIC> » ;
 //  - aucun tracé : pas de shapes.txt, shape_id vide pour tous les trajets (tracé de gare
 //    en gare, approximatif) ; aucun flux de positions (VehiclePosition) publié ;
+//  - aucune voie (quai) dans le GTFS ni le GTFS-RT : elles viennent du flux SIRI Lite ET ;
 //  - le GTFS-RT désigne parfois un train par son identifiant interne court
 //    « OCESN843940F » (préfixe des trip_id statiques de ce train), avec start_date.
 
 const GTFS_URL = 'https://eu.ftp.opendatasoft.com/sncf/plandata/Export_OpenData_SNCF_GTFS_NewTripId.zip';
 const TRIP_UPDATES_URL = 'https://proxy.transport.data.gouv.fr/resource/sncf-gtfs-rt-trip-updates';
 const SERVICE_ALERTS_URL = 'https://proxy.transport.data.gouv.fr/resource/sncf-gtfs-rt-service-alerts';
+// Voies (quais) : seul le flux SIRI Lite Estimated Timetable les publie (ressource 83198 du PAN).
+const SIRI_ET_URL = 'https://proxy.transport.data.gouv.fr/resource/sncf-siri-lite-estimated-timetable';
 
 // Identifiant interne d'un train (préfixe des trip_id statiques).
 const SHORT_ID = /^OCE[A-Z]{2}\d+[FR]/;
@@ -57,8 +60,10 @@ function sncfConfig(env = process.env) {
     // Positions des trains : la SNCF ne publie AUCUN flux GTFS-RT VehiclePosition (seuls
     // Trip Updates et Service Alerts existent sur le PAN). Activable si une source apparaît.
     vehiclePositionsUrl: env.TRAINS_RT_VEHICLES_URL || null,
+    // Voies : TRAINS_SIRI_ET_URL=off pour ne jamais télécharger ce flux (~25 Mo).
+    siriEtUrl: env.TRAINS_SIRI_ET_URL || SIRI_ET_URL,
     conventions,
   };
 }
 
-module.exports = { sncfConfig, conventions, GTFS_URL, TRIP_UPDATES_URL, SERVICE_ALERTS_URL };
+module.exports = { sncfConfig, conventions, GTFS_URL, TRIP_UPDATES_URL, SERVICE_ALERTS_URL, SIRI_ET_URL };

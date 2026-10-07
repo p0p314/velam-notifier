@@ -25,7 +25,7 @@ const journey = (n, dep, over = {}) => ({
 });
 const J1 = journey(843924, "2026-10-07T14:53:00.000Z", {
   estimatedDeparture: "2026-10-07T15:02:00.000Z", departureDelay: 9, estimatedArrival: "2026-10-07T16:19:00.000Z", arrivalDelay: 9,
-  status: "delayed", realtime: true,
+  status: "delayed", realtime: true, departurePlatform: "4", arrivalPlatform: null,
 });
 const J2 = journey(843926, "2026-10-07T15:53:00.000Z", { status: "cancelled", cancellation: { partial: false, reason: "Train supprimé" }, realtime: true });
 const RT = { applicable: true, available: true, updated_at: new Date(Date.now() - 60_000).toISOString() };
@@ -50,7 +50,7 @@ function mockApi() {
     }
     if (u.pathname === "/api/trains/journey") {
       return jsonResponse({ ok: true, realtime, journey: { ...J1, stops: [
-        { station: LILLE, scheduledArrival: J1.scheduledDeparture, scheduledDeparture: J1.scheduledDeparture, estimatedDeparture: J1.estimatedDeparture, estimatedArrival: null, delay: 9, skipped: false, inJourney: true },
+        { station: LILLE, scheduledArrival: J1.scheduledDeparture, scheduledDeparture: J1.scheduledDeparture, estimatedDeparture: J1.estimatedDeparture, estimatedArrival: null, delay: 9, skipped: false, inJourney: true, platform: "4" },
         { station: AMIENS, scheduledArrival: J1.scheduledArrival, scheduledDeparture: J1.scheduledArrival, estimatedArrival: J1.estimatedArrival, estimatedDeparture: null, delay: 9, skipped: false, inJourney: true },
       ] } });
     }
@@ -118,6 +118,9 @@ describe("page Trains", () => {
     expect(within(cards[0]).getAllByText("+9 min").length).toBe(2);
     expect(within(cards[0]).getByText("En retard")).toBeTruthy();
     expect(within(cards[1]).getByText("Supprimé")).toBeTruthy();
+    // Voie connue (flux SIRI) : affichée au départ ; inconnue : rien.
+    expect(within(cards[0]).getByText("Voie 4")).toBeTruthy();
+    expect(within(cards[1]).queryByText(/Voie/)).toBeNull();
     expect(within(cards[1]).queryByText(/min/)).toBeNull();
     // Chaque carte : un lien vers le détail (toute la carte) et un lien « Carte ».
     expect(within(cards[0]).getByRole("link", { name: /^Lille Flandres Amiens/ }).getAttribute("href")).toMatch(/^\/trains\/trajet\?id=/);
@@ -175,6 +178,8 @@ describe("détail d'un train", () => {
     await screen.findByText("Statut");
     expect(screen.getAllByText("Prévu").length).toBe(2);
     expect(screen.getAllByText("Estimé").length).toBe(2);
+    expect(screen.getByText("Voie 4")).toBeTruthy();          // bloc Départ
+    expect(screen.getByText(/· voie 4/)).toBeTruthy();         // liste des arrêts
 
     fireEvent.click(screen.getByRole("button", { name: "Ajouter aux favoris" }));
     await screen.findByRole("button", { name: "Retirer des favoris" });

@@ -69,6 +69,51 @@ function createTrainService(provider, env = process.env) {
     };
   }
 
+  // ── Voies (quais) : flux SIRI Lite ET, lu à la demande ────────────────────
+
+  // Le flux couvre les trains de la prochaine heure : on ne le lit que si un trajet
+  // consulté part dans les 90 min (ou est parti depuis moins de 3 h : encore en route).
+  const PLATFORM_AHEAD_MS = 90 * 60_000;
+  const PLATFORM_BEHIND_MS = 3 * 3600_000;
+  const PLATFORM_MAX_AGE_MS = 15 * 60_000;
+  const platforms = provider.platforms ?? null;
+
+  const nearNow = (j, now) => {
+    if (j.status === 'cancelled') return false;
+    const dep = Date.parse(j.scheduledDeparture);
+    return dep <= now + PLATFORM_AHEAD_MS && dep >= now - PLATFORM_BEHIND_MS;
+  };
+
+  /**
+   * Ajoute les voies connues : `departurePlatform` / `arrivalPlatform` du trajet et
+   * `platform` de chaque arrêt (null si inconnue — souvent : voie pas encore attribuée).
+   * Aucun téléchargement si aucun trajet n'est proche de son horaire.
+   */
+  async function withPlatforms(index, journeys, { now = Date.now(), force = false } = {}) {
+    for (const j of journeys) {
+      j.departurePlatform = null;
+      j.arrivalPlatform = null;
+      for (const st of j.stops ?? []) st.platform = null;
+    }
+    if (!platforms?.enabled || !journeys.some((j) => nearNow(j, now))) return;
+    const snap = await platforms.get({ force });
+    if (!snap?.fetchedAt || now - snap.fetchedAt > PLATFORM_MAX_AGE_MS || !snap.index.size) return;
+    const code = (station) => conventions.stationCode?.(station.id) ?? null;
+    const day = (iso) => (iso ? localParts(Date.parse(iso), index.tz).date : null);
+    const at = (j, station, iso) => platforms.platform(snap, j.trainNumber, code(station), day(iso));
+    for (const j of journeys) {
+      if (!nearNow(j, now) || !j.trainNumber) continue;
+      j.departurePlatform = at(j, j.departureStation, j.scheduledDeparture)?.dep ?? null;
+      j.arrivalPlatform = at(j, j.arrivalStation, j.scheduledArrival)?.arr ?? null;
+      const stops = j.stops ?? [];
+      stops.forEach((st, i) => {
+        if (st.skipped) return;
+        const p = at(j, st.station, st.scheduledDeparture ?? st.scheduledArrival);
+        st.platform = (i === stops.length - 1 ? p?.arr ?? p?.dep : p?.dep ?? p?.arr) ?? null;
+      });
+    }
+  }
+
   // ── Référentiel : gares, lignes ───────────────────────────────────────────
 
   /** Autocomplétion des gares : début de nom, puis début de mot, puis contient. */
@@ -239,6 +284,7 @@ function createTrainService(provider, env = process.env) {
 
     const { rt, meta } = await realtimeContext(index, [date, addDaysYmd(date, -1)], { force, now });
     const journeys = found.map((c) => buildJourney(index, { tripIdx: c.t, date: c.date, fromK: c.fromK, toK: c.toK }, { rt, now, conventions }));
+    await withPlatforms(index, journeys, { now, force });
     return {
       journeys,
       truncated,
@@ -316,6 +362,7 @@ function createTrainService(provider, env = process.env) {
     const ref = locateJourney(index, id);
     const { rt, meta } = await realtimeContext(index, [ref.date], { force, now });
     const journey = buildJourney(index, ref, { rt, now, withStops: true, conventions });
+    await withPlatforms(index, [journey], { now, force });
     const position = await journeyPosition(index, ref, journey, { force, now });
     return { journey, realtime: meta, position };
   }
@@ -399,6 +446,7 @@ function createTrainService(provider, env = process.env) {
       }))
       .filter((j) => (j.estimatedArrival ?? j.scheduledArrival) > nowIso)
       .slice(0, count);
+    await withPlatforms(index, occurrences, { now, force });
     return { occurrences, realtime: meta };
   }
 

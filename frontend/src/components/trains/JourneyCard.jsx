@@ -6,7 +6,7 @@ import { timeInfo } from "../../lib/trains";
 import { trainMapPath } from "../../lib/trainMap";
 
 /** « Départ 16:53 → 17:02 +9 min » : l'heure estimée n'apparaît que si elle diffère. */
-export function TimeLine({ label, scheduled, estimated, delay, cancelled }) {
+export function TimeLine({ label, scheduled, estimated, delay, cancelled, platform = null }) {
   const t = timeInfo(scheduled, estimated, delay);
   return (
     <div className="train-time">
@@ -14,8 +14,14 @@ export function TimeLine({ label, scheduled, estimated, delay, cancelled }) {
       <span className={"t-sched" + (t.estimated || cancelled ? " old" : "")}>{t.scheduled}</span>
       {t.estimated && <span className="t-est">{t.estimated}</span>}
       {t.delay && <span className="t-delay">{t.delay}</span>}
+      {platform && !cancelled && <PlatformBadge platform={platform} />}
     </div>
   );
+}
+
+/** « Voie 4 » : connue seulement peu avant le départ (flux SIRI SNCF), jamais devinée. */
+export function PlatformBadge({ platform }) {
+  return <span className="platform-badge" title="Voie (quai)">Voie {platform}</span>;
 }
 
 /**
@@ -40,8 +46,8 @@ export default function JourneyCard({ j, showDate = false }) {
         {showDate && <span className="train-date"> · {new Date(`${j.serviceDate}T12:00:00Z`).toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "short" })}</span>}
       </Link>
       <div className="train-times">
-        <TimeLine label="Départ" scheduled={j.scheduledDeparture} estimated={j.estimatedDeparture} delay={j.departureDelay} cancelled={cancelled} />
-        <TimeLine label="Arrivée" scheduled={j.scheduledArrival} estimated={j.estimatedArrival} delay={j.arrivalDelay} cancelled={cancelled} />
+        <TimeLine label="Départ" scheduled={j.scheduledDeparture} estimated={j.estimatedDeparture} delay={j.departureDelay} cancelled={cancelled} platform={j.departurePlatform} />
+        <TimeLine label="Arrivée" scheduled={j.scheduledArrival} estimated={j.estimatedArrival} delay={j.arrivalDelay} cancelled={cancelled} platform={j.arrivalPlatform} />
         <Link to={trainMapPath(j.id)} className="train-card-map" aria-label={`Voir sur la carte : ${j.departureStation.name} → ${j.arrivalStation.name}`}>
           <Icon name="map" size={14} /> Carte
         </Link>
