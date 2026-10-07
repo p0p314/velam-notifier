@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import Icon from "../components/Icon";
+import PullToRefresh from "../components/PullToRefresh";
 import BottomSheet from "../components/BottomSheet";
 import LineBadge from "../components/trains/LineBadge";
 import TrainStatus from "../components/trains/TrainStatus";
@@ -85,6 +86,7 @@ export default function TrainJourney() {
   const s = statusInfo(j);
 
   return (
+    <PullToRefresh onRefresh={refresh}>
     <div className="view-pad journey-page">
       {back}
       <div className="journey-head">
@@ -172,5 +174,6 @@ export default function TrainJourney() {
         )}
       </BottomSheet>
     </div>
+    </PullToRefresh>
   );
 }

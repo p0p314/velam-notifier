@@ -2,6 +2,7 @@ import { useState } from "react";
 import StationCard from "../components/StationCard";
 import StationListItem from "../components/StationListItem";
 import StationDetailSheet from "../components/StationDetailSheet";
+import PullToRefresh from "../components/PullToRefresh";
 import BottomSheet from "../components/BottomSheet";
 import Icon from "../components/Icon";
 import { OfflineBanner } from "../components/Offline";
@@ -127,6 +128,7 @@ export default function Stations() {
     <>
       {/* ─────────────── MOBILE ─────────────── */}
       <div className="mobile-only">
+        <PullToRefresh onRefresh={reload}>
         <div className="view-search mobile-toolbar">
           <SearchBox value={search} onChange={setSearch} />
           <button
@@ -152,6 +154,7 @@ export default function Stations() {
             ))}
           </div>
         )}
+        </PullToRefresh>
       </div>
 
       {/* ─────────────── DESKTOP ─────────────── */}

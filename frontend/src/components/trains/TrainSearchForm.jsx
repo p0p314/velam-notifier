@@ -48,6 +48,9 @@ export default function TrainSearchForm({ initial, onSearch }) {
         <label className="train-field">
           <span className="form-label">À partir de</span>
           <input type="time" className="field mono" value={after} onChange={(e) => setAfter(e.target.value)} aria-label="Heure de départ minimale" />
+          {after
+            ? <button type="button" className="link-btn field-clear" onClick={() => setAfter("")}>Toute la journée</button>
+            : <span className="form-hint">Vide : toute la journée</span>}
         </label>
       </div>
       {error && <div className="form-error" role="alert">{error}</div>}

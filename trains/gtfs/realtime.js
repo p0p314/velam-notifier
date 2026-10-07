@@ -19,12 +19,40 @@ function feedType() {
 
 const MAX_BYTES = 30 * 1024 * 1024;
 
-/** Texte traduit GTFS-RT → chaîne, en préférant le français. */
+const ENTITIES = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ', eacute: 'é', egrave: 'è', ecirc: 'ê', agrave: 'à', acirc: 'â', ccedil: 'ç', ocirc: 'ô', ucirc: 'û', ugrave: 'ù', icirc: 'î', iuml: 'ï', euml: 'ë', rsquo: '’', lsquo: '‘', laquo: '«', raquo: '»', hellip: '…', ndash: '–', mdash: '—', euro: '€' };
+
+/**
+ * Texte d'un producteur → texte brut. Les messages SNCF contiennent du HTML (<p>, <br>,
+ * <a>, entités) : il n'est JAMAIS rendu tel quel (ni dans l'app ni dans une notification).
+ * Les blocs deviennent des sauts de ligne, les balises sont retirées, les entités décodées.
+ */
+function toPlainText(input) {
+  if (!input) return null;
+  const text = String(input)
+    .replace(/<\s*br\s*\/?>/gi, '\n')
+    .replace(/<\s*\/\s*(p|div|li|h[1-6]|tr)\s*>/gi, '\n')
+    .replace(/<\s*li[^>]*>/gi, '• ')
+    .replace(/<[^>]*>/g, '')
+    .replace(/&(#x?[0-9a-f]+|[a-z]+);/gi, (m, e) => {
+      if (e[0] === '#') {
+        const code = e[1].toLowerCase() === 'x' ? parseInt(e.slice(2), 16) : parseInt(e.slice(1), 10);
+        return Number.isFinite(code) && code > 0 && code < 0x110000 ? String.fromCodePoint(code) : '';
+      }
+      return ENTITIES[e.toLowerCase()] ?? m;
+    })
+    .replace(/[ \t\u00a0]+/g, ' ')
+    .replace(/ *\n */g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+  return text || null;
+}
+
+/** Texte traduit GTFS-RT → chaîne brute, en préférant le français. */
 function translated(ts) {
   const list = ts?.translation ?? [];
   if (!list.length) return null;
   const pick = list.find((t) => /^fr/i.test(t.language ?? '')) ?? list.find((t) => !t.language) ?? list[0];
-  return pick.text?.trim() || null;
+  return toPlainText(pick.text);
 }
 
 const sec = (v) => (v === undefined || v === null ? null : Number(v));
@@ -180,4 +208,4 @@ function createRealtimeProvider({ tripUpdatesUrl, serviceAlertsUrl, env = proces
   };
 }
 
-module.exports = { createRealtimeProvider, decodeFeed, encodeFeed, normalizeTripUpdate, normalizeAlert };
+module.exports = { createRealtimeProvider, decodeFeed, encodeFeed, normalizeTripUpdate, normalizeAlert, toPlainText };
