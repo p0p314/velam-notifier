@@ -164,3 +164,4 @@ router.get('/open.js', (req, res) => {
 });
 
 module.exports = router;
+module.exports.requireCronSecret = requireCronSecret;

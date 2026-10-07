@@ -126,6 +126,73 @@ async function migrateV15(db) {
   await addColumn(db, 'users', 'tutorial_done', 'INTEGER NOT NULL DEFAULT 0');
 }
 
+/**
+ * v1.6 — module Trains. Uniquement les données des utilisateurs : le référentiel
+ * GTFS (gares, lignes, horaires) n'est jamais copié en base (index mémoire + cache disque).
+ *  - train_favorites : un trajet précis (gares + heure + numéro de train + ligne), identifié
+ *    de façon stable car les trip_id GTFS changent d'une version du dataset à l'autre ;
+ *  - train_alerts : `scope` = `trip` (un favori : retard ≥ seuil, suppression, perturbation)
+ *    ou `line` (toute la ligne : perturbations, suppressions — avec créneau horaire) ;
+ *  - train_notifications : journal d'idempotence, une ligne par événement notifié
+ *    (unique par alerte + clé d'événement) ⇒ jamais deux notifications pour le même événement.
+ */
+async function migrateTrains(db) {
+  const pg = db.dialect === 'postgres';
+  const id = pg ? 'SERIAL PRIMARY KEY' : 'INTEGER PRIMARY KEY AUTOINCREMENT';
+  const created = pg ? 'TIMESTAMPTZ DEFAULT NOW()' : 'DATETIME DEFAULT CURRENT_TIMESTAMP';
+  const big = pg ? 'BIGINT' : 'INTEGER';
+  await db.run(`CREATE TABLE IF NOT EXISTS train_favorites (
+    id               ${id},
+    user_id          INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    provider         TEXT NOT NULL DEFAULT 'sncf',
+    train_number     TEXT NOT NULL DEFAULT '',
+    line_id          TEXT DEFAULT NULL,
+    line_name        TEXT NOT NULL DEFAULT '',
+    line_long_name   TEXT NOT NULL DEFAULT '',
+    origin_id        TEXT NOT NULL,
+    origin_name      TEXT NOT NULL,
+    destination_id   TEXT NOT NULL,
+    destination_name TEXT NOT NULL,
+    departure_time   TEXT NOT NULL,
+    arrival_time     TEXT DEFAULT NULL,
+    trip_id          TEXT DEFAULT NULL,
+    label            TEXT DEFAULT NULL,
+    created_at       ${created},
+    UNIQUE(user_id, provider, origin_id, destination_id, departure_time, train_number)
+  )`);
+  await db.run('CREATE INDEX IF NOT EXISTS train_favorites_user_idx ON train_favorites (user_id)');
+  await db.run(`CREATE TABLE IF NOT EXISTS train_alerts (
+    id               ${id},
+    user_id          INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    scope            TEXT NOT NULL CHECK(scope IN ('trip', 'line')),
+    favorite_id      INTEGER DEFAULT NULL REFERENCES train_favorites(id) ON DELETE CASCADE,
+    provider         TEXT NOT NULL DEFAULT 'sncf',
+    line_id          TEXT DEFAULT NULL,
+    line_name        TEXT NOT NULL DEFAULT '',
+    line_long_name   TEXT NOT NULL DEFAULT '',
+    delay_threshold  INTEGER DEFAULT NULL,
+    on_cancel        INTEGER NOT NULL DEFAULT 1,
+    on_disruption    INTEGER NOT NULL DEFAULT 0,
+    days             TEXT NOT NULL DEFAULT '1,2,3,4,5,6,7',
+    time_start       TEXT DEFAULT NULL,
+    time_end         TEXT DEFAULT NULL,
+    active           INTEGER NOT NULL DEFAULT 1,
+    created_at       ${created},
+    UNIQUE(favorite_id),
+    UNIQUE(user_id, line_id)
+  )`);
+  await db.run('CREATE INDEX IF NOT EXISTS train_alerts_user_idx ON train_alerts (user_id)');
+  await db.run(`CREATE TABLE IF NOT EXISTS train_notifications (
+    id         ${id},
+    user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    alert_id   INTEGER NOT NULL REFERENCES train_alerts(id) ON DELETE CASCADE,
+    event_key  TEXT NOT NULL,
+    type       TEXT NOT NULL,
+    sent_at    ${big} NOT NULL,
+    UNIQUE(alert_id, event_key)
+  )`);
+}
+
 async function runMigrations(db) {
   const isPostgres = !!process.env.DATABASE_URL;
 
@@ -210,6 +277,7 @@ async function runMigrations(db) {
       store_uri     TEXT,
       updated_at    BIGINT NOT NULL DEFAULT 0
     )`);
+    await migrateTrains(db);
     console.log('[db] migrations PostgreSQL appliquées');
     return;
   }
@@ -299,6 +367,7 @@ async function runMigrations(db) {
   await db.run('CREATE INDEX IF NOT EXISTS sessions_user_idx ON sessions (user_id)');
   await migrateSessions(db);
   await migrateV15(db);
+  await migrateTrains(db);
 
   console.log('[db] migrations SQLite appliquées');
 }

@@ -6,6 +6,7 @@ const {
   bumpTokenVersion, removeOtherSubscriptions,
   touchSession, listSessions, deleteSession, deleteOtherSessions, pruneSessions, setSubscriptionSession,
   getFavorites, getAlerts, getAlertsPause, getSubscriptionsByUser,
+  getTrainFavorites, getTrainAlerts, getTrainNotifications,
 } = require('../db');
 const {
   hashPassword, verifyPassword, signToken, requireAuth, startSession, userAgentOf, SESSION_TTL_MS,
@@ -244,9 +245,10 @@ router.get('/api/auth/export', requireAuth, async (req, res) => {
   try {
     const user = await getUserById(req.user.id);
     if (!user) return res.status(401).json({ ok: false, error: 'Compte introuvable' });
-    const [favorites, alerts, pausedUntil, sessions, subscriptions] = await Promise.all([
+    const [favorites, alerts, pausedUntil, sessions, subscriptions, trainFavorites, trainAlerts, trainNotifications] = await Promise.all([
       getFavorites(user.id), getAlerts(user.id), getAlertsPause(user.id),
       listSessions(user.id), getSubscriptionsByUser(user.id),
+      getTrainFavorites(user.id), getTrainAlerts(user.id), getTrainNotifications(user.id, 500),
     ]);
     const iso = (ms) => new Date(ms).toISOString();
     res.json({
@@ -262,6 +264,11 @@ router.get('/api/auth/export', requireAuth, async (req, res) => {
           connected_at: iso(s.created_at), last_seen_at: iso(s.last_seen_at),
         })),
         notification_devices: subscriptions.length,
+        trains: {
+          favorites: trainFavorites.map(({ user_id, ...f }) => f),
+          alerts: trainAlerts.map(({ user_id, ...a }) => a),
+          notifications: trainNotifications.map((n) => ({ ...n, sent_at: iso(n.sent_at) })),
+        },
       },
     });
   } catch (err) {

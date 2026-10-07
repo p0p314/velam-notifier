@@ -215,7 +215,7 @@ async function updatePasswordHash(id, hash) {
  * n'ont pas d'ON DELETE CASCADE.
  */
 async function deleteUser(id) {
-  for (const table of ['alerts', 'favorites', 'push_subscriptions', 'sessions']) {
+  for (const table of ['train_notifications', 'train_alerts', 'train_favorites', 'alerts', 'favorites', 'push_subscriptions', 'sessions']) {
     await dbc.run(`DELETE FROM ${table} WHERE user_id = ?`, [id]);
   }
   const { changes } = await dbc.run('DELETE FROM users WHERE id = ?', [id]);
@@ -475,6 +475,178 @@ async function setAlertsPause(userId, until) {
   await dbc.run('UPDATE users SET alerts_paused_until = ? WHERE id = ?', [until, userId]);
 }
 
+// ── Trains : favoris, alertes, journal des notifications ────────────────────
+
+const TRAIN_FAV_FIELDS = [
+  'provider', 'train_number', 'line_id', 'line_name', 'line_long_name', 'origin_id', 'origin_name',
+  'destination_id', 'destination_name', 'departure_time', 'arrival_time', 'trip_id',
+];
+
+/** Favoris trains, par heure de départ puis gare de départ. */
+async function getTrainFavorites(userId) {
+  const { rows } = await dbc.query(
+    'SELECT * FROM train_favorites WHERE user_id = ? ORDER BY departure_time, LOWER(origin_name), id',
+    [userId]
+  );
+  return rows;
+}
+
+async function getTrainFavorite(userId, id) {
+  return dbc.get('SELECT * FROM train_favorites WHERE id = ? AND user_id = ?', [id, userId]);
+}
+
+async function countTrainFavorites(userId) {
+  const row = await dbc.get('SELECT COUNT(*) AS n FROM train_favorites WHERE user_id = ?', [userId]);
+  return Number(row?.n ?? 0);
+}
+
+/**
+ * Ajoute un trajet favori. Déjà présent (mêmes gares, heure et numéro) : mise à jour
+ * des noms et du dernier trip_id connu, sans doublon. Renvoie la ligne.
+ */
+async function addTrainFavorite(userId, fav) {
+  const cols = TRAIN_FAV_FIELDS.filter((k) => fav[k] !== undefined);
+  await dbc.run(
+    `INSERT INTO train_favorites (user_id, ${cols.join(', ')}) VALUES (?, ${cols.map(() => '?').join(', ')})
+     ON CONFLICT(user_id, provider, origin_id, destination_id, departure_time, train_number) DO UPDATE SET
+       line_id = excluded.line_id, line_name = excluded.line_name, line_long_name = excluded.line_long_name,
+       origin_name = excluded.origin_name, destination_name = excluded.destination_name,
+       arrival_time = excluded.arrival_time, trip_id = excluded.trip_id`,
+    [userId, ...cols.map((k) => fav[k])]
+  );
+  return dbc.get(
+    `SELECT * FROM train_favorites WHERE user_id = ? AND provider = ? AND origin_id = ? AND destination_id = ?
+     AND departure_time = ? AND train_number = ?`,
+    [userId, fav.provider ?? 'sncf', fav.origin_id, fav.destination_id, fav.departure_time, fav.train_number ?? '']
+  );
+}
+
+async function setTrainFavoriteLabel(userId, id, label) {
+  const { changes } = await dbc.run('UPDATE train_favorites SET label = ? WHERE id = ? AND user_id = ?', [label, id, userId]);
+  return changes > 0;
+}
+
+/** Retire un favori et son alerte (suppression explicite : pas de cascade en SQLite de dev sans FK). */
+async function removeTrainFavorite(userId, id) {
+  const alerts = await dbc.query('SELECT id FROM train_alerts WHERE favorite_id = ? AND user_id = ?', [id, userId]);
+  for (const a of alerts.rows) await deleteTrainAlert(userId, a.id);
+  const { changes } = await dbc.run('DELETE FROM train_favorites WHERE id = ? AND user_id = ?', [id, userId]);
+  return changes > 0;
+}
+
+const TRAIN_ALERT_FIELDS = [
+  'scope', 'favorite_id', 'provider', 'line_id', 'line_name', 'line_long_name',
+  'delay_threshold', 'on_cancel', 'on_disruption', 'days', 'time_start', 'time_end', 'active',
+];
+const flag = (v) => (v ? 1 : 0);
+const toTrainAlert = (row) => row && {
+  ...row,
+  on_cancel: !!Number(row.on_cancel),
+  on_disruption: !!Number(row.on_disruption),
+  active: !!Number(row.active),
+};
+const trainAlertValue = (k, v) => (['on_cancel', 'on_disruption', 'active'].includes(k) ? flag(v) : v);
+
+async function getTrainAlerts(userId) {
+  const { rows } = await dbc.query('SELECT * FROM train_alerts WHERE user_id = ? ORDER BY id', [userId]);
+  return rows.map(toTrainAlert);
+}
+
+async function getTrainAlert(userId, id) {
+  return toTrainAlert(await dbc.get('SELECT * FROM train_alerts WHERE id = ? AND user_id = ?', [id, userId]));
+}
+
+async function createTrainAlert(userId, a) {
+  const cols = TRAIN_ALERT_FIELDS.filter((k) => a[k] !== undefined);
+  const { id } = await dbc.run(
+    `INSERT INTO train_alerts (user_id, ${cols.join(', ')}) VALUES (?, ${cols.map(() => '?').join(', ')})`,
+    [userId, ...cols.map((k) => trainAlertValue(k, a[k]))]
+  );
+  return getTrainAlert(userId, id);
+}
+
+/**
+ * Met à jour une alerte. Le journal des notifications est conservé : un même
+ * événement (même train, même jour) n'est pas renvoyé parce que l'alerte a été modifiée.
+ */
+async function updateTrainAlert(userId, id, fields) {
+  const keys = Object.keys(fields).filter((k) => TRAIN_ALERT_FIELDS.includes(k) && !['scope', 'favorite_id', 'provider'].includes(k));
+  if (keys.length) {
+    await dbc.run(
+      `UPDATE train_alerts SET ${keys.map((k) => `${k} = ?`).join(', ')} WHERE id = ? AND user_id = ?`,
+      [...keys.map((k) => trainAlertValue(k, fields[k])), id, userId]
+    );
+  }
+  return getTrainAlert(userId, id);
+}
+
+async function deleteTrainAlert(userId, id) {
+  await dbc.run('DELETE FROM train_notifications WHERE alert_id = ? AND user_id = ?', [id, userId]);
+  const { changes } = await dbc.run('DELETE FROM train_alerts WHERE id = ? AND user_id = ?', [id, userId]);
+  return changes > 0;
+}
+
+async function countActiveTrainAlerts() {
+  const row = await dbc.get('SELECT COUNT(*) AS n FROM train_alerts WHERE active = 1');
+  return Number(row?.n ?? 0);
+}
+
+/**
+ * Alertes trains actives à évaluer (comptes non en pause le jour `today`), avec le
+ * favori associé pour les alertes de trajet (colonnes préfixées `fav_`).
+ */
+async function getActiveTrainAlerts(today) {
+  const { rows } = await dbc.query(
+    `SELECT a.*, f.train_number AS fav_train_number, f.line_id AS fav_line_id, f.line_name AS fav_line_name,
+            f.origin_id AS fav_origin_id, f.origin_name AS fav_origin_name,
+            f.destination_id AS fav_destination_id, f.destination_name AS fav_destination_name,
+            f.departure_time AS fav_departure_time, f.label AS fav_label
+     FROM train_alerts a
+     JOIN users u ON u.id = a.user_id
+     LEFT JOIN train_favorites f ON f.id = a.favorite_id
+     WHERE a.active = 1 AND (u.alerts_paused_until IS NULL OR u.alerts_paused_until < ?)`,
+    [today]
+  );
+  return rows.map(toTrainAlert);
+}
+
+/**
+ * Enregistre un événement notifié. Renvoie true s'il est nouveau (la notification
+ * doit partir), false s'il l'a déjà été — l'unicité (alert_id, event_key) en base
+ * garantit l'idempotence même si deux cycles se chevauchaient.
+ */
+async function recordTrainNotification(userId, alertId, eventKey, type, now = Date.now()) {
+  const { changes } = await dbc.run(
+    `INSERT INTO train_notifications (user_id, alert_id, event_key, type, sent_at) VALUES (?, ?, ?, ?, ?)
+     ON CONFLICT(alert_id, event_key) DO NOTHING`,
+    [userId, alertId, eventKey, type, now]
+  );
+  return changes > 0;
+}
+
+/** Un événement dont la clé commence par `prefix` a-t-il déjà été notifié pour cette alerte ? */
+async function hasTrainNotification(alertId, prefix) {
+  const row = await dbc.get(
+    'SELECT 1 AS x FROM train_notifications WHERE alert_id = ? AND event_key LIKE ? LIMIT 1',
+    [alertId, `${prefix.replace(/[%_]/g, '')}%`]
+  );
+  return !!row;
+}
+
+async function getTrainNotifications(userId, limit = 50) {
+  const { rows } = await dbc.query(
+    'SELECT alert_id, event_key, type, sent_at FROM train_notifications WHERE user_id = ? ORDER BY sent_at DESC LIMIT ?',
+    [userId, limit]
+  );
+  return rows.map((r) => ({ ...r, sent_at: Number(r.sent_at) }));
+}
+
+/** Purge du journal (les clés d'événement sont datées : au-delà, plus aucun doublon possible). */
+async function purgeTrainNotifications(before) {
+  const { changes } = await dbc.run('DELETE FROM train_notifications WHERE sent_at < ?', [before]);
+  return changes;
+}
+
 module.exports = {
   initialize,
   // stations
@@ -495,4 +667,9 @@ module.exports = {
   getAlerts, getAlert, createAlert, updateAlert, deleteAlert,
   markAlertNotified, setAlertNotifiedKey, countActiveAlerts, getActiveAlerts, deleteExpiredAlerts,
   getAlertsPause, setAlertsPause,
+  // trains
+  getTrainFavorites, getTrainFavorite, countTrainFavorites, addTrainFavorite, setTrainFavoriteLabel, removeTrainFavorite,
+  getTrainAlerts, getTrainAlert, createTrainAlert, updateTrainAlert, deleteTrainAlert,
+  countActiveTrainAlerts, getActiveTrainAlerts, recordTrainNotification, hasTrainNotification,
+  getTrainNotifications, purgeTrainNotifications,
 };

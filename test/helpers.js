@@ -11,6 +11,11 @@ process.env.RATE_LIMIT_DISABLED = '1';
 process.env.STATUS_CACHE_TTL_MS = '1'; // cache GBFS quasi nul : chaque test voit ses données
 process.env.GBFS_TIMEOUT_MS = '200';    // délai max d'appel au flux (simulation « ne répond plus »)
 if (!process.env.DATABASE_URL) process.env.SQLITE_PATH = ':memory:';
+// Module Trains : caches temps réel quasi nuls, cache disque du GTFS isolé par process.
+process.env.TRAINS_RT_TTL_MS = '1';
+process.env.TRAINS_ALERTS_TTL_MS = '1';
+process.env.TRAINS_RT_TIMEOUT_MS = '500';
+process.env.TRAINS_CACHE_DIR = require('path').join(require('os').tmpdir(), `velopulse-test-${process.pid}`);
 delete process.env.VAPID_PUBLIC_KEY;
 delete process.env.VAPID_PRIVATE_KEY;
 
@@ -45,7 +50,7 @@ function boot() {
 /** Vide toutes les tables métier (ordre compatible avec les clés étrangères). */
 async function resetDb() {
   await boot();
-  for (const t of ['alerts', 'push_subscriptions', 'favorites', 'sessions', 'users', 'stations', 'rental_apps']) {
+  for (const t of ['train_notifications', 'train_alerts', 'train_favorites', 'alerts', 'push_subscriptions', 'favorites', 'sessions', 'users', 'stations', 'rental_apps']) {
     await dbc.run(`DELETE FROM ${t}`);
   }
 }
@@ -79,8 +84,49 @@ const gbfs = {
   calls:  { info: 0, status: 0, system: 0 },
 };
 
+// ── Faux flux SNCF (GTFS + GTFS-RT) ──────────────────────────────────────────
+// Intercepte eu.ftp.opendatasoft.com (GTFS) et proxy.transport.data.gouv.fr (GTFS-RT).
+const sncf = {
+  gtfs: null,           // Buffer zip servi pour le GTFS (null → 404)
+  lastModified: 'Wed, 07 Oct 2026 08:00:00 GMT',
+  tripUpdates: null,    // Buffer protobuf (null → 503)
+  alerts: null,         // Buffer protobuf (null → 503)
+  failRealtime: false,  // true → les flux GTFS-RT répondent 503
+  calls: { gtfs: 0, tripUpdates: 0, alerts: 0, conditional: 0 },
+};
+
+function sncfResponse(url, init) {
+  if (url.includes('opendatasoft.com')) {
+    sncf.calls.gtfs++;
+    const ims = init?.headers?.['If-Modified-Since'];
+    if (ims) sncf.calls.conditional++;
+    if (ims && ims === sncf.lastModified) return new Response(null, { status: 304 });
+    if (!sncf.gtfs) return new Response('absent', { status: 404 });
+    return new Response(sncf.gtfs, { status: 200, headers: { 'Last-Modified': sncf.lastModified } });
+  }
+  const kind = url.includes('trip-updates') ? 'tripUpdates' : 'alerts';
+  sncf.calls[kind]++;
+  if (sncf.failRealtime || !sncf[kind]) return new Response('indisponible', { status: 503 });
+  return new Response(sncf[kind], { status: 200, headers: { 'Content-Type': 'application/x-protobuf' } });
+}
+
+function resetSncf() {
+  const { getProvider } = require('../trains');
+  const p = getProvider();
+  p.realtime.reset();
+  p.schedule.reset();
+  require('fs').rmSync(process.env.TRAINS_CACHE_DIR, { recursive: true, force: true }); // cache disque du GTFS
+  sncf.gtfs = null;
+  sncf.lastModified = 'Wed, 07 Oct 2026 08:00:00 GMT';
+  sncf.tripUpdates = null;
+  sncf.alerts = null;
+  sncf.failRealtime = false;
+  sncf.calls = { gtfs: 0, tripUpdates: 0, alerts: 0, conditional: 0 };
+}
+
 global.fetch = async (input, init) => {
   const url = String(input);
+  if (url.includes('opendatasoft.com') || url.includes('proxy.transport.data.gouv.fr')) return sncfResponse(url, init);
   if (!url.includes('api.cyclocity.fr')) return realFetch(input, init);
   const kind = url.includes('station_information') ? 'info'
     : url.includes('station_status') ? 'status' : 'system';
@@ -150,6 +196,6 @@ const fakeSubscription = (id = 'abc') => ({
 });
 
 module.exports = {
-  dbc, boot, resetDb, startServer, gbfs, resetGbfs, expireCache,
+  dbc, boot, resetDb, startServer, gbfs, resetGbfs, expireCache, sncf, resetSncf,
   client, registerUser, fakeSubscription,
 };

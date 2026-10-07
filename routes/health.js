@@ -4,6 +4,8 @@ const { countStations } = require('../db');
 const { version } = require('../package.json');
 const { getAlertLoopHealth } = require('../push');
 const { getStatusHealth } = require('../gbfs');
+const { trainsHealth } = require('../trains');
+const { getTrainLoopHealth } = require('../trains/alertLoop');
 
 const router = express.Router();
 
@@ -31,6 +33,8 @@ router.get('/api/health', async (req, res) => {
       node_version:    process.version,
       alert_loop:      alertLoop,
       gbfs,
+      // Module Trains : informatif (n'affecte pas `status` : les vélos restent le cœur du service).
+      trains: { providers: trainsHealth(), alert_loop: getTrainLoopHealth() },
     });
   } catch (err) {
     console.error('[GET /api/health]', err.message);
