@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useSwipeReveal } from "../useSwipeReveal";
+import { useBikeCity } from "../authContext";
 import PullToRefresh from "../components/PullToRefresh";
 import StationListItem from "../components/StationListItem";
 import StationDetailSheet from "../components/StationDetailSheet";
@@ -85,6 +86,7 @@ export default function Favorites() {
 }
 
 export function FavoriteStations({ st, fav, embedded = false }) {
+  const city = useBikeCity();
   const { stations, loading, stale, staleReason, lastUpd } = st;
   const { favorites, favIds, toggleFav, rename, reorder, loading: favLoading, stale: favStale } = fav;
   const { coords, status: geoStatus, locate } = useGeolocation();
@@ -118,7 +120,7 @@ export function FavoriteStations({ st, fav, embedded = false }) {
     <>
       <div className="page-head">
         {embedded
-          ? <h2 className="section-title">Stations Vélam</h2>
+          ? <h2 className="section-title">Stations {city.system}</h2>
           : <h2 className="page-title">Mes favoris</h2>}
         {favStations.length > 0 && <span className="page-count">{favStations.length} station{favStations.length !== 1 ? "s" : ""}</span>}
         {favorites.length > 1 && (

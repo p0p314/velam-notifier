@@ -59,7 +59,7 @@ test('/api/auth/me renvoie un jeton neuf (session glissante)', async () => {
   const { token, user } = await registerUser(api, 'alice');
   const res = await api.get('/api/auth/me', { token });
   assert.equal(res.status, 200);
-  assert.deepEqual(res.body.user, { id: user.id, username: 'alice', tutorial_done: false, modules: { bikes: true, trains: true } });
+  assert.deepEqual(res.body.user, { id: user.id, username: 'alice', tutorial_done: false, modules: { bikes: true, trains: true }, city: 'amiens' });
   const payload = jwt.decode(res.body.token);
   assert.equal(payload.id, user.id);
   // Durée par défaut : 30 jours

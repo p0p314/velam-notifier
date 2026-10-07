@@ -10,6 +10,7 @@ import { shareApp } from "../lib/share";
 import { fmtLastSeen, exportFileName, downloadJson } from "../lib/devices";
 import { BIKE_TYPES, landingsFor, getBikePref, setBikePref, getLandingPref, setLandingPref } from "../lib/prefs";
 import { canDisable } from "../lib/modules";
+import { CITIES, COUNTRIES } from "../lib/cities";
 import { useTheme, THEME_MODES } from "../useTheme";
 import Tutorial from "../components/Tutorial";
 import { tutorialSlides } from "../lib/tutorial";
@@ -234,7 +235,7 @@ function Field({ label, hint, children }) {
 }
 
 const MODULES = [
-  { name: "bikes",  title: "Vélos",  text: "Stations Vélam d'Amiens : disponibilités, carte, favoris et alertes." },
+  { name: "bikes",  title: "Vélos",  text: "Vélos en libre-service de votre ville : disponibilités, carte, favoris et alertes." },
   { name: "trains", title: "Trains", text: "Trains SNCF : recherche, trajets suivis, carte et alertes." },
 ];
 
@@ -281,6 +282,42 @@ function ModulesCard() {
 }
 
 /**
+ * Ville des vélos (compte, tous les appareils) : seule celle-ci est affichée et interrogée.
+ * Favoris et alertes des autres villes sont conservés, masqués, et leurs alertes ne
+ * partent plus ; ils reviennent en revenant à leur ville.
+ */
+function CityCard() {
+  const { city, updateCity } = useAuth();
+  const [error, setError] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const change = async (id) => {
+    setError(null);
+    setBusy(true);
+    try { await updateCity(id); } catch (e) { setError(e.message); } finally { setBusy(false); }
+  };
+  const groups = Object.entries(COUNTRIES)
+    .map(([code, label]) => ({ label, cities: CITIES.filter((c) => c.country === code) }))
+    .filter((g) => g.cities.length);
+  return (
+    <div className="account-card">
+      <div className="form-title">Ville des vélos</div>
+      <Field label="Ville" hint={`Service : ${city.system}. Vos favoris et alertes d'une autre ville sont conservés et reviennent si vous y retournez ; leurs alertes ne sont pas envoyées entre-temps.`}>
+        <div className="select-wrap">
+          <select className="field" aria-label="Ville des vélos" value={city.id} disabled={busy} onChange={(e) => change(e.target.value)}>
+            {groups.map((g) => (
+              <optgroup key={g.label} label={g.label}>
+                {g.cities.map((c) => <option key={c.id} value={c.id}>{c.name} — {c.system}</option>)}
+              </optgroup>
+            ))}
+          </select>
+        </div>
+      </Field>
+      {error && <div className="form-error" role="alert">{error}</div>}
+    </div>
+  );
+}
+
+/**
  * Préférences : fonctionnalités du compte, puis réglages de cet appareil (thème, type
  * de vélo par défaut, page d'ouverture) — sans ceux d'une fonctionnalité désactivée.
  */
@@ -297,6 +334,7 @@ function PreferencesTab() {
   return (
     <>
     <ModulesCard />
+    {modules.bikes && <CityCard />}
     <div className="account-card">
       <div className="form-title">Cet appareil</div>
       <Field label="Thème" hint={mode === "system" ? "Suit le réglage clair / sombre de votre appareil." : null}>

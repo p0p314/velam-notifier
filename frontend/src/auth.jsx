@@ -1,9 +1,10 @@
-import { createContext, useContext, useState, useCallback, useEffect, useRef } from "react";
+import { useContext, useState, useCallback, useEffect, useRef } from "react";
 import { api, getToken, setToken, clearToken, getStoredUser, setStoredUser, AUTH_EXPIRED_EVENT } from "./api";
 import { syncPush, unlinkPush } from "./push";
 import { modulesOf } from "./lib/modules";
-
-const AuthContext = createContext(null);
+import { userCity, cityById } from "./lib/cities";
+import { AuthContext } from "./authContext";
+export { useModules, useBikeCity } from "./authContext";
 
 export function AuthProvider({ children }) {
   const [user,  setUser]  = useState(() => getStoredUser());
@@ -103,18 +104,30 @@ export function AuthProvider({ children }) {
     }
   }, []);
 
+  // Ville des vélos du compte : appliquée tout de suite, rétablie si le serveur refuse.
+  const updateCity = useCallback(async (city) => {
+    const previous = userRef.current;
+    if (!previous) return;
+    const optimistic = { ...previous, city };
+    setStoredUser(optimistic);
+    setUser(optimistic);
+    try {
+      const data = await api("/api/auth/city", { method: "PUT", body: { city } });
+      setStoredUser(data.user);
+      setUser(data.user);
+    } catch (e) {
+      setStoredUser(previous);
+      setUser(previous);
+      throw e;
+    }
+  }, []);
+
   const value = {
-    user, token, login, register, logout, endSession, renewSession, completeTutorial, updateModules,
-    modules: modulesOf(user), isAuthenticated: !!token,
+    user, token, login, register, logout, endSession, renewSession, completeTutorial, updateModules, updateCity,
+    modules: modulesOf(user), city: cityById(userCity(user)), isAuthenticated: !!token,
   };
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
-
-/**
- * Fonctionnalités actives du compte : { bikes, trains }. Hors <AuthProvider> (pages
- * publiques, composants isolés) : les deux, comportement par défaut.
- */
-export const useModules = () => modulesOf(useContext(AuthContext)?.user);
 
 export function useAuth() {
   const ctx = useContext(AuthContext);

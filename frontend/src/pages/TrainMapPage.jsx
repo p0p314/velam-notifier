@@ -9,8 +9,8 @@ import Freshness from "../components/trains/Freshness";
 import { useTrainJourney, useTrainRoute, useNow } from "../trainHooks";
 import { useStations } from "../hooks";
 import { useTheme } from "../useTheme";
-import { useModules } from "../auth";
-import { DEFAULT_CENTER, MAPBOX_TOKEN } from "../lib/mapConfig";
+import { useModules, useBikeCity } from "../authContext";
+import { MAPBOX_TOKEN } from "../lib/mapConfig";
 import { fmtDayLong } from "../lib/trains";
 import {
   progressInfo, positionInfo, positionNote, routeNote, mapRefreshMs, routeNear,
@@ -68,6 +68,7 @@ export default function TrainMapPage() {
   const routeRes = useTrainRoute(id);
   const { theme } = useTheme();
   const modules = useModules();
+  const city = useBikeCity();
   const now = useNow(10_000);
   const mapRef = useRef(null);
   const [showBikes, setShowBikes] = useState(false);
@@ -97,8 +98,9 @@ export default function TrainMapPage() {
   const route = routeRes.data?.route ?? null;
   const vehicle = data?.position?.vehicle ?? null;
   const rNote = routeNote(route, data?.provider ?? routeRes.data?.provider);
-  // Couche Vélam : seulement si la fonctionnalité vélos est active et le trajet passe par Amiens.
-  const nearAmiens = modules.bikes && routeNear(route, DEFAULT_CENTER);
+  // Couche vélos : seulement si la fonctionnalité est active et que le trajet passe par la
+  // ville choisie (ses stations seules, jamais celles d'autres villes).
+  const nearAmiens = modules.bikes && routeNear(route, { lat: city.center.lat, lng: city.center.lon });
 
   // Tirer pour actualiser depuis le panneau (la carte garde ses propres gestes).
   return (
@@ -141,7 +143,7 @@ export default function TrainMapPage() {
         {nearAmiens && (
           <label className="tm-toggle">
             <input type="checkbox" checked={showBikes} onChange={(e) => setShowBikes(e.target.checked)} />
-            <span>Stations Vélam</span>
+            <span>Stations {city.system}</span>
           </label>
         )}
         {showBikes && <BikeStationsLoader onData={setBikes} />}

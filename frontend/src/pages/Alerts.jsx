@@ -15,7 +15,8 @@ import TrainAlertsList from "../components/trains/TrainAlertsList";
 import { useTrainAlerts } from "../trainHooks";
 import DayPicker from "../components/DayPicker";
 import Seg from "../components/Seg";
-import { useModules } from "../auth";
+import { useModules, useBikeCity } from "../authContext";
+import { stationCity } from "../lib/cities";
 
 const BIKE_OPTIONS = [
   { value: "mechanical", label: "Mécanique" },
@@ -435,6 +436,7 @@ export default function Alerts() {
   // Une fonctionnalité désactivée (Paramètres › Préférences) : l'autre seule, sans bascule.
   const [params, setParams] = useSearchParams();
   const modules = useModules();
+  const city = useBikeCity();
   const both = modules.bikes && modules.trains;
   const type = !modules.bikes ? "trains" : !modules.trains ? "velos" : params.get("type") === "trains" ? "trains" : "velos";
   const trains = useTrainAlerts(type === "trains");
@@ -571,10 +573,12 @@ export default function Alerts() {
     catch (e) { setError(e.message); reload(); }
   };
 
-  const activeCount = alerts.filter((a) => a.active).length;
-  const showFilter = hasBothKinds(alerts);
+  // Alertes vélos de la ville choisie seulement (les autres restent en base, masquées).
+  const cityAlerts = alerts.filter((a) => stationCity(a.station_id) === city.id);
+  const activeCount = cityAlerts.filter((a) => a.active).length;
+  const showFilter = hasBothKinds(cityAlerts);
   // Filtre masqué (un seul type restant) ⇒ ignoré, sinon la liste pourrait rester vide.
-  const shown = visibleAlerts(alerts, { ...listPrefs, filter: showFilter ? listPrefs.filter : "all" });
+  const shown = visibleAlerts(cityAlerts, { ...listPrefs, filter: showFilter ? listPrefs.filter : "all" });
   const formProps = { stations, form, setField, error, onSubmit: save, onCancel: cancelEdit, onDelete: remove, editing, copying };
 
   return (
@@ -583,7 +587,7 @@ export default function Alerts() {
         <div className="alertes-list">
           <div className="page-head">
             <h2 className="page-title">Mes alertes</h2>
-            {type === "velos" && alerts.length > 0 && <span className="page-count">{activeCount} active{activeCount !== 1 ? "s" : ""}</span>}
+            {type === "velos" && cityAlerts.length > 0 && <span className="page-count">{activeCount} active{activeCount !== 1 ? "s" : ""}</span>}
           </div>
 
           {both && (
@@ -597,11 +601,11 @@ export default function Alerts() {
               <span>Alertes {type === "trains" ? "trains" : "vélos"} coupées pour votre compte : elles ne sont pas envoyées. <Link to="/compte?onglet=notifications">Paramètres</Link></span>
             </div>
           )}
-          {((modules.bikes && alerts.length > 0) || trains.alerts.length > 0) && <PauseControl pausedUntil={pausedUntil} onChange={setPausedUntil} />}
+          {((modules.bikes && cityAlerts.length > 0) || trains.alerts.length > 0) && <PauseControl pausedUntil={pausedUntil} onChange={setPausedUntil} />}
           {type === "trains" ? <TrainAlertsList t={trains} paused={!!pausedUntil} /> : (<>
-          {alerts.length > 1 && <ListControls prefs={listPrefs} onChange={changeListPrefs} showFilter={showFilter} />}
+          {cityAlerts.length > 1 && <ListControls prefs={listPrefs} onChange={changeListPrefs} showFilter={showFilter} />}
 
-          {alerts.length === 0 ? (
+          {cityAlerts.length === 0 ? (
             <div className="empty-state">
               <Icon name="bell" size={40} />
               <div className="empty-title">Aucune alerte configurée</div>

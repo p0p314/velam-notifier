@@ -5,10 +5,12 @@ import Icon from "../components/Icon";
 import { OfflineBanner } from "../components/Offline";
 import { useStations, fmtDistance, requestPosition } from "../hooks";
 import { useTheme } from "../useTheme";
+import { useBikeCity } from "../authContext";
 import { bikeCountForType, nearestWithBikes } from "../lib/mapConfig";
 import { getBikePref, stationFilterFor } from "../lib/prefs";
 
 export default function MapPage() {
+  const city = useBikeCity();
   const { stations, loading, error, stale, staleReason, lastUpd, reload } = useStations();
   const [type, setType] = useState(() => stationFilterFor(getBikePref()));
   const [minBikes, setMinBikes] = useState(0);
@@ -68,7 +70,8 @@ export default function MapPage() {
               le bandeau de fraîcheur au-dessus ne doit pas passer sous les filtres. */}
           <div className="map-stage">
           <MapFilters type={type} setType={setType} minBikes={minBikes} setMinBikes={setMinBikes} count={filtered.length} />
-          <StationMap stations={filtered} filterType={type} focus={focus} theme={theme} />
+          {/* Une carte par ville (clé) : changer de ville la recentre, sans marqueurs d'avant. */}
+          <StationMap key={city.id} stations={filtered} filterType={type} focus={focus} theme={theme} center={city.center} />
           {loading && <div className="map-loading">Chargement des stations…</div>}
 
           <div className="map-around">

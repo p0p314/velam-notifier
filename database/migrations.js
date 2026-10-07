@@ -146,6 +146,10 @@ async function migrateTrains(db) {
   // et ses alertes ne sont plus envoyées (elles sont conservées).
   await addColumn(db, 'users', 'use_bikes', 'INTEGER NOT NULL DEFAULT 1');
   await addColumn(db, 'users', 'use_trains', 'INTEGER NOT NULL DEFAULT 1');
+  // v1.11 — plusieurs villes de vélos (cities.js) : ville choisie par le compte, ville de
+  // chaque station du référentiel (les données d'avant sont celles d'Amiens).
+  await addColumn(db, 'users', 'bike_city', "TEXT NOT NULL DEFAULT 'amiens'");
+  await addColumn(db, 'stations', 'city', "TEXT NOT NULL DEFAULT 'amiens'");
   const pg = db.dialect === 'postgres';
   const id = pg ? 'SERIAL PRIMARY KEY' : 'INTEGER PRIMARY KEY AUTOINCREMENT';
   const created = pg ? 'TIMESTAMPTZ DEFAULT NOW()' : 'DATETIME DEFAULT CURRENT_TIMESTAMP';

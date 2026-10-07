@@ -1,6 +1,7 @@
 // Routes stations : référentiel en cache + disponibilité live fusionnée à la volée.
 const express = require('express');
-const { countStations, getStations, saveStations, replaceStations } = require('../db');
+const { countStations, getStations, getStationCities, saveStations, replaceStations } = require('../db');
+const { DEFAULT_CITY, isCity } = require('../cities');
 const { fetchStationInfo, getStationStatus, isFresh } = require('../gbfs');
 const { requireAuth } = require('../auth');
 
@@ -37,23 +38,33 @@ function mergeWithStatus(stations, statusList) {
   });
 }
 
+/** Ville demandée (`?city=lyon`), Amiens par défaut ; null si inconnue. */
+function cityOf(req) {
+  const c = req.query.city;
+  if (c === undefined || c === '') return DEFAULT_CITY;
+  return isCity(c) ? c : null;
+}
+
 /**
- * GET /api/stations
- * Infos stations depuis la base (fetch auto si vide).
- * Disponibilité vélos toujours récupérée en direct depuis l'API GBFS (cache court).
+ * GET /api/stations?city=…
+ * Infos stations d'UNE ville depuis la base (fetch auto si vide pour cette ville).
+ * Disponibilité vélos toujours récupérée en direct depuis l'API GBFS (cache court par ville).
+ * Jamais toutes les villes à la fois.
  */
 router.get('/api/stations', async (req, res) => {
+  const city = cityOf(req);
+  if (!city) return res.status(400).json({ ok: false, error: 'Ville inconnue' });
   try {
-    // Auto-populate au premier appel
-    if (await countStations() === 0) {
-      console.log('[GET /api/stations] base vide — fetch initial...');
-      const info = await fetchStationInfo();
-      await saveStations(info);
+    // Auto-populate au premier appel pour cette ville
+    if (await countStations(city) === 0) {
+      console.log(`[GET /api/stations] ${city} : référentiel vide — fetch initial...`);
+      const info = await fetchStationInfo(city);
+      await saveStations(info, city);
     }
 
     const [stations, status] = await Promise.all([
-      getStations(),
-      getStationStatus(),
+      getStations(city),
+      getStationStatus(city),
     ]);
 
     const merged = mergeWithStatus(stations, status.stations);
@@ -61,6 +72,7 @@ router.get('/api/stations', async (req, res) => {
 
     res.json({
       ok:              true,
+      city,
       count:           merged.length,
       // Fraîcheur des disponibilités : date des données Vélam (last_updated du flux),
       // leur âge (calculé ici, insensible à l'horloge du client) et un verdict
@@ -80,10 +92,27 @@ router.get('/api/stations', async (req, res) => {
 /**
  * Recharge le référentiel depuis GBFS : ajoute/met à jour les stations et retire
  * celles qui ont disparu du flux. Utilisé par le cron quotidien et la route de refresh.
+ * Sans ville : toutes les villes déjà présentes en base (au moins Amiens), une à une.
  */
-async function refreshStationCatalog() {
-  const info = await fetchStationInfo();
-  return replaceStations(info);
+async function refreshStationCatalog(city = null) {
+  if (city) {
+    const info = await fetchStationInfo(city);
+    return replaceStations(info, city);
+  }
+  const cities = [...new Set([DEFAULT_CITY, ...(await getStationCities())])];
+  let count = 0;
+  let removed = 0;
+  for (const c of cities) {
+    try {
+      const r = await refreshStationCatalog(c);
+      count += r.count;
+      removed += r.removed;
+    } catch (err) {
+      if (c === DEFAULT_CITY) throw err;
+      console.error(`[stations] référentiel ${c} non rafraîchi :`, err.message);
+    }
+  }
+  return { count, removed, cities };
 }
 
 /**
@@ -93,7 +122,9 @@ async function refreshStationCatalog() {
  */
 router.post('/api/stations/refresh', requireAuth, async (req, res) => {
   try {
-    const { count, removed } = await refreshStationCatalog();
+    const city = cityOf(req);
+    if (!city) return res.status(400).json({ ok: false, error: 'Ville inconnue' });
+    const { count, removed } = await refreshStationCatalog(city);
     res.json({
       ok:      true,
       message: `${count} stations rechargées depuis l'API`,

@@ -24,7 +24,7 @@ export const STALE_AFTER_MIN = 5;
  *               ou ses données ont au moins STALE_AFTER_MIN minutes.
  * `when` : heure lisible des données affichées (null si aucune).
  */
-export function bannerText(reason, lastUpd, when, now = Date.now()) {
+export function bannerText(reason, lastUpd, when, now = Date.now(), service = "Vélam") {
   const data = when ? `données de ${when}` : "aucune donnée enregistrée";
   if (reason === "offline") return `Hors ligne — ${data}`;
   if (reason === "server") return `Serveur injoignable — ${data}`;
@@ -32,7 +32,7 @@ export function bannerText(reason, lastUpd, when, now = Date.now()) {
   if (age !== null && age >= STALE_AFTER_MIN) {
     return `Disponibilités non mises à jour depuis ${fmtAge(age)} — ${data}`;
   }
-  return `Données Vélam momentanément indisponibles — ${data}`;
+  return `Données ${service} momentanément indisponibles — ${data}`;
 }
 
 /** « 2 vélos indisponibles » (en panne / réservés à la maintenance), ou null. */

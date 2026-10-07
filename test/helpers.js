@@ -82,6 +82,10 @@ const gbfs = {
   malformed: false, // true → HTTP 200 mais JSON inexploitable
   lastUpdated: undefined, // `last_updated` (s POSIX) renvoyé par station_status
   calls:  { info: 0, status: 0, system: 0 },
+  // Autres villes (contrat Cyclocity) : { lyon: { info: [...], status: [...] } } ; sinon les
+  // listes ci-dessus. `cities` : villes interrogées, dans l'ordre des appels.
+  byCity: {},
+  cities: [],
 };
 
 // ── Faux flux SNCF (GTFS + GTFS-RT) ──────────────────────────────────────────
@@ -138,12 +142,15 @@ global.fetch = async (input, init) => {
   const kind = url.includes('station_information') ? 'info'
     : url.includes('station_status') ? 'status' : 'system';
   gbfs.calls[kind]++;
+  const city = /\/contracts\/([^/]+)\//.exec(url)?.[1] ?? 'amiens';
+  gbfs.cities.push(city);
   if (gbfs.hang) {
     return new Promise((_, reject) => init?.signal?.addEventListener('abort', () => reject(init.signal.reason)));
   }
   if (gbfs.fail) return new Response('indisponible', { status: 503 });
   if (gbfs.malformed) return new Response('{"oups":', { status: 200, headers: { 'Content-Type': 'application/json' } });
-  const data = kind === 'system' ? gbfs.system : { stations: gbfs[kind] };
+  const source = city !== 'amiens' && gbfs.byCity[city] ? gbfs.byCity[city] : gbfs;
+  const data = kind === 'system' ? gbfs.system : { stations: source[kind] };
   const body = kind === 'status' && gbfs.lastUpdated !== undefined ? { last_updated: gbfs.lastUpdated, data } : { data };
   return new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } });
 };
@@ -158,6 +165,8 @@ function resetGbfs() {
   gbfs.malformed = false;
   gbfs.lastUpdated = undefined;
   gbfs.calls = { info: 0, status: 0, system: 0 };
+  gbfs.byCity = {};
+  gbfs.cities = [];
 }
 
 /** Attend que le cache de statut GBFS (TTL 1 ms) soit expiré. */

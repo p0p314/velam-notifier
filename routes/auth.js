@@ -6,8 +6,9 @@ const {
   bumpTokenVersion, removeOtherSubscriptions,
   touchSession, listSessions, deleteSession, deleteOtherSessions, pruneSessions, setSubscriptionSession,
   getFavorites, getAlerts, getAlertsPause, getSubscriptionsByUser,
-  getTrainFavorites, getTrainAlerts, getTrainNotifications, getNotificationPrefs, modulesOf, setModules,
+  getTrainFavorites, getTrainAlerts, getTrainNotifications, getNotificationPrefs, modulesOf, setModules, setBikeCity,
 } = require('../db');
+const { DEFAULT_CITY, isCity } = require('../cities');
 const {
   hashPassword, verifyPassword, signToken, requireAuth, startSession, userAgentOf, SESSION_TTL_MS,
 } = require('../auth');
@@ -17,10 +18,12 @@ const router = express.Router();
 
 /**
  * Utilisateur renvoyé au client : identité, tutoriel de présentation déjà vu ou non,
- * fonctionnalités utilisées (`modules` : { bikes, trains }, au moins une).
+ * fonctionnalités utilisées (`modules` : { bikes, trains }, au moins une), ville des
+ * vélos (`city`, catalogue de cities.js).
  */
 const publicUser = (user) => ({
   id: user.id, username: user.username, tutorial_done: !!user.tutorial_done, modules: modulesOf(user),
+  city: isCity(user.bike_city) ? user.bike_city : DEFAULT_CITY,
 });
 
 // RATE_LIMIT_DISABLED=1 : uniquement pour les tests d'intégration (nombreux comptes créés).
@@ -231,6 +234,25 @@ router.put('/api/auth/modules', requireAuth, async (req, res) => {
 });
 
 /**
+ * PUT /api/auth/city — { city } : ville des vélos du compte (tous ses appareils). Seule
+ * cette ville est affichée et interrogée ; favoris et alertes des autres villes sont
+ * conservés mais masqués, et leurs alertes ne sont plus envoyées. Renvoie l'utilisateur.
+ */
+router.put('/api/auth/city', requireAuth, async (req, res) => {
+  try {
+    const { city } = req.body ?? {};
+    if (!isCity(city)) return res.status(400).json({ ok: false, error: 'Ville inconnue' });
+    const user = await getUserById(req.user.id);
+    if (!user) return res.status(401).json({ ok: false, error: 'Compte introuvable' });
+    await setBikeCity(user.id, city);
+    res.json({ ok: true, user: publicUser({ ...user, bike_city: city }) });
+  } catch (err) {
+    console.error('[PUT /api/auth/city]', err.message);
+    res.status(500).json({ ok: false, error: 'Erreur serveur' });
+  }
+});
+
+/**
  * GET /api/auth/sessions — appareils connectés au compte (le plus récent d'abord) :
  * { id, label (« iPhone · Safari »), created_at, last_seen_at (ms), current }.
  * Les sessions dont le jeton a forcément expiré sont purgées au passage.
@@ -293,6 +315,7 @@ router.get('/api/auth/export', requireAuth, async (req, res) => {
           username: user.username, created_at: user.created_at, alerts_paused_until: pausedUntil,
           notifications: await getNotificationPrefs(user.id),
           modules: modulesOf(user),
+          bike_city: user.bike_city ?? DEFAULT_CITY,
         },
         favorites: favorites.map(({ user_id, id, ...f }) => f),
         alerts: alerts.map(({ user_id, ...a }) => a),

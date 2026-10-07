@@ -5,7 +5,7 @@ import MyTrains from "../components/trains/MyTrains";
 import { FavoriteStations } from "./Favorites";
 import { useStations, useFavorites, useOnline } from "../hooks";
 import { useMyTrains } from "../trainHooks";
-import { useModules } from "../auth";
+import { useModules, useBikeCity } from "../authContext";
 
 const VIEW_KEY = "velopulse-trajets-vue";
 const VIEWS = [
@@ -71,6 +71,7 @@ function TrainsOnly() {
  */
 function WithBikes({ trainsOn }) {
   const online = useOnline();
+  const city = useBikeCity();
   const st = useStations();
   const fav = useFavorites();
   const trains = useMyTrains(trainsOn);
@@ -102,7 +103,7 @@ function WithBikes({ trainsOn }) {
             ? <MyTrains t={trains} stations={st.stations} />
             : <div className="form-hint">Trains indisponibles hors ligne.</div>
         ) : (
-          <section className="my-trains-section" aria-label="Stations Vélam">
+          <section className="my-trains-section" aria-label={`Stations ${city.system}`}>
             <FavoriteStations st={st} fav={fav} embedded />
           </section>
         )}

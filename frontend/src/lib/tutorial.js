@@ -8,7 +8,7 @@ export const TUTORIAL_SLIDES = [
   {
     icon: "bike",
     title: "Bienvenue sur VéloPulse",
-    text: "Vos trajets du quotidien en temps réel : les vélos Vélam d'Amiens et les trains SNCF.",
+    text: "Vos trajets du quotidien en temps réel : les vélos en libre-service de votre ville (Vélam à Amiens, Vélo'v à Lyon…) et les trains SNCF.",
     points: [
       "Vélos mécaniques, électriques et places libres, station par station",
       "Horaires, retards et suppressions des TER, Intercités et TGV",
@@ -21,7 +21,7 @@ export const TUTORIAL_SLIDES = [
     points: [
       "Basculez entre vos trains et vos vélos en haut de la page",
       "Pour chaque train : le prochain départ ; maintenez le doigt dessus pour les autres jours",
-      "Les stations Vélam près de vos gares : places au départ, vélos à l'arrivée",
+      "Les stations de vélos près de vos gares : places au départ, vélos à l'arrivée",
     ],
   },
   {
