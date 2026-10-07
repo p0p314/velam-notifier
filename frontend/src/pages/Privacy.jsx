@@ -17,6 +17,7 @@ export default function Privacy() {
         <li><b>Votre compte</b> : un nom d'utilisateur et votre mot de passe <b>chiffré</b> (haché, jamais lisible), et si vous avez déjà vu le tutoriel de présentation. Aucune adresse e-mail, aucun nom réel.</li>
         <li><b>Vos favoris</b> et le nom que vous leur donnez, ainsi que leur ordre.</li>
         <li><b>Vos alertes</b> : stations, seuils, horaires (dont les heures d'envoi de vos résumés), jours, le nom éventuel de vos groupes de stations, et la date de pause éventuelle.</li>
+        <li><b>Vos trains</b> : les trajets favoris (gares, ligne, numéro et heure du train, nom éventuel), vos alertes trains (seuil de retard, motifs, jours, créneau) et l'historique des notifications envoyées pendant 45 jours, pour ne jamais vous prévenir deux fois du même événement.</li>
         <li><b>Vos appareils connectés</b> : le type d'appareil et de navigateur (tel que votre navigateur l'annonce), la date de connexion et la dernière activité, pour que vous puissiez les reconnaître et les déconnecter. Un appareil inactif au-delà de la durée de connexion (30 jours) est effacé.</li>
         <li><b>Vos appareils</b> ayant activé les notifications : l'adresse technique fournie par votre navigateur pour vous les envoyer.</li>
       </ul>
@@ -37,7 +38,7 @@ export default function Privacy() {
       <p>Depuis <b>Paramètres › Sécurité</b>, vous pouvez changer votre mot de passe, voir et déconnecter vos appareils, <b>télécharger toutes vos données</b> (droit d'accès et à la portabilité) et <b>supprimer votre compte</b> : toutes vos données (favoris, alertes, appareils) sont alors effacées immédiatement et définitivement.</p>
 
       <h2>Hébergement et sources</h2>
-      <p>Application hébergée par Render ; base de données hébergée par Supabase. Les disponibilités des vélos proviennent du flux ouvert (GBFS) du service Vélam d'Amiens Métropole. VéloPulse est un projet indépendant, non affilié à Vélam ni à Amiens Métropole.</p>
+      <p>Application hébergée par Render ; base de données hébergée par Supabase. Les disponibilités des vélos proviennent du flux ouvert (GBFS) du service Vélam d'Amiens Métropole. Les horaires et l'information en temps réel des trains proviennent des données ouvertes de SNCF Voyageurs (transport.data.gouv.fr, licence ODbL), interrogées par le serveur de VéloPulse : votre appareil ne contacte jamais la SNCF et aucune donnée vous concernant ne lui est transmise. VéloPulse est un projet indépendant, non affilié à Vélam ni à Amiens Métropole.</p>
       <p className="legal-todo">Éditeur et contact : à compléter par le responsable du service.</p>
 
       <p><Link to={isAuthenticated ? "/compte" : "/login"}>← Retour</Link></p>

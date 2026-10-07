@@ -21,3 +21,7 @@ services:
         sync: false
       - key: APP_URL
         sync: false        # base https:// pour la page /redirect des notifs
+      - key: CRON_SECRET
+        sync: false        # protège /cron/* (sync rental_apps, stations, trains)
+      # Module Trains : sources SNCF par défaut (aucune clé requise). Facultatif :
+      # TRAINS_ENABLED=0 pour le désactiver, TRAINS_GTFS_URL / TRAINS_RT_* pour un miroir.

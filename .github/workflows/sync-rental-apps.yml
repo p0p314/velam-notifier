@@ -1,7 +1,7 @@
 name: Synchronisation quotidienne (GBFS)
 
-# Synchronisation quotidienne : deep links officiels Vélam (rental_apps) et
-# référentiel des stations.
+# Synchronisation quotidienne : deep links officiels Vélam (rental_apps),
+# référentiel des stations et horaires des trains (GTFS SNCF).
 # Toute la planification vit ici — aucun cron côté serveur (Render/backend).
 on:
   schedule:
@@ -43,6 +43,20 @@ jobs:
           set -euo pipefail
           curl -sS -f -o response.json \
             -X POST "${BACKEND_URL%/}/cron/refresh-stations" \
+            -H "Authorization: Bearer ${CRON_SECRET}" \
+            -H "Content-Type: application/json"
+          cat response.json
+
+      # Horaires des trains (GTFS SNCF) : requête conditionnelle, rien n'est
+      # retéléchargé si la SNCF n'a pas publié de nouvelle version.
+      - name: Synchronisation des horaires des trains
+        env:
+          BACKEND_URL: ${{ secrets.BACKEND_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          set -euo pipefail
+          curl -sS -f -o response.json --max-time 300 \
+            -X POST "${BACKEND_URL%/}/cron/sync-trains" \
             -H "Authorization: Bearer ${CRON_SECRET}" \
             -H "Content-Type: application/json"
           cat response.json

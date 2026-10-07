@@ -22,6 +22,10 @@ import { tutorialPending } from "./lib/tutorial";
 
 // Carte chargée à la demande : mapbox-gl (~1,5 Mo) reste hors du bundle principal.
 const MapPage = lazy(() => import("./pages/MapPage"));
+// Module Trains, lui aussi chargé à la demande (hors du bundle principal).
+const Trains = lazy(() => import("./pages/Trains"));
+const TrainJourney = lazy(() => import("./pages/TrainJourney"));
+const trainsFallback = <div className="view-state">Chargement…</div>;
 
 function Protected() {
   const { isAuthenticated } = useAuth();
@@ -94,6 +98,8 @@ export default function App() {
                 <Route path="/carte" element={<OnlineOnly><Suspense fallback={<div className="view-state">Chargement de la carte…</div>}><MapPage /></Suspense></OnlineOnly>} />
                 <Route path="/favoris" element={<Favorites />} />
                 <Route path="/alertes" element={<OnlineOnly><Alerts /></OnlineOnly>} />
+                <Route path="/trains" element={<OnlineOnly><Suspense fallback={trainsFallback}><Trains /></Suspense></OnlineOnly>} />
+                <Route path="/trains/trajet" element={<OnlineOnly><Suspense fallback={trainsFallback}><TrainJourney /></Suspense></OnlineOnly>} />
                 <Route path="/compte" element={<OnlineOnly><Account /></OnlineOnly>} />
               </Route>
             </Route>

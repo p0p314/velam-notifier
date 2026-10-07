@@ -1,6 +1,6 @@
 {
   "name": "velopulse",
-  "version": "1.5.2",
+  "version": "1.6.0",
   "description": "Proxy API pour les stations Vélam d'Amiens",
   "main": "server.js",
   "scripts": {

@@ -24,6 +24,7 @@ export default function Navbar() {
         <NavLink to="/carte" className={cls}>Carte</NavLink>
         <NavLink to="/favoris" className={cls}>Favoris</NavLink>
         <NavLink to="/alertes" className={cls}>Alertes</NavLink>
+        <NavLink to="/trains" className={cls}>Trains</NavLink>
       </nav>
       <div className="nav-right">
         {/* Installation PWA : uniquement sur mobile (jamais sur desktop), et pas si déjà installée. */}
