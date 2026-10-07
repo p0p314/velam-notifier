@@ -92,17 +92,55 @@ export const STATUS_FILTERS = [
   { value: "disrupted", label: "Perturbés" },
 ];
 
-export const DEFAULT_FILTERS = { minTime: "", maxTime: "", line: "", from: "", to: "", status: "all", sort: "departure" };
+/** Trains déjà passés : tout afficher, masquer les arrivés, ou aussi ceux déjà partis. */
+export const PAST_FILTERS = [
+  { value: "",        label: "Tout afficher" },
+  { value: "arrived", label: "Masquer les trains arrivés" },
+  { value: "left",    label: "Masquer les trains partis et arrivés" },
+];
+
+export const DEFAULT_FILTERS = { minTime: "", maxTime: "", line: "", from: "", to: "", status: "all", sort: "departure", past: "" };
 
 /** Nombre de filtres actifs (pastille du bouton « Filtrer »). */
 export const activeFilterCount = (f) =>
-  ["minTime", "maxTime", "line", "from", "to"].filter((k) => f[k]).length + (f.status !== "all" ? 1 : 0) + (f.sort !== "departure" ? 1 : 0);
+  ["minTime", "maxTime", "line", "from", "to", "past"].filter((k) => f[k]).length + (f.status !== "all" ? 1 : 0) + (f.sort !== "departure" ? 1 : 0);
+
+const PAST_KEY = "velopulse-trains-passes";
+const PAST_VALUES = new Set(PAST_FILTERS.map((o) => o.value));
+
+/** Choix « Trains passés » mémorisé sur l'appareil (gardé d'une recherche à l'autre). */
+export function loadPastFilter() {
+  try { const v = localStorage.getItem(PAST_KEY) ?? ""; return PAST_VALUES.has(v) ? v : ""; } catch { return ""; }
+}
+export function savePastFilter(v) {
+  try { if (v) localStorage.setItem(PAST_KEY, v); else localStorage.removeItem(PAST_KEY); } catch { /* stockage indisponible */ }
+}
+
+/** Filtres de départ d'une recherche : par défaut, sauf le choix « Trains passés » mémorisé. */
+export const initialFilters = () => ({ ...DEFAULT_FILTERS, past: loadPastFilter() });
+
+/**
+ * Phase d'un train à l'instant `now` (recalculée côté client : la liste reste affichée
+ * entre deux actualisations) : « upcoming », « left » (parti) ou « arrived ». Heures
+ * estimées si connues ; un train supprimé suit ses heures prévues.
+ */
+export function journeyPhase(j, now = Date.now()) {
+  const live = j.status !== "cancelled";
+  const dep = Date.parse((live && j.estimatedDeparture) || j.scheduledDeparture);
+  const arr = Date.parse((live && j.estimatedArrival) || j.scheduledArrival);
+  if (now >= arr) return "arrived";
+  return now >= dep ? "left" : "upcoming";
+}
 
 const maxDelay = (j) => Math.max(j.departureDelay ?? 0, j.arrivalDelay ?? 0);
 
 /** Applique filtres et tri. Heures comparées en « HH:MM » du réseau. */
-export function applyFilters(journeys, f = DEFAULT_FILTERS) {
+export function applyFilters(journeys, f = DEFAULT_FILTERS, now = Date.now()) {
   const list = journeys.filter((j) => {
+    if (f.past) {
+      const phase = journeyPhase(j, now);
+      if (phase === "arrived" || (f.past === "left" && phase === "left")) return false;
+    }
     const dep = fmtClock(j.scheduledDeparture);
     if (f.minTime && dep < f.minTime) return false;
     if (f.maxTime && dep > f.maxTime) return false;

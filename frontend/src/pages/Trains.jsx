@@ -13,7 +13,7 @@ import { useTrainSearch, useMyTrains } from "../trainHooks";
 import { useIsMobile } from "../hooks";
 import {
   searchFromQuery, queryFromSearch, apiSearchQuery, searchError, searchTitle, fmtDayLong,
-  applyFilters, activeFilterCount, DEFAULT_FILTERS,
+  applyFilters, activeFilterCount, initialFilters, savePastFilter,
 } from "../lib/trains";
 
 /** Bouton « Suivre cette ligne » d'une recherche par ligne (alerte de ligne). */
@@ -41,10 +41,11 @@ function Results({ search }) {
   const isMobile = useIsMobile();
   const query = apiSearchQuery(search);
   const { data, loading, error, refresh, load } = useTrainSearch(query);
-  const [filters, setFilters] = useState(DEFAULT_FILTERS);
+  const [filters, setFiltersState] = useState(initialFilters);
+  const setFilters = (f) => { setFiltersState(f); savePastFilter(f.past); };
   const [direction, setDirection] = useState("all"); // recherche par ligne : sens choisi
   const [sheet, setSheet] = useState(false);
-  useEffect(() => { setFilters(DEFAULT_FILTERS); setDirection("all"); }, [query]);
+  useEffect(() => { setFiltersState(initialFilters()); setDirection("all"); }, [query]);
 
   if (loading) return <div className="view-state">Recherche des trains…</div>;
   if (error && !data) {

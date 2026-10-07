@@ -382,7 +382,9 @@ terminus le plus fréquent de chaque sens, seulement s'il y en a deux) ;
   `components/trains/` (`Autocomplete` gares/lignes servies par l'API, `JourneyCard`, `Freshness`
   « Temps réel — mis à jour il y a 1 min » + Actualiser, `TrainFilters`, `TrainAlertForm`,
   `MyTrains` (section de Mes trajets), `TrainAlertsList` (page Alertes)) ; `trainHooks.js` (actualisation 2 min si visible) ; `lib/trains.js` (logique pure :
-  heures affichées en Europe/Paris, estimé masqué s'il est identique au prévu, filtres, tris).
+  heures affichées en Europe/Paris, estimé masqué s'il est identique au prévu, filtres, tris ;
+  filtre « Trains passés » `past` (`journeyPhase` recalculée côté client, mémorisé en `localStorage`
+  `velopulse-trains-passes`) ; `JourneyCard` empile départ / arrivée dès qu'une voie est connue).
   `components/DayPicker` et `components/Seg` sont partagés avec la page Alertes.
   **Carte d'un train** : `pages/TrainMapPage.jsx` (`/trains/carte?id=`, lazy ; « Carte » sur
   chaque `JourneyCard`, « Voir sur la carte » dans le détail), `components/map/TrainMap.jsx`

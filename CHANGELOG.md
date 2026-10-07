@@ -9,6 +9,15 @@ Toutes les évolutions notables de VéloPulse. Format inspiré de
 section `## [x.y.z] - AAAA-MM-JJ` ci-dessous, puis merger sur `main` : le workflow
 `release.yml` crée le tag `vx.y.z` et la release GitHub à partir de cette section.
 
+## [1.12.0] - 2026-10-07
+
+### Trains
+- **Voie connue** : sur une carte de train, départ et arrivée passent automatiquement
+  l'un sous l'autre, heures alignées (une seule ligne sinon).
+- **Filtre « Trains passés »** (Filtrer et trier) : tout afficher, masquer les trains
+  arrivés, ou masquer aussi ceux déjà partis. Calculé à l'instant (heures estimées si
+  connues ; un train supprimé suit son horaire prévu) et mémorisé d'une recherche à l'autre.
+
 ## [1.11.0] - 2026-10-07
 
 ### Plusieurs villes de vélos
