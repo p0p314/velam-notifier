@@ -1,10 +1,10 @@
 {
   "name": "velopulse",
-  "version": "1.6.0",
+  "version": "1.6.1",
   "description": "Proxy API pour les stations Vélam d'Amiens",
   "main": "server.js",
   "scripts": {
-    "build": "cd frontend && npm install --include=dev && npm run build",
+    "build": "npm install --omit=dev --no-audit --no-fund && cd frontend && npm install --include=dev && npm run build",
     "start": "node server.js",
     "dev": "node --watch server.js",
     "dev:front": "cd frontend && npm run dev",

@@ -403,4 +403,12 @@ Helpers de migration portables : `columnsOf` / `addColumn` / `dropColumn` (`migr
 
 `render.yaml` : service web `velopulse`, `buildCommand: npm run build`, `startCommand: npm start`.
 Secrets (`DATABASE_URL`, `VAPID_*`, `JWT_SECRET`, `APP_URL`, `CRON_SECRET`) en variables d'env
-Render. Après un merge sur `main`, déclencher un déploiement Render (voir mémoire projet).
+Render.
+
+**Procédure après chaque merge sur `main`** (sauf contre-indication) :
+1. **Release** : `release.yml` crée le tag `vX.Y.Z` et la release GitHub depuis le CHANGELOG
+   (vérifier que le run est vert et la release publiée ; sinon la créer).
+2. **Déploiement via le MCP Render** (`trigger_deploy` sur le service `velam-notifier`,
+   `srv-d8qvbo6gvqtc73eajfq0`), puis suivre le déploiement jusqu'à `live` et vérifier
+   `/api/health`. Le workflow `deploy.yml` (deploy hook) **ne fonctionne pas** : ne pas s'y fier,
+   et l'auto-deploy Render ne se déclenche pas au merge.
