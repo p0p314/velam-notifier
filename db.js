@@ -129,7 +129,7 @@ async function getUserByUsername(username) {
 
 /** Avec le hash du mot de passe : réservé aux vérifications d'identité. */
 async function getUserAuthById(id) {
-  return dbc.get('SELECT id, username, password_hash, token_version, tutorial_done FROM users WHERE id = ?', [id]);
+  return dbc.get('SELECT id, username, password_hash, token_version, tutorial_done, use_bikes, use_trains FROM users WHERE id = ?', [id]);
 }
 
 /** Version de session du compte (null si le compte n'existe plus). */
@@ -228,7 +228,7 @@ async function markTutorialDone(id) {
 }
 
 async function getUserById(id) {
-  return dbc.get('SELECT id, username, token_version, tutorial_done, created_at FROM users WHERE id = ?', [id]);
+  return dbc.get('SELECT id, username, token_version, tutorial_done, use_bikes, use_trains, created_at FROM users WHERE id = ?', [id]);
 }
 
 // ── Favorites ────────────────────────────────────────────────────────────────
@@ -449,7 +449,7 @@ async function countActiveAlerts() {
 async function getActiveAlerts(today) {
   const { rows } = await dbc.query(
     `SELECT a.* FROM alerts a JOIN users u ON u.id = a.user_id
-     WHERE a.active = 1 AND u.notify_bikes = 1
+     WHERE a.active = 1 AND u.notify_bikes = 1 AND u.use_bikes = 1
        AND (u.alerts_paused_until IS NULL OR u.alerts_paused_until < ?)
        AND (a.valid_on IS NULL OR a.valid_on = ?)`,
     [today, today]
@@ -475,6 +475,16 @@ async function setNotificationPrefs(userId, prefs) {
   if (typeof prefs.bikes === 'boolean') await dbc.run('UPDATE users SET notify_bikes = ? WHERE id = ?', [prefs.bikes ? 1 : 0, userId]);
   if (typeof prefs.trains === 'boolean') await dbc.run('UPDATE users SET notify_trains = ? WHERE id = ?', [prefs.trains ? 1 : 0, userId]);
   return getNotificationPrefs(userId);
+}
+
+// ── Fonctionnalités utilisées (par compte) ───────────────────────────────────
+
+/** { bikes, trains } d'une ligne `users` (colonnes absentes = activées). */
+const modulesOf = (row) => ({ bikes: Number(row?.use_bikes ?? 1) === 1, trains: Number(row?.use_trains ?? 1) === 1 });
+
+/** `modules` : { bikes, trains } complet et valide (au moins un des deux, vérifié par la route). */
+async function setModules(userId, modules) {
+  await dbc.run('UPDATE users SET use_bikes = ?, use_trains = ? WHERE id = ?', [modules.bikes ? 1 : 0, modules.trains ? 1 : 0, userId]);
 }
 
 // ── Pause globale des alertes ────────────────────────────────────────────────
@@ -618,7 +628,7 @@ async function getActiveTrainAlerts(today) {
      FROM train_alerts a
      JOIN users u ON u.id = a.user_id
      LEFT JOIN train_favorites f ON f.id = a.favorite_id
-     WHERE a.active = 1 AND u.notify_trains = 1
+     WHERE a.active = 1 AND u.notify_trains = 1 AND u.use_trains = 1
        AND (u.alerts_paused_until IS NULL OR u.alerts_paused_until < ?)`,
     [today]
   );
@@ -681,7 +691,7 @@ module.exports = {
   // alerts
   getAlerts, getAlert, createAlert, updateAlert, deleteAlert,
   markAlertNotified, setAlertNotifiedKey, countActiveAlerts, getActiveAlerts, deleteExpiredAlerts,
-  getAlertsPause, setAlertsPause, getNotificationPrefs, setNotificationPrefs,
+  getAlertsPause, setAlertsPause, getNotificationPrefs, setNotificationPrefs, modulesOf, setModules,
   // trains
   getTrainFavorites, getTrainFavorite, countTrainFavorites, addTrainFavorite, setTrainFavoriteLabel, removeTrainFavorite,
   getTrainAlerts, getTrainAlert, createTrainAlert, updateTrainAlert, deleteTrainAlert,

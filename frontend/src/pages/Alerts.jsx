@@ -15,6 +15,7 @@ import TrainAlertsList from "../components/trains/TrainAlertsList";
 import { useTrainAlerts } from "../trainHooks";
 import DayPicker from "../components/DayPicker";
 import Seg from "../components/Seg";
+import { useModules } from "../auth";
 
 const BIKE_OPTIONS = [
   { value: "mechanical", label: "Mécanique" },
@@ -431,8 +432,11 @@ const TYPE_OPTIONS = [
 
 export default function Alerts() {
   // Vélos ou trains (?type=trains) : notifications et pause globale sont communes.
+  // Une fonctionnalité désactivée (Paramètres › Préférences) : l'autre seule, sans bascule.
   const [params, setParams] = useSearchParams();
-  const type = params.get("type") === "trains" ? "trains" : "velos";
+  const modules = useModules();
+  const both = modules.bikes && modules.trains;
+  const type = !modules.bikes ? "trains" : !modules.trains ? "velos" : params.get("type") === "trains" ? "trains" : "velos";
   const trains = useTrainAlerts(type === "trains");
   const { prefs: kinds } = useNotificationPrefs();
   const kindOff = kinds && !kinds[type === "trains" ? "trains" : "bikes"];
@@ -582,8 +586,10 @@ export default function Alerts() {
             {type === "velos" && alerts.length > 0 && <span className="page-count">{activeCount} active{activeCount !== 1 ? "s" : ""}</span>}
           </div>
 
-          <Seg label="Type d'alertes" options={TYPE_OPTIONS} value={type}
-            onChange={(v) => setParams(v === "trains" ? { type: "trains" } : {}, { replace: true })} />
+          {both && (
+            <Seg label="Type d'alertes" options={TYPE_OPTIONS} value={type}
+              onChange={(v) => setParams(v === "trains" ? { type: "trains" } : {}, { replace: true })} />
+          )}
           <PushBanner />
           {kindOff && (
             <div className="push-banner warn" role="status">
@@ -591,7 +597,7 @@ export default function Alerts() {
               <span>Alertes {type === "trains" ? "trains" : "vélos"} coupées pour votre compte : elles ne sont pas envoyées. <Link to="/compte?onglet=notifications">Paramètres</Link></span>
             </div>
           )}
-          {(alerts.length > 0 || trains.alerts.length > 0) && <PauseControl pausedUntil={pausedUntil} onChange={setPausedUntil} />}
+          {((modules.bikes && alerts.length > 0) || trains.alerts.length > 0) && <PauseControl pausedUntil={pausedUntil} onChange={setPausedUntil} />}
           {type === "trains" ? <TrainAlertsList t={trains} paused={!!pausedUntil} /> : (<>
           {alerts.length > 1 && <ListControls prefs={listPrefs} onChange={changeListPrefs} showFilter={showFilter} />}
 

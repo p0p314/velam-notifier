@@ -9,6 +9,19 @@ Toutes les évolutions notables de VéloPulse. Format inspiré de
 section `## [x.y.z] - AAAA-MM-JJ` ci-dessous, puis merger sur `main` : le workflow
 `release.yml` crée le tag `vx.y.z` et la release GitHub à partir de cette section.
 
+## [1.9.0] - 2026-10-07
+
+### Choisir ses fonctionnalités : vélos, trains, ou les deux
+- **Paramètres › Préférences › Fonctionnalités** : désactivez les **vélos** ou les
+  **trains** si vous ne les utilisez pas (jamais les deux à la fois), pour tous vos
+  appareils.
+- L'application s'adapte : onglet retiré, Mes trajets et Alertes sans bascule (une seule
+  catégorie), réglages inutiles masqués (type de vélo, page d'ouverture, alertes), tutoriel
+  et carte d'un train sans la partie désactivée ; un lien vers une page désactivée ouvre
+  Mes trajets.
+- Rien n'est supprimé : favoris et alertes de la fonctionnalité coupée sont conservés et
+  reviennent en la réactivant ; ses alertes ne sont plus envoyées entre-temps.
+
 ## [1.8.1] - 2026-10-07
 
 ### Mes trajets

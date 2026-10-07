@@ -26,6 +26,7 @@ export const TUTORIAL_SLIDES = [
   },
   {
     icon: "map-pin",
+    module: "bikes",
     title: "Vélos",
     text: "Toutes les stations en liste ou sur la carte. Touchez l'étoile d'une station pour la suivre.",
     points: [
@@ -35,6 +36,7 @@ export const TUTORIAL_SLIDES = [
   },
   {
     icon: "train",
+    module: "trains",
     title: "Trains",
     text: "Cherchez un trajet (Lille Flandres → Amiens), une gare ou une ligne (K44) : les trains du jour, avec les retards en temps réel.",
     points: [
@@ -68,4 +70,8 @@ export const TUTORIAL_SLIDES = [
  * serveur a confirmé qu'il n'a jamais été vu (un utilisateur mémorisé avant la v1.5,
  * sans le champ, attend la réponse de /api/auth/me).
  */
+/** Diapositives utiles : sans celles d'une fonctionnalité désactivée. */
+export const tutorialSlides = (modules = { bikes: true, trains: true }) =>
+  TUTORIAL_SLIDES.filter((s) => !s.module || modules[s.module]);
+
 export const tutorialPending = (user) => user?.tutorial_done === false;

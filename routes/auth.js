@@ -6,7 +6,7 @@ const {
   bumpTokenVersion, removeOtherSubscriptions,
   touchSession, listSessions, deleteSession, deleteOtherSessions, pruneSessions, setSubscriptionSession,
   getFavorites, getAlerts, getAlertsPause, getSubscriptionsByUser,
-  getTrainFavorites, getTrainAlerts, getTrainNotifications, getNotificationPrefs,
+  getTrainFavorites, getTrainAlerts, getTrainNotifications, getNotificationPrefs, modulesOf, setModules,
 } = require('../db');
 const {
   hashPassword, verifyPassword, signToken, requireAuth, startSession, userAgentOf, SESSION_TTL_MS,
@@ -15,8 +15,13 @@ const { describeDevice } = require('../device');
 
 const router = express.Router();
 
-/** Utilisateur renvoyé au client : identité + tutoriel de présentation déjà vu ou non. */
-const publicUser = (user) => ({ id: user.id, username: user.username, tutorial_done: !!user.tutorial_done });
+/**
+ * Utilisateur renvoyé au client : identité, tutoriel de présentation déjà vu ou non,
+ * fonctionnalités utilisées (`modules` : { bikes, trains }, au moins une).
+ */
+const publicUser = (user) => ({
+  id: user.id, username: user.username, tutorial_done: !!user.tutorial_done, modules: modulesOf(user),
+});
 
 // RATE_LIMIT_DISABLED=1 : uniquement pour les tests d'intégration (nombreux comptes créés).
 const skip = () => process.env.RATE_LIMIT_DISABLED === '1';
@@ -198,6 +203,34 @@ router.post('/api/auth/tutorial', requireAuth, async (req, res) => {
 });
 
 /**
+ * PUT /api/auth/modules — { bikes, trains } (booléens ; un champ absent est inchangé) :
+ * fonctionnalités utilisées par le compte, sur tous ses appareils. Au moins une reste
+ * active (400 sinon). Une fonctionnalité désactivée n'envoie plus ses alertes (elles
+ * sont conservées et reprennent si elle est réactivée). Renvoie l'utilisateur à jour.
+ */
+router.put('/api/auth/modules', requireAuth, async (req, res) => {
+  try {
+    const { bikes, trains } = req.body ?? {};
+    const bad = [bikes, trains].some((v) => v !== undefined && typeof v !== 'boolean');
+    if (bad || (bikes === undefined && trains === undefined)) {
+      return res.status(400).json({ ok: false, error: 'bikes / trains : booléens attendus' });
+    }
+    const user = await getUserById(req.user.id);
+    if (!user) return res.status(401).json({ ok: false, error: 'Compte introuvable' });
+    const current = modulesOf(user);
+    const next = { bikes: bikes ?? current.bikes, trains: trains ?? current.trains };
+    if (!next.bikes && !next.trains) {
+      return res.status(400).json({ ok: false, error: 'Gardez au moins les vélos ou les trains' });
+    }
+    await setModules(user.id, next);
+    res.json({ ok: true, user: publicUser({ ...user, use_bikes: next.bikes ? 1 : 0, use_trains: next.trains ? 1 : 0 }) });
+  } catch (err) {
+    console.error('[PUT /api/auth/modules]', err.message);
+    res.status(500).json({ ok: false, error: 'Erreur serveur' });
+  }
+});
+
+/**
  * GET /api/auth/sessions — appareils connectés au compte (le plus récent d'abord) :
  * { id, label (« iPhone · Safari »), created_at, last_seen_at (ms), current }.
  * Les sessions dont le jeton a forcément expiré sont purgées au passage.
@@ -259,6 +292,7 @@ router.get('/api/auth/export', requireAuth, async (req, res) => {
         account: {
           username: user.username, created_at: user.created_at, alerts_paused_until: pausedUntil,
           notifications: await getNotificationPrefs(user.id),
+          modules: modulesOf(user),
         },
         favorites: favorites.map(({ user_id, id, ...f }) => f),
         alerts: alerts.map(({ user_id, ...a }) => a),

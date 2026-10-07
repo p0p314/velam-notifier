@@ -1,12 +1,15 @@
-import { createContext, useContext, useState, useCallback, useEffect } from "react";
+import { createContext, useContext, useState, useCallback, useEffect, useRef } from "react";
 import { api, getToken, setToken, clearToken, getStoredUser, setStoredUser, AUTH_EXPIRED_EVENT } from "./api";
 import { syncPush, unlinkPush } from "./push";
+import { modulesOf } from "./lib/modules";
 
 const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
   const [user,  setUser]  = useState(() => getStoredUser());
   const [token, setTok]   = useState(() => getToken());
+  const userRef = useRef(user);
+  userRef.current = user;
 
   const persist = useCallback((data) => {
     setToken(data.token);
@@ -81,9 +84,37 @@ export function AuthProvider({ children }) {
     api("/api/auth/tutorial", { method: "POST" }).catch(() => {});
   }, []);
 
-  const value = { user, token, login, register, logout, endSession, renewSession, completeTutorial, isAuthenticated: !!token };
+  // Fonctionnalités du compte (vélos / trains) : appliquées tout de suite, puis
+  // confirmées par le serveur ; en cas d'échec, l'état précédent est rétabli.
+  const updateModules = useCallback(async (next) => {
+    const previous = userRef.current;
+    if (!previous) return;
+    const optimistic = { ...previous, modules: { ...modulesOf(previous), ...next } };
+    setStoredUser(optimistic);
+    setUser(optimistic);
+    try {
+      const data = await api("/api/auth/modules", { method: "PUT", body: next });
+      setStoredUser(data.user);
+      setUser(data.user);
+    } catch (e) {
+      setStoredUser(previous);
+      setUser(previous);
+      throw e;
+    }
+  }, []);
+
+  const value = {
+    user, token, login, register, logout, endSession, renewSession, completeTutorial, updateModules,
+    modules: modulesOf(user), isAuthenticated: !!token,
+  };
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
+
+/**
+ * Fonctionnalités actives du compte : { bikes, trains }. Hors <AuthProvider> (pages
+ * publiques, composants isolés) : les deux, comportement par défaut.
+ */
+export const useModules = () => modulesOf(useContext(AuthContext)?.user);
 
 export function useAuth() {
   const ctx = useContext(AuthContext);

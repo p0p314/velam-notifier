@@ -188,6 +188,13 @@ describe('alerte de trajet', () => {
     assert.equal(sent.length, 1);
   });
 
+  test('fonctionnalité trains désactivée pour le compte : rien', async () => {
+    await tripAlert();
+    await require('../db').setModules(userId, { bikes: true, trains: false });
+    assert.equal(await cycle('16:30', { delayMin: 30 }), 'aucune_due');
+    assert.equal(sent.length, 0);
+  });
+
   test('alerte désactivée : rien', async () => {
     const a = await tripAlert();
     await updateTrainAlert(userId, a.id, { active: false });
