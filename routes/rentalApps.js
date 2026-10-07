@@ -3,6 +3,7 @@ const express = require('express');
 const crypto  = require('crypto');
 const { getRentalApps, getRentalAppsMap } = require('../db');
 const { syncRentalApps } = require('../rentalApps');
+const { DEFAULT_CITY, isCity, cityById } = require('../cities');
 
 const OFFICIAL_WEB = 'https://velam.amiens.fr/fr/home';
 
@@ -86,12 +87,21 @@ const attr = (v) => String(v ?? '')
  * les liens lui sont passés en attributs data-*.
  */
 router.get('/open', async (req, res) => {
+  // Ville de l'alerte (`?city=lyon`) : site et nom de son service ; Amiens par défaut.
+  // Les liens des stores ne sont synchronisés que pour Vélam : ailleurs, site seul.
+  const city = isCity(req.query.city) ? req.query.city : DEFAULT_CITY;
+  const service = cityById(city);
+  const amiens = city === DEFAULT_CITY;
+  const web = amiens ? OFFICIAL_WEB : service.website;
   let apps = {};
-  try { apps = await getRentalAppsMap(); } catch (_) { /* dégrade vers web seul */ }
+  if (amiens) {
+    try { apps = await getRentalAppsMap(); } catch (_) { /* dégrade vers web seul */ }
+  }
 
   // Un store par plateforme (le script choisit selon l'appareil).
   const storeIos     = apps.ios?.store_uri         || '';
   const storeAndroid = apps.android?.store_uri     || '';
+  const name = attr(service.system);
 
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
   res.setHeader('Cache-Control', 'no-store');
@@ -101,7 +111,7 @@ router.get('/open', async (req, res) => {
   <meta charset="utf-8">
   <meta name="robots" content="noindex">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Ouvrir Vélam — VéloPulse</title>
+  <title>Ouvrir ${name} — VéloPulse</title>
   <style>
     :root{--bg:#FBFBFA;--text:#1B1B19;--muted:#6B6B66;--accent:#2C66E0;--on:#fff;--line:#E3E3DE;--surface:#fff}
     @media (prefers-color-scheme: dark){:root{--bg:#0B0B0D;--text:#ECECEE;--muted:#9A9AA2;--accent:#4F8BFF;--line:#2A2A2E;--surface:#151517}}
@@ -119,10 +129,10 @@ router.get('/open', async (req, res) => {
 </head>
 <body data-store-ios="${attr(storeIos)}" data-store-android="${attr(storeAndroid)}">
   <img src="/icon-192.png" alt="" width="64" height="64">
-  <p id="msg">Réservez votre vélo avec Vélam.</p>
+  <p id="msg">Réservez votre vélo avec ${name}.</p>
   <div class="actions">
-    <a class="btn primary" id="open-app" href="${attr(OFFICIAL_WEB)}" target="_blank" rel="noopener">Ouvrir l'app Vélam</a>
-    <a class="btn" id="store" href="#" hidden target="_blank" rel="noopener">Installer l'app Vélam</a>
+    <a class="btn primary" id="open-app" href="${attr(web)}" target="_blank" rel="noopener">Ouvrir l'app ${name}</a>
+    <a class="btn" id="store" href="#" hidden target="_blank" rel="noopener">Installer l'app ${name}</a>
     <a class="btn back" id="back" href="/">← Retour à VéloPulse</a>
   </div>
   <script src="/open.js"></script>

@@ -9,6 +9,19 @@ Toutes les évolutions notables de VéloPulse. Format inspiré de
 section `## [x.y.z] - AAAA-MM-JJ` ci-dessous, puis merger sur `main` : le workflow
 `release.yml` crée le tag `vx.y.z` et la release GitHub à partir de cette section.
 
+## [1.11.0] - 2026-10-07
+
+### Plusieurs villes de vélos
+- **Paramètres › Préférences › Ville des vélos** : choisissez parmi 17 villes servies par
+  la même plateforme que Vélam — Amiens, Lyon (Vélo'v), Nantes (Naolib), Toulouse
+  (VélÔToulouse), Nancy, Besançon, Mulhouse, Cergy-Pontoise, Bruxelles (Villo!), Namur,
+  Luxembourg, Séville, Valence, Ljubljana, Maribor, Lund, Lillestrøm.
+- Seule la ville choisie est affichée et interrogée : stations, carte (centrée sur la
+  ville), favoris, alertes, correspondances avec les trains, libellés au nom du service.
+- Vos favoris et alertes d'une autre ville sont conservés et reviennent en y retournant ;
+  leurs alertes ne sont pas envoyées entre-temps.
+- Les notifications ouvrent le site du service de la ville de l'alerte.
+
 ## [1.10.0] - 2026-10-07
 
 ### Voies des trains

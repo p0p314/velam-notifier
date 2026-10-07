@@ -1,6 +1,11 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { api } from "./api";
 import { saveCache, loadCache } from "./lib/offlineCache";
+import { useBikeCity } from "./authContext";
+import { DEFAULT_CITY, stationCity } from "./lib/cities";
+
+/** Clé du cache hors ligne des stations : « stations » pour Amiens (comme avant), sinon par ville. */
+export const stationsCacheKey = (city) => (city === DEFAULT_CITY ? "stations" : `stations:${city}`);
 
 const REFRESH = 60; // secondes
 
@@ -134,16 +139,32 @@ export function useOnline() {
  * (mémoire ou cache hors ligne) restent affichées dans tous les cas.
  */
 export function useStations() {
-  const [cached] = useState(() => loadCache("stations"));
+  // Seule la ville choisie par le compte est lue (jamais toutes les villes).
+  const city = useBikeCity().id;
+  const cacheKey = stationsCacheKey(city);
+  const [cached] = useState(() => loadCache(cacheKey));
   const [stations, setStations] = useState(() => cached?.data ?? []);
   const [loading,  setLoading]  = useState(!cached);
   const [error,    setError]    = useState(null);
   const [staleReason, setStaleReason] = useState(null);
   const [lastUpd,  setLastUpd]  = useState(() => (cached ? new Date(cached.at) : null));
+  const cityRef = useRef(city);
+
+  // Changement de ville : on repart de son cache (ou de rien), jamais des stations d'avant.
+  useEffect(() => {
+    if (cityRef.current === city) return;
+    cityRef.current = city;
+    const c = loadCache(cacheKey);
+    setStations(c?.data ?? []);
+    setLastUpd(c ? new Date(c.at) : null);
+    setLoading(!c);
+    setStaleReason(null);
+  }, [city, cacheKey]);
 
   const reload = useCallback(async () => {
     try {
-      const data = await api("/api/stations", { auth: false });
+      const data = await api(city === DEFAULT_CITY ? "/api/stations" : `/api/stations?city=${encodeURIComponent(city)}`, { auth: false });
+      if (cityRef.current !== city) return; // ville changée entre-temps
       // Réponse illisible ou incomplète (proxy, corps tronqué…) : traitée comme un échec
       // plutôt que d'écraser la liste affichée par `undefined`.
       if (!Array.isArray(data?.stations)) throw new Error("Réponse du serveur invalide");
@@ -153,7 +174,7 @@ export function useStations() {
       setLastUpd(new Date(at));
       setError(null);
       setStaleReason(data.stale ? "upstream" : null);
-      saveCache("stations", data.stations, at);
+      saveCache(cacheKey, data.stations, at);
     } catch (e) {
       // Des données (mémoire ou cache) existent déjà → on les garde, marquées périmées.
       setStaleReason("server");
@@ -161,7 +182,7 @@ export function useStations() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [city, cacheKey]);
 
   useEffect(() => {
     reload();
@@ -241,7 +262,10 @@ export function useFavorites() {
     return queue.current;
   }, [apply, reload]);
 
-  const favIds = new Set(favorites.map((f) => f.station_id));
+  // Favoris de la ville choisie seulement (ceux des autres villes restent en base, masqués).
+  const city = useBikeCity().id;
+  const cityFavorites = useMemo(() => favorites.filter((f) => stationCity(f.station_id) === city), [favorites, city]);
+  const favIds = new Set(cityFavorites.map((f) => f.station_id));
 
   const toggleFav = useCallback((station) => {
     const id = station.station_id;
@@ -259,11 +283,15 @@ export function useFavorites() {
 
   /** Nouvel ordre (optimiste : affiché tout de suite, confirmé par le serveur). */
   const reorder = useCallback((stationIds) => {
-    setFavorites((list) => stationIds.map((id) => list.find((f) => f.station_id === id)).filter(Boolean));
+    // Les favoris des autres villes gardent leur place (après ceux-ci), comme côté serveur.
+    setFavorites((list) => [
+      ...stationIds.map((id) => list.find((f) => f.station_id === id)).filter(Boolean),
+      ...list.filter((f) => !stationIds.includes(f.station_id)),
+    ]);
     return mutate(async () =>
       (await api("/api/favorites/order", { method: "PUT", body: { station_ids: stationIds } })).favorites
     );
   }, [mutate]);
 
-  return { favorites, favIds, toggleFav, rename, reorder, loading, stale, reload };
+  return { favorites: cityFavorites, allFavorites: favorites, favIds, toggleFav, rename, reorder, loading, stale, reload };
 }

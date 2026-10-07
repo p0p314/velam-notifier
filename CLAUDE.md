@@ -93,7 +93,15 @@ Frontend (préfixe `VITE_`, injectées au build) :
 
 Modules CommonJS, séparation nette des responsabilités :
 
-- **gbfs.js** — accès au flux GBFS Cyclocity (fetch natif). Trois endpoints :
+- **cities.js** — **villes de vélos** (v1.11) : contrats Cyclocity du catalogue GBFS MobilityData à
+  l'heure de Paris (17 villes : Amiens, Lyon, Nantes, Toulouse, Bruxelles…), `globalStationId` /
+  `stationCity` : identifiants de stations **inchangés à Amiens**, **préfixés ailleurs** (`lyon:12`,
+  les numéros GBFS ne sont uniques que dans une ville). Copie côté client : `frontend/src/lib/cities.js`
+  (identité vérifiée par `test/cities.test.js`). Une ville par compte (`users.bike_city`,
+  `PUT /api/auth/city`, `user.city`) : seule celle-ci est affichée et interrogée ; favoris et alertes
+  des autres villes conservés, masqués, alertes non envoyées (filtre de la boucle). Une alerte ne
+  mélange pas les villes (400).
+- **gbfs.js** — accès au flux GBFS Cyclocity (fetch natif), **par ville** (`?city`, cache par ville). Trois endpoints :
   `station_information` (statique), `station_status` (live), `system_information` (rental_apps).
   Filtre la station fantôme `761` (sans nom/capacité) au moment du fetch info. Renvoie les
   données brutes ; **aucune fusion ici**.
@@ -164,7 +172,7 @@ Les **infos statiques** de station sont mises en **cache SQL** ; la **disponibil
 et fusionnée à la volée. La base n'est **jamais** la source de vérité pour la disponibilité,
 seulement pour le référentiel lent des stations.
 
-- `GET /api/stations` — auto-peuple la base au premier appel si vide, puis fusionne l'info en
+- `GET /api/stations?city=` (Amiens par défaut, 400 si inconnue) — une seule ville ; auto-peuple sa partie du référentiel (`stations.city`) si vide, puis fusionne l'info en
   cache avec un fetch statut live. Le détail par type vient de `vehicle_types_available`
   (`mechanical` / `electrical`).
 - `POST /api/stations/refresh` (**protégée**) et `POST /cron/refresh-stations` (cron quotidien) —
@@ -186,7 +194,7 @@ Erreurs upstream/proxy → **HTTP 502** `{ ok:false, error }`. Toutes les répon
 enveloppe `ok` ; le client `api()` lève sur `!res.ok || data.ok === false`. Routes protégées
 (`/api/favorites` (+ `PATCH /:id` label, `PUT /order`), `/api/alerts` (+ `PUT /pause`),
 `/api/push/subscribe|unsubscribe|test`, `/api/auth/me` (GET ; DELETE = suppression du compte),
-`POST /api/auth/tutorial`, `PUT /api/auth/modules`,
+`POST /api/auth/tutorial`, `PUT /api/auth/modules`, `PUT /api/auth/city`,
 `PUT /api/auth/password`, `POST /api/auth/logout|logout-others`, `/api/auth/sessions` (GET, DELETE `/:id`),
 `GET /api/auth/export`,
 `POST /api/stations/refresh`, `/api/trains/favorites` (GET, POST, PATCH/DELETE `/:id`),
@@ -293,7 +301,10 @@ Alertes et **aucune donnée chargée** pour elle, réglages associés masqués (
 d'ouverture via `landingsFor` / `landingPath(pref, isMobile, modules)`, interrupteur d'alertes),
 diapositive du tutoriel retirée (`tutorialSlides`), couche Vélam de la carte d'un train masquée.
 `useModules()` (`auth.jsx`) / `lib/modules.js` (`modulesOf`, `canDisable`) : hors `AuthProvider`,
-les deux sont actives.
+les deux sont actives. **Ville des vélos** : `useBikeCity()` (`authContext.js`, sans dépendance — importable par
+`hooks.js`) ; `useStations` lit `/api/stations?city=` (cache hors ligne par ville : `stationsCacheKey`),
+`useFavorites` expose les favoris de la ville (`allFavorites` : tous), carte centrée sur la ville,
+libellés au nom du service (« Stations Vélo'v »), choix dans Paramètres › Préférences (`CityCard`).
 
 **Navigation (v1.7) — 4 onglets, organisés par usage et non par mode de transport** :
 `/trajets` **Mes trajets** (`pages/MyTrips.jsx` : **une catégorie à la fois**, bascule
@@ -416,7 +427,8 @@ Tables (créées/migrées par `database/migrations.js`, dialecte selon `DATABASE
 `stations` (référentiel statique), `config` (clé/valeur : secret JWT, clés VAPID),
 `users` (+ `alerts_paused_until`, `token_version`, `tutorial_done`, `notify_bikes` / `notify_trains` — types
 d'alertes envoyés au compte, `GET|PUT /api/notifications/preferences`, respectés par les deux boucles d'alerte ;
-`use_bikes` / `use_trains` — fonctionnalités utilisées, voir « Fonctionnalités du compte »), `sessions` (appareils connectés, horodatages
+`use_bikes` / `use_trains` — fonctionnalités utilisées, voir « Fonctionnalités du compte » ; `bike_city` —
+ville des vélos, cf. cities.js), `stations.city` (ville de chaque station du référentiel), `sessions` (appareils connectés, horodatages
 en ms), `push_subscriptions.session_id` (appareil de rattachement), `favorites` (unique `user_id+station_id`, `label`, `sort_order`
 — NULL tant que l'utilisateur n'a jamais ordonné : ordre alphabétique), `push_subscriptions`
 (unique `endpoint`), `alerts` (cf. modèle ci-dessus ; `group_stations` stocké en JSON texte,

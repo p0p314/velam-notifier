@@ -5,6 +5,7 @@ const {
   getSubscriptionsByUser, removeSubscriptionById, getStations,
 } = require('./db');
 const { getStationStatus, isFresh } = require('./gbfs');
+const { stationCity, DEFAULT_CITY } = require('./cities');
 const { nowInTz, inWindow } = require('./time');
 const { distanceKm, fmtDistance } = require('./geo');
 
@@ -179,9 +180,11 @@ async function sendToUser(userId, payload) {
 // Le SW iOS ne peut pas ouvrir directement une URL cross-origin via clients.openWindow().
 // On passe par /open (même domaine) qui répond avec une page de redirection vers
 // l'app Vélam (deep link) puis le store, puis le site.
-function buildRedirectUrl() {
+// Hors Amiens : `city` désigne l'application de la ville (site et nom du service).
+function buildRedirectUrl(stationId = null) {
   const base = (process.env.APP_URL || 'https://velam-notifier.onrender.com').replace(/\/$/, '');
-  return `${base}/open?url=${encodeURIComponent(OFFICIAL_URL)}`;
+  const city = stationCity(stationId);
+  return `${base}/open?url=${encodeURIComponent(OFFICIAL_URL)}${city === DEFAULT_CITY ? '' : `&city=${city}`}`;
 }
 
 const plural = (n, word) => `${n} ${word}${n > 1 ? 's' : ''}`;
@@ -286,7 +289,7 @@ function buildPayload(alerte, ev, fallbacks) {
   return {
     ...withFallbacks(buildMessage(alerte, ev), alerte, fallbacks),
     // Toujours une URL https:// (page /open interne) → ouvrable par le SW iOS.
-    url:       buildRedirectUrl(),
+    url:       buildRedirectUrl(alerte.station_id),
     stationId: alerte.station_id,
     icon:      '/icon-192.png',
     badge:     '/badge-72.png',
@@ -316,7 +319,7 @@ function buildSummaryPayload(alerte, statusMap) {
     body: (alerte.group_stations ?? [])
       .map((s) => `${s.station_name} : ${summaryLine(statusMap[s.station_id], alerte.bike_type)}`)
       .join('\n'),
-    url:       buildRedirectUrl(),
+    url:       buildRedirectUrl(alerte.station_id),
     stationId: alerte.station_id,
     icon:      '/icon-192.png',
     badge:     '/badge-72.png',
@@ -383,20 +386,38 @@ async function checkAlerts(date = new Date()) {
   const now = nowInTz(date);
   await deleteExpiredAlerts(now.date); // alertes ponctuelles des jours passés
 
+  // Seulement les alertes de la ville choisie par le compte (les autres sont conservées,
+  // masquées, et ne sont plus envoyées — comme une fonctionnalité désactivée).
   const due = (await getActiveAlerts(now.date))
+    .filter((a) => stationCity(a.station_id) === (a.user_city ?? DEFAULT_CITY))
     .filter((a) => (a.kind === 'summary' ? isSummaryDue(a, now) : isDue(a, now)));
   if (due.length === 0) return 'aucune_due';
 
+  // Une ville à la fois, et seulement celles qui ont une alerte due.
+  const byCity = new Map();
+  for (const a of due) {
+    const c = stationCity(a.station_id);
+    if (!byCity.has(c)) byCity.set(c, []);
+    byCity.get(c).push(a);
+  }
+  const outcomes = [];
+  for (const [city, alerts] of byCity) outcomes.push(await checkCity(city, alerts, now));
+  // Résultat du cycle : celui d'Amiens s'il y en a, sinon le premier (santé de la boucle).
+  return outcomes.includes('verifiees') ? undefined : outcomes[0];
+}
+
+/** Évalue les alertes dues d'une ville (un seul appel GBFS pour toutes). */
+async function checkCity(city, due, now) {
   let status;
   try {
-    status = await getStationStatus();
+    status = await getStationStatus(city);
   } catch (err) {
-    console.error('[push] fetch GBFS status', err.message);
+    console.error(`[push] fetch GBFS status (${city})`, err.message);
     return 'flux_indisponible';
   }
-  // Flux Vélam en panne ou données figées : on n'alerte pas sur des chiffres périmés.
+  // Flux en panne ou données figées : on n'alerte pas sur des chiffres périmés.
   if (!isFresh(status)) {
-    console.warn('[push] disponibilités périmées — cycle d\'alerte ignoré');
+    console.warn(`[push] disponibilités périmées (${city}) — alertes de cette ville ignorées`);
     return 'donnees_perimees';
   }
 
@@ -405,7 +426,7 @@ async function checkAlerts(date = new Date()) {
   // Référentiel (coordonnées) pour les stations de repli — lu en base, 1 fois par cycle.
   let stations = [];
   try {
-    stations = await getStations();
+    stations = await getStations(city);
   } catch (err) {
     console.error('[push] lecture stations', err.message); // dégrade : pas de repli
   }
@@ -434,6 +455,7 @@ async function checkAlerts(date = new Date()) {
       await setAlertNotifiedKey(alert.id, null);
     }
   }
+  return 'verifiees';
 }
 
 // ── Ordonnancement (instance unique + cycle non concurrent) ──────────────────────

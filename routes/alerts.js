@@ -1,5 +1,6 @@
 // Routes alertes de disponibilité (protégées par JWT) + validation des payloads.
 const express = require('express');
+const { stationCity } = require('../cities');
 const { getAlerts, getAlert, createAlert, updateAlert, deleteAlert, getAlertsPause, setAlertsPause } = require('../db');
 const { nowInTz, addDays } = require('../time');
 const { requireAuth } = require('../auth');
@@ -51,7 +52,16 @@ const present = (v) => v !== undefined && v !== null && v !== '';
  * le fuseau des alertes, pour refuser une alerte ponctuelle dans le passé.
  * `min_count` (ancien nom de `threshold`) reste accepté en entrée.
  */
-function validateAlertPayload(body, { current = null, today = null } = {}) {
+function validateAlertPayload(body, opts = {}) {
+  const out = validateAlertFields(body, opts);
+  // Une alerte porte sur une seule ville (stations, arrivée, groupe : cf. cities.js).
+  const f = out.fields;
+  const ids = [f.station_id, f.arrival_station_id, ...(f.group_stations ?? []).map((g) => g.station_id)].filter(Boolean);
+  if (new Set(ids.map(stationCity)).size > 1) out.errors.push('stations d\'une même ville');
+  return out;
+}
+
+function validateAlertFields(body, { current = null, today = null } = {}) {
   const src = { ...(current ?? {}), ...body };
   if (body.threshold === undefined && body.min_count !== undefined) src.threshold = body.min_count;
   const fields = {};

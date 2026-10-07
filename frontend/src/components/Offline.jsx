@@ -1,7 +1,7 @@
 import { NavLink } from "react-router-dom";
 import Icon from "./Icon";
 import { useOnline } from "../hooks";
-import { useModules } from "../auth";
+import { useModules, useBikeCity } from "../authContext";
 import { fmtUpdatedAt } from "../lib/offlineCache";
 import { bannerText } from "../lib/station";
 
@@ -12,12 +12,13 @@ import { bannerText } from "../lib/station";
  */
 export function OfflineBanner({ stale, staleReason, lastUpd }) {
   const online = useOnline();
+  const city = useBikeCity();
   if (online && !stale) return null;
   const reason = !online ? "offline" : staleReason ?? "server";
   return (
     <div className="offline-banner" role="status">
       <Icon name={reason === "upstream" ? "clock" : "wifi-off"} size={16} />
-      <span>{bannerText(reason, lastUpd, fmtUpdatedAt(lastUpd))}</span>
+      <span>{bannerText(reason, lastUpd, fmtUpdatedAt(lastUpd), Date.now(), city.system)}</span>
     </div>
   );
 }

@@ -8,7 +8,7 @@
 export async function shareApp(url = window.location.origin) {
   const data = {
     title: "VéloPulse",
-    text: "VéloPulse : les vélos Vélam disponibles autour de vous, et des alertes quand il en manque.",
+    text: "VéloPulse : les vélos en libre-service (Vélam, Vélo'v…) et les trains, en temps réel, avec des alertes quand il le faut.",
     url,
   };
   if (typeof navigator.share === "function" && (!navigator.canShare || navigator.canShare(data))) {

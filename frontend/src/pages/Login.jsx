@@ -87,7 +87,7 @@ export default function Login() {
         <header className="auth-hero">
           <span className="auth-logo"><Logo /></span>
           <h1 className="auth-name">VéloPulse</h1>
-          <p className="auth-sub">Les vélos Vélam d'Amiens, en temps réel</p>
+          <p className="auth-sub">Vos vélos en libre-service et vos trains, en temps réel</p>
           <ul className="auth-features">
             {FEATURES.map((f) => (
               <li key={f.icon}><Icon name={f.icon} size={16} /><span>{f.text}</span></li>

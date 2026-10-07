@@ -10,6 +10,7 @@ import TrainAlertForm from "./TrainAlertForm";
 import { describeTrainAlert, favoriteTitle, fmtClock, nearbyVelam } from "../../lib/trains";
 import { fmtDistance } from "../../hooks";
 import { useLongPress } from "../../useLongPress";
+import { useBikeCity } from "../../authContext";
 
 const dayLabel = (j) => new Date(`${j.serviceDate}T12:00:00Z`).toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "short" });
 
@@ -40,13 +41,14 @@ export function AlertSwitch({ alert, onToggle }) {
  * gare est loin de toute station (hors d'Amiens).
  */
 function VelamLinks({ journey, stations }) {
+  const { system } = useBikeCity();
   const rows = [
     { label: "Au départ", hit: nearbyVelam(stations, journey.departureStation, "docks"), unit: (n) => `${n} place${n > 1 ? "s" : ""}` },
     { label: "À l'arrivée", hit: nearbyVelam(stations, journey.arrivalStation, "bikes"), unit: (n) => `${n} vélo${n > 1 ? "s" : ""}` },
   ].filter((r) => r.hit);
   if (!rows.length) return null;
   return (
-    <ul className="velam-links" aria-label="Stations Vélam proches">
+    <ul className="velam-links" aria-label={`Stations ${system} proches`}>
       {rows.map((r) => (
         <li key={r.label}>
           <Icon name="bike" size={15} />

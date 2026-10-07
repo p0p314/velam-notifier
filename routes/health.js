@@ -3,7 +3,8 @@ const express = require('express');
 const { countStations } = require('../db');
 const { version } = require('../package.json');
 const { getAlertLoopHealth } = require('../push');
-const { getStatusHealth } = require('../gbfs');
+const { getStatusHealth, queriedCities } = require('../gbfs');
+const { DEFAULT_CITY } = require('../cities');
 const { trainsHealth } = require('../trains');
 const { getTrainLoopHealth } = require('../trains/alertLoop');
 
@@ -33,6 +34,8 @@ router.get('/api/health', async (req, res) => {
       node_version:    process.version,
       alert_loop:      alertLoop,
       gbfs,
+      // Autres villes consultées depuis le démarrage (informatif ; Amiens décide de `status`).
+      gbfs_cities: Object.fromEntries(queriedCities().filter((c) => c !== DEFAULT_CITY).map((c) => [c, getStatusHealth(Date.now(), c)])),
       // Module Trains : informatif (n'affecte pas `status` : les vélos restent le cœur du service).
       trains: { providers: trainsHealth(), alert_loop: getTrainLoopHealth() },
     });

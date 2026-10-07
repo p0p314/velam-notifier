@@ -8,36 +8,48 @@ async function initialize() {
 
 // ── Stations ────────────────────────────────────────────────────────────────
 
-async function countStations() {
-  const row = await dbc.get('SELECT COUNT(*) AS n FROM stations');
+/** Nombre de stations du référentiel : toutes villes confondues, ou d'une ville. */
+async function countStations(city = null) {
+  const row = city
+    ? await dbc.get('SELECT COUNT(*) AS n FROM stations WHERE city = ?', [city])
+    : await dbc.get('SELECT COUNT(*) AS n FROM stations');
   return Number(row?.n ?? 0);
 }
 
-async function getStations() {
-  const { rows } = await dbc.query('SELECT * FROM stations ORDER BY LOWER(name)');
+/** Référentiel d'une ville (Amiens par défaut). */
+async function getStations(city = 'amiens') {
+  const { rows } = await dbc.query('SELECT * FROM stations WHERE city = ? ORDER BY LOWER(name)', [city]);
   return rows;
 }
 
+/** Villes présentes dans le référentiel (rafraîchissement quotidien). */
+async function getStationCities() {
+  const { rows } = await dbc.query('SELECT DISTINCT city FROM stations');
+  return rows.map((r) => r.city);
+}
+
 /**
- * Upsert du référentiel stations en un seul INSERT multi-lignes (1 aller-retour DB,
- * atomique). Déduplique par station_id (dernier gagne) pour éviter un conflit
- * dupliqué dans la même instruction. Timestamp calculé côté JS (portable).
+ * Upsert du référentiel stations d'une ville en un seul INSERT multi-lignes (1 aller-retour
+ * DB, atomique). Déduplique par station_id (dernier gagne) pour éviter un conflit
+ * dupliqué dans la même instruction. Timestamp calculé côté JS (portable). Les
+ * identifiants sont globaux (préfixés hors Amiens) : pas de collision entre villes.
  */
-async function saveStations(stations) {
+async function saveStations(stations, city = 'amiens') {
   const unique = [...new Map(stations.map((s) => [s.station_id, s])).values()];
   if (unique.length === 0) return;
 
   const now = Math.floor(Date.now() / 1000);
-  const row = '(?, ?, ?, ?, ?, ?, ?)';
+  const row = '(?, ?, ?, ?, ?, ?, ?, ?)';
   const values = unique.map(() => row).join(', ');
   const params = unique.flatMap((s) => [
-    s.station_id, s.name, s.address?.trim() ?? '', s.lat, s.lon, s.capacity ?? 0, now,
+    s.station_id, s.name, s.address?.trim() ?? '', s.lat, s.lon, s.capacity ?? 0, now, city,
   ]);
 
   await dbc.run(
-    `INSERT INTO stations (station_id, name, address, lat, lon, capacity, fetched_at)
+    `INSERT INTO stations (station_id, name, address, lat, lon, capacity, fetched_at, city)
      VALUES ${values}
      ON CONFLICT(station_id) DO UPDATE SET
+       city       = excluded.city,
        name       = excluded.name,
        address    = excluded.address,
        lat        = excluded.lat,
@@ -46,7 +58,7 @@ async function saveStations(stations) {
        fetched_at = excluded.fetched_at`,
     params
   );
-  console.log(`[db] ${unique.length} stations enregistrées`);
+  console.log(`[db] ${unique.length} stations enregistrées (${city})`);
 }
 
 /**
@@ -55,14 +67,14 @@ async function saveStations(stations) {
  * connues (flux partiel / incident), on n'en supprime aucune.
  * Renvoie { count, removed }.
  */
-async function replaceStations(stations) {
-  await saveStations(stations);
+async function replaceStations(stations, city = 'amiens') {
+  await saveStations(stations, city);
   const ids = [...new Set(stations.map((s) => s.station_id))];
-  const known = await countStations();
+  const known = await countStations(city);
   if (ids.length === 0 || ids.length < known / 2) return { count: ids.length, removed: 0 };
   const { changes } = await dbc.run(
-    `DELETE FROM stations WHERE station_id NOT IN (${ids.map(() => '?').join(', ')})`,
-    ids
+    `DELETE FROM stations WHERE city = ? AND station_id NOT IN (${ids.map(() => '?').join(', ')})`,
+    [city, ...ids]
   );
   if (changes) console.log(`[db] ${changes} station(s) retirée(s) du référentiel`);
   return { count: ids.length, removed: changes };
@@ -129,7 +141,7 @@ async function getUserByUsername(username) {
 
 /** Avec le hash du mot de passe : réservé aux vérifications d'identité. */
 async function getUserAuthById(id) {
-  return dbc.get('SELECT id, username, password_hash, token_version, tutorial_done, use_bikes, use_trains FROM users WHERE id = ?', [id]);
+  return dbc.get('SELECT id, username, password_hash, token_version, tutorial_done, use_bikes, use_trains, bike_city FROM users WHERE id = ?', [id]);
 }
 
 /** Version de session du compte (null si le compte n'existe plus). */
@@ -228,7 +240,7 @@ async function markTutorialDone(id) {
 }
 
 async function getUserById(id) {
-  return dbc.get('SELECT id, username, token_version, tutorial_done, use_bikes, use_trains, created_at FROM users WHERE id = ?', [id]);
+  return dbc.get('SELECT id, username, token_version, tutorial_done, use_bikes, use_trains, bike_city, created_at FROM users WHERE id = ?', [id]);
 }
 
 // ── Favorites ────────────────────────────────────────────────────────────────
@@ -444,11 +456,12 @@ async function countActiveAlerts() {
 /**
  * Alertes actives à évaluer le jour `today` (YYYY-MM-DD, fuseau des alertes) :
  * exclut les comptes en pause (alerts_paused_until >= today) et les alertes
- * ponctuelles d'un autre jour.
+ * ponctuelles d'un autre jour. `user_city` : ville choisie par le compte (la boucle
+ * ignore les alertes d'une autre ville, conservées mais masquées).
  */
 async function getActiveAlerts(today) {
   const { rows } = await dbc.query(
-    `SELECT a.* FROM alerts a JOIN users u ON u.id = a.user_id
+    `SELECT a.*, u.bike_city AS user_city FROM alerts a JOIN users u ON u.id = a.user_id
      WHERE a.active = 1 AND u.notify_bikes = 1 AND u.use_bikes = 1
        AND (u.alerts_paused_until IS NULL OR u.alerts_paused_until < ?)
        AND (a.valid_on IS NULL OR a.valid_on = ?)`,
@@ -483,6 +496,11 @@ async function setNotificationPrefs(userId, prefs) {
 const modulesOf = (row) => ({ bikes: Number(row?.use_bikes ?? 1) === 1, trains: Number(row?.use_trains ?? 1) === 1 });
 
 /** `modules` : { bikes, trains } complet et valide (au moins un des deux, vérifié par la route). */
+/** Ville des vélos du compte (identifiant du catalogue, vérifié par la route). */
+async function setBikeCity(userId, city) {
+  await dbc.run('UPDATE users SET bike_city = ? WHERE id = ?', [city, userId]);
+}
+
 async function setModules(userId, modules) {
   await dbc.run('UPDATE users SET use_bikes = ?, use_trains = ? WHERE id = ?', [modules.bikes ? 1 : 0, modules.trains ? 1 : 0, userId]);
 }
@@ -675,7 +693,7 @@ async function purgeTrainNotifications(before) {
 module.exports = {
   initialize,
   // stations
-  countStations, getStations, saveStations, replaceStations,
+  countStations, getStations, getStationCities, saveStations, replaceStations,
   // rental apps
   upsertRentalApp, getRentalApps, getRentalAppsMap,
   // config
@@ -691,7 +709,7 @@ module.exports = {
   // alerts
   getAlerts, getAlert, createAlert, updateAlert, deleteAlert,
   markAlertNotified, setAlertNotifiedKey, countActiveAlerts, getActiveAlerts, deleteExpiredAlerts,
-  getAlertsPause, setAlertsPause, getNotificationPrefs, setNotificationPrefs, modulesOf, setModules,
+  getAlertsPause, setAlertsPause, getNotificationPrefs, setNotificationPrefs, modulesOf, setModules, setBikeCity,
   // trains
   getTrainFavorites, getTrainFavorite, countTrainFavorites, addTrainFavorite, setTrainFavoriteLabel, removeTrainFavorite,
   getTrainAlerts, getTrainAlert, createTrainAlert, updateTrainAlert, deleteTrainAlert,

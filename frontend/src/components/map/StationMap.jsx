@@ -38,7 +38,7 @@ export function popupHTML(s) {
  * et `filterType` (couleur des markers). Markers diffés (créés une fois, mis à
  * jour en place) → pas de recréation à chaque rafraîchissement API.
  */
-export default function StationMap({ stations, filterType = "all", focus = null, theme = "light" }) {
+export default function StationMap({ stations, filterType = "all", focus = null, theme = "light", center = null }) {
   const containerRef = useRef(null);
   const userMarkerRef = useRef(null);
   const mapRef = useRef(null);
@@ -52,7 +52,8 @@ export default function StationMap({ stations, filterType = "all", focus = null,
     const map = new mapboxgl.Map({
       container: containerRef.current,
       style: mapStyleFor(theme),
-      center: [DEFAULT_CENTER.lng, DEFAULT_CENTER.lat],
+      // Centre de la ville choisie (lib/cities.js), sinon Amiens.
+      center: center ? [center.lon, center.lat] : [DEFAULT_CENTER.lng, DEFAULT_CENTER.lat],
       zoom: DEFAULT_ZOOM,
     });
     map.addControl(new mapboxgl.NavigationControl({ showCompass: false }), "top-right");
