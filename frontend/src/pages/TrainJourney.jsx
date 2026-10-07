@@ -7,17 +7,18 @@ import LineBadge from "../components/trains/LineBadge";
 import TrainStatus from "../components/trains/TrainStatus";
 import Freshness from "../components/trains/Freshness";
 import TrainAlertForm from "../components/trains/TrainAlertForm";
+import { PlatformBadge } from "../components/trains/JourneyCard";
 import { useTrainJourney, useMyTrains } from "../trainHooks";
 import { fmtClock, fmtDayLong, timeInfo, describeTrainAlert, statusInfo, delayLabel } from "../lib/trains";
 import { trainMapPath, progressInfo } from "../lib/trainMap";
 
 /** Bloc « Départ » / « Arrivée » : prévu, estimé (seulement s'il diffère) et retard. */
-function TimeBlock({ title, station, scheduled, estimated, delay, cancelled }) {
+function TimeBlock({ title, station, scheduled, estimated, delay, cancelled, platform = null }) {
   const t = timeInfo(scheduled, estimated, delay);
   return (
     <div className="journey-time">
       <div className="journey-time-title">{title}</div>
-      <div className="journey-time-station">{station.name}</div>
+      <div className="journey-time-station">{station.name}{platform && !cancelled && <> <PlatformBadge platform={platform} /></>}</div>
       {t.estimated ? (
         <dl className="journey-time-rows">
           <div><dt>Prévu</dt><dd className="mono old">{t.scheduled}</dd></div>
@@ -104,8 +105,8 @@ export default function TrainJourney() {
 
       <div className="journey-card">
         <div className="journey-times">
-          <TimeBlock title="Départ" station={j.departureStation} scheduled={j.scheduledDeparture} estimated={j.estimatedDeparture} delay={j.departureDelay} cancelled={cancelled} />
-          <TimeBlock title="Arrivée" station={j.arrivalStation} scheduled={j.scheduledArrival} estimated={j.estimatedArrival} delay={j.arrivalDelay} cancelled={cancelled} />
+          <TimeBlock title="Départ" station={j.departureStation} scheduled={j.scheduledDeparture} estimated={j.estimatedDeparture} delay={j.departureDelay} cancelled={cancelled} platform={j.departurePlatform} />
+          <TimeBlock title="Arrivée" station={j.arrivalStation} scheduled={j.scheduledArrival} estimated={j.estimatedArrival} delay={j.arrivalDelay} cancelled={cancelled} platform={j.arrivalPlatform} />
         </div>
         <div className="journey-status">
           <span className="form-label">Statut</span>
@@ -165,7 +166,7 @@ export default function TrainJourney() {
             return (
               <li key={`${st.station.id}-${i}`} className={"journey-stop" + (st.inJourney ? " in" : "") + (st.skipped ? " skipped" : "")}>
                 <span className="journey-stop-dot" aria-hidden="true" />
-                <span className="journey-stop-name">{st.station.name}{st.skipped && <span className="journey-stop-flag"> · supprimé</span>}</span>
+                <span className="journey-stop-name">{st.station.name}{st.skipped && <span className="journey-stop-flag"> · supprimé</span>}{st.platform && !st.skipped && <span className="journey-stop-platform"> · voie {st.platform}</span>}</span>
                 <span className="journey-stop-time mono">
                   <span className={changed ? "old" : ""}>{fmtClock(sched)}</span>
                   {changed && <span className="t-est"> {fmtClock(est)}</span>}

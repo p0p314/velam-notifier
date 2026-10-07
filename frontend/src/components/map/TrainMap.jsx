@@ -19,6 +19,7 @@ function stopPopupHTML(p) {
     <div class="sp-name">${esc(p.name)}</div>
     ${p.status ? `<div class="tp-status">${esc(p.status)}</div>` : ""}
     ${rows ? `<div class="tp-rows">${rows}</div>` : ""}
+    ${p.platform ? `<div class="tp-platform">Voie ${esc(p.platform)}</div>` : ""}
     ${p.delay ? `<div class="tp-delay">${esc(p.delay)}</div>` : ""}
   </div>`;
 }

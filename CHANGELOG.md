@@ -9,6 +9,17 @@ Toutes les évolutions notables de VéloPulse. Format inspiré de
 section `## [x.y.z] - AAAA-MM-JJ` ci-dessous, puis merger sur `main` : le workflow
 `release.yml` crée le tag `vx.y.z` et la release GitHub à partir de cette section.
 
+## [1.10.0] - 2026-10-07
+
+### Voies des trains
+- **« Voie 4 »** affichée sur les trains proches de leur départ : cartes de résultats et de
+  Mes trajets (départ et arrivée), détail du trajet (chaque gare) et carte du train.
+- Source : flux temps réel SNCF « SIRI Lite » (le seul à publier les voies). La voie
+  n'apparaît que lorsqu'elle est attribuée — souvent peu avant le départ, comme sur les
+  panneaux en gare — et n'est jamais devinée.
+- Économe : ce flux volumineux n'est téléchargé que si un train consulté part dans l'heure
+  et demie (ou roule), une fois toutes les 2 minutes au plus pour tous les utilisateurs.
+
 ## [1.9.1] - 2026-10-07
 
 ### Améliorations

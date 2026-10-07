@@ -3,6 +3,7 @@
 //   TransportProvider
 //   ├── schedule : StaticScheduleProvider (GTFS — horaires théoriques)
 //   ├── realtime : RealtimeTrainProvider  (GTFS-RT — retards, suppressions, perturbations)
+//   ├── platforms: voies des trains (SIRI Lite ET, facultatif)
 //   ├── conventions : particularités du producteur (numéro de train, alias temps réel…)
 //   └── service  : TrainService (couche métier → modèles TrainJourney)
 //
@@ -10,6 +11,7 @@
 // dans providers/ (URL GTFS, URL GTFS-RT, conventions) et un appel à register().
 const { createStaticSchedule } = require('./gtfs/staticSchedule');
 const { createRealtimeProvider } = require('./gtfs/realtime');
+const { createPlatformsProvider } = require('./siri');
 const { createTrainService, TrainsError } = require('./service');
 const { sncfConfig } = require('./providers/sncf');
 
@@ -27,6 +29,8 @@ function createProvider(config, env = process.env) {
       tripUpdatesUrl: config.tripUpdatesUrl, serviceAlertsUrl: config.serviceAlertsUrl,
       vehiclePositionsUrl: config.vehiclePositionsUrl ?? null, env,
     }),
+    // Voies (quais) : flux facultatif, lu à la demande (null : le fournisseur n'en publie pas).
+    platforms: config.siriEtUrl ? createPlatformsProvider({ url: config.siriEtUrl, env }) : null,
   };
   provider.service = createTrainService(provider, env);
   return provider;
@@ -62,6 +66,20 @@ function initTrains(env = process.env) {
   for (const p of providers.values()) p.schedule.load();
 }
 
+/** Flux des voies : null si absent ; jamais interrogé tant que personne ne consulte un train proche. */
+function platformsHealth(platforms, now) {
+  if (!platforms?.enabled) return null;
+  const snap = platforms.peek();
+  if (!snap) return { upstream_ok: null, note: 'pas encore interrogé' };
+  return {
+    upstream_ok: snap.upstreamOk,
+    fetched_at: snap.fetchedAt ? new Date(snap.fetchedAt).toISOString() : null,
+    age_s: snap.fetchedAt ? Math.round((now - snap.fetchedAt) / 1000) : null,
+    entries: snap.index.size,
+    last_error: snap.error ?? null,
+  };
+}
+
 /** État de chaque fournisseur, sans appel réseau (pour /api/health). */
 function trainsHealth(now = Date.now()) {
   return listProviders().map((p) => {
@@ -78,6 +96,7 @@ function trainsHealth(now = Date.now()) {
       trip_updates: feed(tripUpdates),
       service_alerts: feed(serviceAlerts),
       // Positions des trains : null si le fournisseur n'en publie pas (SNCF).
+      platforms: platformsHealth(p.platforms, now),
       vehicle_positions: p.realtime.hasVehiclePositions
         ? (vehicles ? { ...feed(vehicles), count: vehicles.vehicles?.length ?? 0 } : { upstream_ok: null, note: 'pas encore interrogé' })
         : null,

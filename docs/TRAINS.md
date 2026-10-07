@@ -16,6 +16,7 @@ Toutes les données viennent du **Point d'Accès National** (transport.data.gouv
 | Horaires théoriques | GTFS (zip ~7 Mo, ~85 Mo décompressé) | `https://eu.ftp.opendatasoft.com/sncf/plandata/Export_OpenData_SNCF_GTFS_NewTripId.zip` | publié environ une fois par jour, couvre ~5 mois |
 | Retards, suppressions | GTFS-RT Trip Updates (protobuf) | `https://proxy.transport.data.gouv.fr/resource/sncf-gtfs-rt-trip-updates` | mis à jour ~toutes les 2 min (trains de l'heure à venir) |
 | Perturbations | GTFS-RT Service Alerts (protobuf) | `https://proxy.transport.data.gouv.fr/resource/sncf-gtfs-rt-service-alerts` | idem, change plus lentement |
+| Voies (quais) | SIRI Lite Estimated Timetable (XML, ~25 Mo) | `https://proxy.transport.data.gouv.fr/resource/sncf-siri-lite-estimated-timetable` | toutes les 2 min, trains de l'heure à venir (voir § 13) |
 | Tracés des voies | GTFS `shapes.txt` | — | **non publié par la SNCF** (voir § 12) |
 | Positions des trains | GTFS-RT VehiclePosition | — (`TRAINS_RT_VEHICLES_URL`) | **non publié par la SNCF** (voir § 12) |
 
@@ -98,7 +99,8 @@ trains/
 | `cancellation` | `null` ou `{ partial, reason }` (partiel : arrêt de départ/arrivée supprimé) |
 | `realtime` | une mise à jour temps réel existe pour ce train |
 | `alerts`, `disrupted` | perturbations (`scope` : trip, line, station ; `major`) |
-| `stops` | (détail) tous les arrêts du trajet : `station` (`{ id, name, lat, lon }`), `seq` (stop_sequence), `stopId` (quai), horaires prévus / estimés, `delay`, `skipped`, `inJourney` |
+| `departurePlatform`, `arrivalPlatform` | voie au départ / à l'arrivée (« 4 »), `null` si inconnue (§ 13) |
+| `stops` | (détail) tous les arrêts du trajet : `station` (`{ id, name, lat, lon }`), `seq` (stop_sequence), `stopId` (point d'arrêt GTFS), `platform` (voie ou `null`), horaires prévus / estimés, `delay`, `skipped`, `inJourney` |
 
 ### Règles de fusion
 
@@ -122,6 +124,7 @@ trains/
 | Index temps réel (rattachement) | mémoire | une fois par instantané |
 | Tracés (`TrainRoute`) | mémoire, attaché à l'index | jusqu'à la version suivante (2 000 trajets au plus) ; navigateur : 1 h + ETag |
 | Positions (VehiclePosition), si publiées | mémoire | TTL 30 s (`TRAINS_RT_VEHICLES_TTL_MS`) |
+| Voies (index numéro \| gare \| jour → voies, pas le XML) | mémoire | TTL 2 min (`TRAINS_SIRI_TTL_MS`), ignoré au-delà de 15 min |
 
 - Démarrage : chargement **en arrière-plan** (le serveur répond tout de suite ; les
   routes trains renvoient 503 « en cours de chargement » quelques secondes, le client
@@ -249,6 +252,8 @@ Toutes facultatives (les sources SNCF sont publiques).
 | `TRAINS_RT_MAX_AGE_MS` | 600000 | au-delà, temps réel ignoré |
 | `TRAINS_RT_VEHICLES_URL` | (aucune) | flux GTFS-RT VehiclePosition, si une source en publie un (la SNCF non) |
 | `TRAINS_RT_VEHICLES_TTL_MS` | 30000 | cache des positions |
+| `TRAINS_SIRI_ET_URL` | flux SNCF du PAN | voies ; `off` = jamais téléchargé |
+| `TRAINS_SIRI_TTL_MS` / `TRAINS_SIRI_TIMEOUT_MS` | 120000 / 45000 | cache et délai du flux des voies |
 | `CRON_SECRET` | — | requis pour `/cron/sync-trains` |
 
 ## 9. Développement local
@@ -285,7 +290,8 @@ Rien de plus à configurer sur Render : les sources sont publiques. Prévoir :
 ## 11. Limitations connues
 
 - **Trajets directs uniquement** : pas de calcul d'itinéraire avec correspondance.
-- **Quais** : non publiés dans ces flux (ni théorique ni temps réel).
+- **Voies** : seulement via le flux SIRI (§ 13), pour les trains de l'heure à venir et
+  quand la SNCF les a attribuées (environ la moitié des passages TER et TGV).
 - **Carte** : ni tracé des voies ni position des trains publiés par la SNCF — tracé
   approximatif de gare en gare et avancement estimé d'après les horaires (§ 12).
 - **Temps réel limité à l'heure à venir** : la SNCF publie les Trip Updates pour les
@@ -417,3 +423,31 @@ rechargé (statique).
 - **Positions** : renseigner `vehiclePositionsUrl` dans la configuration du fournisseur
   (`providers/<id>.js`) ou `TRAINS_RT_VEHICLES_URL`. Si le flux désigne les trains
   autrement, ajouter la règle dans `conventions.realtimeAliases` du fournisseur.
+
+## 13. Voies (quais)
+
+Ni le GTFS ni le GTFS-RT SNCF ne publient les voies (aucune colonne `platform_code`, les
+`StopPoint` sont des points par marque, pas des voies). Seul le flux **SIRI Lite Estimated
+Timetable** du PAN les donne (`DeparturePlatformName` / `ArrivalPlatformName`), pour les
+trains des 60 prochaines minutes, quand elles sont attribuées : mesures publiques
+d'environ 56 % des passages TER, 66 % Intercités, 47 % TGV — souvent tard, comme en gare.
+
+Contraintes du flux : ~25 Mo de XML **non compressé**, filtres SIRI sans effet (tout le
+réseau à chaque lecture). D'où (`trains/siri.js`) :
+
+- **lecture à la demande** : seulement si un trajet consulté part dans les 90 min ou est
+  parti depuis moins de 3 h ; jamais pour un train lointain ni par la boucle d'alerte ;
+- **lecture en flux** : le XML est parcouru trajet par trajet (`EstimatedVehicleJourney`),
+  sans être gardé ; seul un index `numéro de train | UIC | jour → { dep, arr }` reste en
+  mémoire ; préfixes d'espace de noms tolérés ;
+- **cache 2 min**, appels coalescés, dernière réponse valide resservie en cas d'échec
+  (ignorée au-delà de 15 min) ; état dans `/api/health` (`trains[].platforms`).
+
+Rattachement : numéro de train (`TrainNumberRef`, sinon nom ou référence du trajet, zéros
+de tête retirés) + gare (code UIC extrait de `StopPointRef`) + jour de service (heure
+prévue, Europe/Paris). Une voie inconnue reste `null` : **jamais devinée**.
+
+Diagnostic : le premier téléchargement de chaque instance journalise le nombre de trajets,
+de passages et de voies, l'inventaire des balises du flux et un extrait — pour vérifier le
+format réel et repérer d'autres champs exploitables (heures réelles des arrêts passés,
+statut par arrêt…).

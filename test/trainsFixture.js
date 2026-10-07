@@ -270,6 +270,33 @@ function vehiclesFeed(vehicles, ts = Date.now()) {
   });
 }
 
+/**
+ * Flux SIRI Lite Estimated Timetable (XML) au format SIRI 2 : `journeys` = [{ number,
+ * frameDate, datedRef, numberTag (false : pas de TrainNumberRef), calls: [{ uic,
+ * aimedDep, aimedArr (ms), dep, arr (voies), recorded }] }]. `prefix` : espace de noms
+ * préfixé (« siri: ») pour vérifier la tolérance du lecteur.
+ */
+function siriEtFeed(journeys, { prefix = '' } = {}) {
+  const t = (name, v) => (v === undefined || v === null ? '' : `<${prefix}${name}>${v}</${prefix}${name}>`);
+  const iso = (ms) => (ms ? new Date(ms).toISOString() : null);
+  const call = (c, i) => {
+    const tag = c.recorded ? 'RecordedCall' : 'EstimatedCall';
+    return `<${prefix}${tag}>${t('StopPointRef', `FR:ScheduledStopPoint::${c.uic}:`)}${t('Order', i + 1)}`
+      + `${t('AimedArrivalTime', iso(c.aimedArr))}${t('ArrivalPlatformName', c.arr)}`
+      + `${t('AimedDepartureTime', iso(c.aimedDep))}${t('DeparturePlatformName', c.dep)}</${prefix}${tag}>`;
+  };
+  const evj = (j) => `<${prefix}EstimatedVehicleJourney>${t('LineRef', 'FR:Line::K44:')}`
+    + `<${prefix}FramedVehicleJourneyRef>${t('DataFrameRef', j.frameDate)}${t('DatedVehicleJourneyRef', j.datedRef ?? `SNCF:VehicleJourney::${j.number}_F:LOC`)}</${prefix}FramedVehicleJourneyRef>`
+    + (j.numberTag === false ? '' : `<${prefix}TrainNumbers>${t('TrainNumberRef', j.number)}</${prefix}TrainNumbers>`)
+    + `<${prefix}RecordedCalls>${(j.calls ?? []).filter((c) => c.recorded).map(call).join('')}</${prefix}RecordedCalls>`
+    + `<${prefix}EstimatedCalls>${(j.calls ?? []).filter((c) => !c.recorded).map(call).join('')}</${prefix}EstimatedCalls>`
+    + `</${prefix}EstimatedVehicleJourney>`;
+  const ns = prefix ? ` xmlns:${prefix.slice(0, -1)}="http://www.siri.org.uk/siri"` : ' xmlns="http://www.siri.org.uk/siri"';
+  return `<?xml version="1.0" encoding="UTF-8"?><${prefix}Siri${ns} version="2.0"><${prefix}ServiceDelivery>`
+    + `<${prefix}EstimatedTimetableDelivery><${prefix}EstimatedJourneyVersionFrame>${journeys.map(evj).join('\n')}`
+    + `</${prefix}EstimatedJourneyVersionFrame></${prefix}EstimatedTimetableDelivery></${prefix}ServiceDelivery></${prefix}Siri>`;
+}
+
 /** Date locale (Europe/Paris) d'un instant. */
 function parisDate(ms = Date.now()) {
   return new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Paris', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(ms));
@@ -287,5 +314,5 @@ function parisTime(ymd, hhmm) {
 }
 
 module.exports = {
-  ST, LINES, area, point, tripId, buildGtfs, zipFiles, tripUpdatesFeed, alertsFeed, vehiclesFeed, addDays, parisDate, parisTime,
+  ST, LINES, area, point, tripId, buildGtfs, zipFiles, tripUpdatesFeed, alertsFeed, vehiclesFeed, siriEtFeed, addDays, parisDate, parisTime,
 };

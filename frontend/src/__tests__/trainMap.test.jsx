@@ -103,7 +103,9 @@ describe("lib/trainMap", () => {
     expect(stopState(skipped, BETWEEN, ROUTE, 2)).toBe("skipped");
 
     const p = stopPopup(JOURNEY, BETWEEN, ROUTE, 2);
-    expect(p).toMatchObject({ name: "Arras", status: "Prochain arrêt", delay: "+3 min" });
+    expect(p).toMatchObject({ name: "Arras", status: "Prochain arrêt", delay: "+3 min", platform: null });
+    const withPlatform = { ...JOURNEY, stops: JOURNEY.stops.map((x, i) => (i === 2 ? { ...x, platform: "2" } : x)) };
+    expect(stopPopup(withPlatform, BETWEEN, ROUTE, 2).platform).toBe("2");
     expect(p.rows).toEqual([
       { label: "Arrivée", scheduled: "17:27", estimated: "17:30" },
       { label: "Départ", scheduled: "17:29", estimated: "17:32" },

@@ -153,6 +153,7 @@ export function stopPopup(journey, progress, route, i) {
   return {
     name,
     rows,
+    platform: !st.skipped && journey.status !== "cancelled" ? st.platform ?? null : null,
     delay: !st.skipped && st.delay > 0 ? delayLabel(st.delay) : null,
     status: journey.status === "cancelled" ? "Train supprimé" : STATE_LABEL[state],
   };
