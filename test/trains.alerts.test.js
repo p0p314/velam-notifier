@@ -42,6 +42,9 @@ beforeEach(async () => {
 
 /** Temps réel du 16:53 (retard au départ en minutes, ou supprimé) publié à `when`. */
 function rtFor(when, { delayMin = null, cancelled = false, alerts = [] } = {}) {
+  // Nouveau flux publié : on oublie le précédent. Le cache des tests dure 1 ms d'horloge
+  // réelle ; deux cycles dans la même milliseconde (machine rapide) reliraient sinon l'ancien.
+  provider.realtime.reset();
   const updates = [];
   if (cancelled) updates.push({ tripId: 'OCESN843924F', startDate: D, relationship: 'CANCELED' });
   else if (delayMin !== null) updates.push({ tripId: T1, startDate: D, stops: [{ seq: 0, dep: delayMin * 60 }] });
@@ -183,6 +186,7 @@ describe('alerte de trajet', () => {
   test('train arrivé : plus aucune notification', async () => {
     await tripAlert();
     assert.equal(await cycle('18:30', { delayMin: 0 }), 'verifiees');
+    provider.realtime.reset();
     sncf.tripUpdates = tripUpdatesFeed([{ tripId: T1, startDate: D, stops: [{ seq: 4, arr: 900 }] }], +at('18:40'));
     sncf.alerts = alertsFeed([], +at('18:40'));
     await checkTrainAlerts(at('18:40')); // arrivée estimée 18:25 dépassée
