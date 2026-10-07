@@ -1,5 +1,5 @@
 import Icon from "../Icon";
-import { SORTS, STATUS_FILTERS, DEFAULT_FILTERS, filterOptions } from "../../lib/trains";
+import { SORTS, STATUS_FILTERS, PAST_FILTERS, DEFAULT_FILTERS, filterOptions } from "../../lib/trains";
 
 function Select({ label, value, onChange, options, all }) {
   return (
@@ -36,6 +36,7 @@ export default function TrainFilters({ journeys, value, onChange, onDone, count 
           <input type="time" className="field mono" value={value.maxTime} onChange={(e) => set("maxTime", e.target.value)} aria-label="Heure maximale" />
         </label>
       </div>
+      <Select label="Trains passés" value={value.past} onChange={(v) => set("past", v)} options={PAST_FILTERS} />
       <Select label="État" value={value.status} onChange={(v) => set("status", v)} options={STATUS_FILTERS} />
       {opts.lines.length > 1 && <Select label="Ligne" value={value.line} onChange={(v) => set("line", v)} options={opts.lines} all="Toutes les lignes" />}
       {opts.from.length > 1 && <Select label="Gare de départ" value={value.from} onChange={(v) => set("from", v)} options={opts.from} all="Toutes" />}

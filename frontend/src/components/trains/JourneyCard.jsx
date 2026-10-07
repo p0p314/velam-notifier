@@ -32,6 +32,8 @@ export function PlatformBadge({ platform }) {
 export default function JourneyCard({ j, showDate = false }) {
   const cancelled = j.status === "cancelled";
   const major = j.alerts?.find((a) => a.major && a.scope !== "station");
+  // Une voie affichée allonge la ligne : départ et arrivée passent l'un sous l'autre.
+  const stacked = !cancelled && !!(j.departurePlatform || j.arrivalPlatform);
   return (
     <article className={"train-card" + (cancelled ? " cancelled" : "")}>
       <div className="train-card-head">
@@ -45,9 +47,11 @@ export default function JourneyCard({ j, showDate = false }) {
         {j.departureStation.name} <span aria-hidden="true">→</span> {j.arrivalStation.name}
         {showDate && <span className="train-date"> · {new Date(`${j.serviceDate}T12:00:00Z`).toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "short" })}</span>}
       </Link>
-      <div className="train-times">
-        <TimeLine label="Départ" scheduled={j.scheduledDeparture} estimated={j.estimatedDeparture} delay={j.departureDelay} cancelled={cancelled} platform={j.departurePlatform} />
-        <TimeLine label="Arrivée" scheduled={j.scheduledArrival} estimated={j.estimatedArrival} delay={j.arrivalDelay} cancelled={cancelled} platform={j.arrivalPlatform} />
+      <div className={"train-times" + (stacked ? " stacked" : "")}>
+        <div className="train-times-main">
+          <TimeLine label="Départ" scheduled={j.scheduledDeparture} estimated={j.estimatedDeparture} delay={j.departureDelay} cancelled={cancelled} platform={j.departurePlatform} />
+          <TimeLine label="Arrivée" scheduled={j.scheduledArrival} estimated={j.estimatedArrival} delay={j.arrivalDelay} cancelled={cancelled} platform={j.arrivalPlatform} />
+        </div>
         <Link to={trainMapPath(j.id)} className="train-card-map" aria-label={`Voir sur la carte : ${j.departureStation.name} → ${j.arrivalStation.name}`}>
           <Icon name="map" size={14} /> Carte
         </Link>

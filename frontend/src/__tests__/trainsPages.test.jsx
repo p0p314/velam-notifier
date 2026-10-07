@@ -122,6 +122,9 @@ describe("page Trains", () => {
     expect(within(cards[0]).getByText("Voie 4")).toBeTruthy();
     expect(within(cards[1]).queryByText(/Voie/)).toBeNull();
     expect(within(cards[1]).queryByText(/min/)).toBeNull();
+    // Au moins une voie : départ et arrivée l'un sous l'autre ; sinon sur une ligne.
+    expect(cards[0].querySelector(".train-times").classList.contains("stacked")).toBe(true);
+    expect(cards[1].querySelector(".train-times").classList.contains("stacked")).toBe(false);
     // Chaque carte : un lien vers le détail (toute la carte) et un lien « Carte ».
     expect(within(cards[0]).getByRole("link", { name: /^Lille Flandres Amiens/ }).getAttribute("href")).toMatch(/^\/trains\/trajet\?id=/);
     expect(within(cards[0]).getByRole("link", { name: /Voir sur la carte/ }).getAttribute("href")).toMatch(/^\/trains\/carte\?id=trip843924/);
@@ -169,6 +172,31 @@ describe("page Trains", () => {
     fireEvent.change(screen.getByRole("combobox", { name: "État" }), { target: { value: "cancelled" } });
     expect(screen.getAllByRole("article").length).toBe(1);
     expect(screen.getByText("Train supprimé")).toBeTruthy();
+  });
+
+  test("« Trains passés » : masque les trains partis / arrivés, choix mémorisé", async () => {
+    const now = vi.spyOn(Date, "now").mockReturnValue(Date.parse("2026-10-07T15:30:00Z")); // 17:30 : J1 parti à 17:02
+    try {
+      const view = renderAt(SEARCH);
+      await screen.findByText("Lille Flandres → Amiens", { selector: "h2" });
+      const select = screen.getByRole("combobox", { name: "Trains passés" });
+      fireEvent.change(select, { target: { value: "arrived" } });
+      expect(screen.getAllByRole("article").length).toBe(2); // J1 en route : gardé
+      fireEvent.change(select, { target: { value: "left" } });
+      expect(screen.getAllByRole("article").length).toBe(1);
+      expect(screen.getByText("Train supprimé")).toBeTruthy();
+      expect(localStorage.getItem("velopulse-trains-passes")).toBe("left");
+      view.unmount();
+      renderAt(SEARCH); // nouvelle recherche : choix conservé
+      await screen.findByText("Lille Flandres → Amiens", { selector: "h2" });
+      expect(screen.getByRole("combobox", { name: "Trains passés" }).value).toBe("left");
+      expect(screen.getAllByRole("article").length).toBe(1);
+      fireEvent.click(screen.getByRole("button", { name: "Réinitialiser" }));
+      expect(screen.getAllByRole("article").length).toBe(2);
+      expect(localStorage.getItem("velopulse-trains-passes")).toBeNull();
+    } finally {
+      now.mockRestore();
+    }
   });
 });
 

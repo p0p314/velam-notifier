@@ -1,6 +1,6 @@
 import { describe, test, expect } from "vitest";
 import {
-  fmtClock, delayLabel, timeInfo, statusInfo, agoLabel, freshnessInfo, applyFilters, filterOptions, activeFilterCount,
+  fmtClock, delayLabel, timeInfo, statusInfo, agoLabel, freshnessInfo, applyFilters, filterOptions, activeFilterCount, journeyPhase,
   DEFAULT_FILTERS, searchFromQuery, queryFromSearch, apiSearchQuery, searchError, searchTitle,
   tripAlertForm, tripAlertPayload, lineAlertForm, lineAlertPayload, alertFormError, describeTrainAlert, daysLabel, favoriteTitle,
 } from "../lib/trains";
@@ -60,6 +60,21 @@ describe("filtres et tris", () => {
     expect(ids({ to: "C" })).toEqual(["3"]);
     expect(ids({ status: "delayed" })).toEqual(["2"]);
     expect(ids({ status: "cancelled" })).toEqual(["3"]);
+  });
+
+  test("trains passés : phase recalculée à l'instant, heures estimées, supprimés à l'horaire prévu", () => {
+    const at = (iso) => Date.parse(iso);
+    // Heures de Paris : 1 = 16:53 → 18:10, 2 = 17:53 → 19:10, 3 (supprimé) = 20:53 → 22:10.
+    const late = j({ id: "4", estimatedDeparture: "2026-10-07T15:10:00.000Z", estimatedArrival: "2026-10-07T16:30:00.000Z" });
+    expect(journeyPhase(late, at("2026-10-07T15:00:00Z"))).toBe("upcoming"); // prévu 16:53, estimé 17:10
+    expect(journeyPhase(late, at("2026-10-07T16:20:00Z"))).toBe("left");     // arrivée estimée 18:30
+    expect(journeyPhase(late, at("2026-10-07T16:30:00Z"))).toBe("arrived");
+    const now = at("2026-10-07T17:30:00Z"); // 19:30 : 1 arrivé, 2 arrivé, 3 à venir
+    expect(applyFilters(list, { ...DEFAULT_FILTERS, past: "arrived" }, now).map((x) => x.id)).toEqual(["3"]);
+    const mid = at("2026-10-07T16:00:00Z"); // 18:00 : 1 parti, 2 parti (17:53), 3 à venir
+    expect(applyFilters(list, { ...DEFAULT_FILTERS, past: "arrived" }, mid).map((x) => x.id)).toEqual(["1", "2", "3"]);
+    expect(applyFilters(list, { ...DEFAULT_FILTERS, past: "left" }, mid).map((x) => x.id)).toEqual(["3"]);
+    expect(activeFilterCount({ ...DEFAULT_FILTERS, past: "left" })).toBe(1);
   });
 
   test("tris : départ, arrivée, retard (supprimés en tête)", () => {
