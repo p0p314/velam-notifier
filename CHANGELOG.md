@@ -9,6 +9,17 @@ Toutes les évolutions notables de VéloPulse. Format inspiré de
 section `## [x.y.z] - AAAA-MM-JJ` ci-dessous, puis merger sur `main` : le workflow
 `release.yml` crée le tag `vx.y.z` et la release GitHub à partir de cette section.
 
+## [1.8.1] - 2026-10-07
+
+### Mes trajets
+- **Bascule Trains / Vélos** en haut de la page : une seule catégorie affichée à la fois
+  (les stations Vélam ne sont plus listées sous les trains). Le dernier choix est
+  mémorisé ; sans choix, la page s'ouvre sur les trains, ou sur les vélos si vous ne
+  suivez que des stations (ou hors ligne).
+- **Trains favoris allégés** : seule la prochaine circulation est affichée (celle du jour,
+  sinon la suivante). **Maintenez le doigt** sur le train pour voir les autres jours
+  (clic droit sur ordinateur) ; un appui court ouvre toujours le détail.
+
 ## [1.8.0] - 2026-10-07
 
 ### Carte des trains

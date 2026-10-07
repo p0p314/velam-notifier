@@ -1,5 +1,5 @@
 import { describe, test, expect, beforeEach, vi } from "vitest";
-import { render, screen, fireEvent, waitFor, within } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor, within, act } from "@testing-library/react";
 import { MemoryRouter, Routes, Route } from "react-router-dom";
 import Trains from "../pages/Trains";
 import TrainJourney from "../pages/TrainJourney";
@@ -30,7 +30,7 @@ const J1 = journey(843924, "2026-10-07T14:53:00.000Z", {
 const J2 = journey(843926, "2026-10-07T15:53:00.000Z", { status: "cancelled", cancellation: { partial: false, reason: "Train supprimé" }, realtime: true });
 const RT = { applicable: true, available: true, updated_at: new Date(Date.now() - 60_000).toISOString() };
 
-let calls, favorites, alerts, realtime, trainAlerts;
+let calls, favorites, alerts, realtime, trainAlerts, stationFavorites;
 function mockApi() {
   fetch.mockImplementation(async (url, init = {}) => {
     const u = new URL(String(url));
@@ -53,7 +53,7 @@ function mockApi() {
       return jsonResponse({ ok: true, favorite: favorites[0] }, 201);
     }
     if (u.pathname === "/api/stations") return jsonResponse({ ok: true, stations: VELAM, stale: false, data_age_s: 0 });
-    if (u.pathname === "/api/favorites") return jsonResponse({ ok: true, favorites: [] });
+    if (u.pathname === "/api/favorites") return jsonResponse({ ok: true, favorites: stationFavorites });
     if (u.pathname === "/api/alerts" && method === "GET") return jsonResponse({ ok: true, alerts: [], paused_until: null });
     if (u.pathname === "/api/trains/alerts" && method === "GET") return jsonResponse({ ok: true, alerts: trainAlerts });
     if (u.pathname === "/api/trains/alerts" && method === "POST") {
@@ -78,7 +78,7 @@ const renderAt = (path) => render(
 const SEARCH = `/trains?from=${encodeURIComponent(LILLE.id)}&fromName=Lille+Flandres&to=${encodeURIComponent(AMIENS.id)}&toName=Amiens&date=2026-10-07`;
 
 beforeEach(() => {
-  calls = []; favorites = []; alerts = []; realtime = RT; trainAlerts = [];
+  calls = []; favorites = []; alerts = []; realtime = RT; trainAlerts = []; stationFavorites = [];
   window.PushManager = function PushManager() {};
   Object.defineProperty(navigator, "serviceWorker", { configurable: true, value: { ready: new Promise(() => {}) } });
   window.Notification = { permission: "granted", requestPermission: vi.fn() };
@@ -157,22 +157,96 @@ describe("détail d'un train", () => {
   });
 });
 
+// jsdom n'a pas PointerEvent : sans lui, les coordonnées (clientX/Y) seraient perdues.
+if (!window.PointerEvent) {
+  window.PointerEvent = class PointerEvent extends MouseEvent {
+    constructor(type, init = {}) { super(type, init); this.pointerId = init.pointerId ?? 1; }
+  };
+}
+
 describe("Mes trajets", () => {
   const FAV = { id: 7, origin_id: LILLE.id, origin_name: LILLE.name, destination_id: AMIENS.id, destination_name: AMIENS.name, departure_time: "16:53", train_number: "843924", line_name: "K44", label: null,
     alert: { id: 3, scope: "trip", active: true, delay_threshold: 10, on_cancel: true, on_disruption: false, days: "1,2,3,4,5" }, next: [J1, J2] };
 
-  test("trains favoris : état actuel, alerte, correspondance Vélam ; stations favorites", async () => {
+  test("trains favoris : prochain départ seulement, alerte, correspondance Vélam ; pas de stations dessous", async () => {
     favorites = [FAV];
     renderAt("/trajets");
     expect(await screen.findByText("16:53 Lille Flandres → Amiens")).toBeTruthy();
     expect(screen.getByText("En retard")).toBeTruthy();
     expect(screen.getByText("Retard ≥ 10 min · suppression — lun.–ven.")).toBeTruthy();
-    expect(screen.getByRole("list", { name: "Prochaines circulations" })).toBeTruthy();
+    // Les autres jours ne sont pas affichés d'emblée.
+    expect(screen.queryByRole("list", { name: "Prochaines circulations" })).toBeNull();
+    expect(screen.queryByText("Supprimé")).toBeNull();
     // À l'arrivée (Amiens) : la station Vélam la plus proche avec des vélos ; rien à Lille (trop loin).
     const velam = await screen.findByRole("list", { name: "Stations Vélam proches" });
     expect(velam.textContent).toMatch(/À l'arrivée : Gare du Nord · 4 vélos · 1\d\d m/);
     expect(velam.textContent).not.toMatch(/Au départ/);
-    expect(screen.getByText("Stations Vélam")).toBeTruthy();
+    expect(screen.queryByRole("heading", { name: "Stations Vélam" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Trains", pressed: true })).toBeTruthy();
+  });
+
+  test("appui long sur le train : les autres jours, sans ouvrir le détail", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      favorites = [FAV];
+      renderAt("/trajets");
+      const route = await screen.findByRole("link", { name: /^Lille Flandres Amiens/ });
+      fireEvent.pointerDown(route, { button: 0, clientX: 10, clientY: 10 });
+      act(() => { vi.advanceTimersByTime(600); });
+      const dialog = await screen.findByRole("dialog", { name: "Autres jours" });
+      const others = within(dialog).getByRole("list", { name: "Prochaines circulations" });
+      expect(within(others).getByText("Supprimé")).toBeTruthy();
+      fireEvent.pointerUp(route);
+      fireEvent.click(route); // le clic du lâcher est ignoré : on reste sur Mes trajets
+      expect(screen.getByRole("heading", { name: "Mes trajets" })).toBeTruthy();
+      expect(screen.getByRole("dialog", { name: "Autres jours" })).toBeTruthy();
+    } finally {
+      act(() => { vi.advanceTimersByTime(4000); }); // fin de la fenêtre où le clic est ignoré
+      vi.useRealTimers();
+    }
+  });
+
+  test("appui court : ouvre le détail ; défilement : pas d'appui long", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      favorites = [FAV];
+      renderAt("/trajets");
+      const route = await screen.findByRole("link", { name: /^Lille Flandres Amiens/ });
+      fireEvent.pointerDown(route, { button: 0, clientX: 10, clientY: 10 });
+      fireEvent.pointerMove(route, { clientX: 10, clientY: 60 });
+      act(() => { vi.advanceTimersByTime(600); });
+      expect(screen.queryByRole("dialog")).toBeNull();
+      fireEvent.click(route);
+      expect(await screen.findByText(/Chargement du trajet|Lille Flandres → Amiens/)).toBeTruthy();
+      expect(screen.queryByRole("heading", { name: "Mes trajets" })).toBeNull();
+    } finally {
+      act(() => { vi.advanceTimersByTime(4000); }); // fin de la fenêtre où le clic est ignoré
+      vi.useRealTimers();
+    }
+  });
+
+  test("bouton « Autres jours » (clavier, lecteur d'écran)", async () => {
+    favorites = [{ ...FAV, next: [J1] }];
+    renderAt("/trajets");
+    fireEvent.click(await screen.findByRole("button", { name: "Autres jours" }));
+    expect(await screen.findByText("Aucune autre circulation dans les 8 prochains jours.")).toBeTruthy();
+  });
+
+  test("bascule Trains / Vélos : une catégorie à la fois, choix mémorisé", async () => {
+    favorites = [FAV];
+    renderAt("/trajets");
+    await screen.findByText("16:53 Lille Flandres → Amiens");
+    fireEvent.click(screen.getByRole("button", { name: "Vélos" }));
+    expect(await screen.findByRole("heading", { name: "Stations Vélam" })).toBeTruthy();
+    expect(screen.queryByText("16:53 Lille Flandres → Amiens")).toBeNull();
+    expect(localStorage.getItem("velopulse-trajets-vue")).toBe("velos");
+  });
+
+  test("vue par défaut : vélos si aucun train suivi mais des stations favorites", async () => {
+    stationFavorites = [{ station_id: "1", station_name: "Gare du Nord", label: null, sort_order: null }];
+    renderAt("/trajets");
+    expect(await screen.findByRole("heading", { name: "Stations Vélam" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Vélos", pressed: true })).toBeTruthy();
   });
 
   test("aucun train suivi : invitation à rechercher", async () => {

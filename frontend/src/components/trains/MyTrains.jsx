@@ -9,6 +9,9 @@ import Freshness from "./Freshness";
 import TrainAlertForm from "./TrainAlertForm";
 import { describeTrainAlert, favoriteTitle, fmtClock, nearbyVelam } from "../../lib/trains";
 import { fmtDistance } from "../../hooks";
+import { useLongPress } from "../../useLongPress";
+
+const dayLabel = (j) => new Date(`${j.serviceDate}T12:00:00Z`).toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "short" });
 
 /** Bouton en deux temps (« Retirer » puis « Confirmer ») : pas de suppression par erreur. */
 function ConfirmButton({ label, confirmLabel, onConfirm }) {
@@ -54,8 +57,15 @@ function VelamLinks({ journey, stations }) {
   );
 }
 
+/**
+ * Un train favori : seulement sa prochaine circulation (celle du jour, sinon la
+ * suivante). Les autres jours s'ouvrent en maintenant le doigt sur le train (ou par
+ * clic droit, ou le bouton « Autres jours » réservé au clavier / lecteur d'écran).
+ */
 function FavoriteTrain({ f, stations, onEditAlert, onRemove, onToggleAlert }) {
   const [current, ...later] = f.next ?? [];
+  const [othersOpen, setOthersOpen] = useState(false);
+  const press = useLongPress(() => setOthersOpen(true));
   return (
     <article className="my-train">
       <div className="my-train-head">
@@ -75,20 +85,29 @@ function FavoriteTrain({ f, stations, onEditAlert, onRemove, onToggleAlert }) {
           {current.scheduleChanged && (
             <div className="train-note warn"><Icon name="clock" size={14} /><span>Horaire modifié : départ à {fmtClock(current.scheduledDeparture)} au lieu de {f.departure_time}</span></div>
           )}
-          <JourneyCard j={current} showDate />
+          <div className="my-train-press" {...press} title="Maintenir pour voir les autres jours">
+            <JourneyCard j={current} showDate />
+          </div>
+          <button type="button" className="sr-only" onClick={() => setOthersOpen(true)}>Autres jours</button>
           <VelamLinks journey={current} stations={stations} />
-          {later.length > 0 && (
-            <ul className="my-train-next" aria-label="Prochaines circulations">
-              {later.map((j) => (
-                <li key={j.id}>
-                  <Link to={`/trains/trajet?id=${encodeURIComponent(j.id)}`}>
-                    <span>{new Date(`${j.serviceDate}T12:00:00Z`).toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "short" })} · {fmtClock(j.scheduledDeparture)}</span>
-                    <TrainStatus journey={j} />
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          )}
+          <BottomSheet open={othersOpen} onClose={() => setOthersOpen(false)} heightVh={50} labelledBy={`autres-jours-${f.id}`}>
+            <h2 id={`autres-jours-${f.id}`} className="section-title">Autres jours</h2>
+            <div className="form-hint">{favoriteTitle(f)}</div>
+            {later.length > 0 ? (
+              <ul className="my-train-next" aria-label="Prochaines circulations">
+                {later.map((j) => (
+                  <li key={j.id}>
+                    <Link to={`/trains/trajet?id=${encodeURIComponent(j.id)}`}>
+                      <span>{dayLabel(j)} · {fmtClock(j.scheduledDeparture)}</span>
+                      <TrainStatus journey={j} />
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <div className="view-state">Aucune autre circulation dans les 8 prochains jours.</div>
+            )}
+          </BottomSheet>
         </>
       ) : (
         <div className="form-hint">Aucune circulation prévue dans les 8 prochains jours.</div>

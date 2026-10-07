@@ -1102,3 +1102,10 @@ html { overscroll-behavior-y: contain; } /* pas de rechargement natif de toute l
   .bikes-page.carte .map-container { height: calc(100dvh - 170px); }
   .alertes-layout.single { grid-template-columns: minmax(0, 760px); }
 }
+
+/* Mes trajets : appui long sur un train favori (autres jours) — ni aperçu de lien
+   iOS, ni sélection de texte pendant l'appui. */
+.my-train-press { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+.trips-switch { margin-left: auto; }
+.trips-switch .seg button { padding: 6px 14px; min-height: 36px; }
