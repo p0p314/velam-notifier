@@ -25,6 +25,11 @@ section `## [x.y.z] - AAAA-MM-JJ` ci-dessous, puis merger sur `main` : le workfl
   nouvelle page ; page d'ouverture (Paramètres) : Mes trajets, Vélos ou Trains ;
   raccourcis de l'app et tutoriel mis à jour.
 
+### Notifications
+- **Paramètres › Notifications** : couper séparément les **alertes vélos** ou les
+  **alertes trains**, pour tous vos appareils (les alertes sont conservées, simplement
+  plus envoyées). La page Alertes le rappelle quand un type est coupé.
+
 ## [1.6.2] - 2026-10-07
 
 ### Trains

@@ -449,7 +449,7 @@ async function countActiveAlerts() {
 async function getActiveAlerts(today) {
   const { rows } = await dbc.query(
     `SELECT a.* FROM alerts a JOIN users u ON u.id = a.user_id
-     WHERE a.active = 1
+     WHERE a.active = 1 AND u.notify_bikes = 1
        AND (u.alerts_paused_until IS NULL OR u.alerts_paused_until < ?)
        AND (a.valid_on IS NULL OR a.valid_on = ?)`,
     [today, today]
@@ -461,6 +461,20 @@ async function getActiveAlerts(today) {
 async function deleteExpiredAlerts(today) {
   const { changes } = await dbc.run('DELETE FROM alerts WHERE valid_on IS NOT NULL AND valid_on < ?', [today]);
   return changes;
+}
+
+// ── Types d'alertes notifiés (par compte) ────────────────────────────────────
+
+async function getNotificationPrefs(userId) {
+  const row = await dbc.get('SELECT notify_bikes, notify_trains FROM users WHERE id = ?', [userId]);
+  return { bikes: Number(row?.notify_bikes ?? 1) === 1, trains: Number(row?.notify_trains ?? 1) === 1 };
+}
+
+/** `prefs` : { bikes?, trains? } (booléens) ; les champs absents sont inchangés. */
+async function setNotificationPrefs(userId, prefs) {
+  if (typeof prefs.bikes === 'boolean') await dbc.run('UPDATE users SET notify_bikes = ? WHERE id = ?', [prefs.bikes ? 1 : 0, userId]);
+  if (typeof prefs.trains === 'boolean') await dbc.run('UPDATE users SET notify_trains = ? WHERE id = ?', [prefs.trains ? 1 : 0, userId]);
+  return getNotificationPrefs(userId);
 }
 
 // ── Pause globale des alertes ────────────────────────────────────────────────
@@ -604,7 +618,8 @@ async function getActiveTrainAlerts(today) {
      FROM train_alerts a
      JOIN users u ON u.id = a.user_id
      LEFT JOIN train_favorites f ON f.id = a.favorite_id
-     WHERE a.active = 1 AND (u.alerts_paused_until IS NULL OR u.alerts_paused_until < ?)`,
+     WHERE a.active = 1 AND u.notify_trains = 1
+       AND (u.alerts_paused_until IS NULL OR u.alerts_paused_until < ?)`,
     [today]
   );
   return rows.map(toTrainAlert);
@@ -666,7 +681,7 @@ module.exports = {
   // alerts
   getAlerts, getAlert, createAlert, updateAlert, deleteAlert,
   markAlertNotified, setAlertNotifiedKey, countActiveAlerts, getActiveAlerts, deleteExpiredAlerts,
-  getAlertsPause, setAlertsPause,
+  getAlertsPause, setAlertsPause, getNotificationPrefs, setNotificationPrefs,
   // trains
   getTrainFavorites, getTrainFavorite, countTrainFavorites, addTrainFavorite, setTrainFavoriteLabel, removeTrainFavorite,
   getTrainAlerts, getTrainAlert, createTrainAlert, updateTrainAlert, deleteTrainAlert,

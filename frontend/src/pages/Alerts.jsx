@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { useFavorites, useIsMobile } from "../hooks";
-import { usePushState } from "../components/PushControls";
+import { usePushState, useNotificationPrefs } from "../components/PushControls";
 import {
   ALL_DAYS, defaultForm, formFromAlert, validateForm, payloadFromForm, describeAlert,
   tripAllowed, groupRuleText, LIST_FILTERS, LIST_SORTS, loadListPrefs, saveListPrefs, visibleAlerts, hasBothKinds, localYmd, addDaysYmd, fmtDay, GROUP_MIN, GROUP_MAX, GROUP_NAME_MAX,
@@ -434,6 +434,8 @@ export default function Alerts() {
   const [params, setParams] = useSearchParams();
   const type = params.get("type") === "trains" ? "trains" : "velos";
   const trains = useTrainAlerts(type === "trains");
+  const { prefs: kinds } = useNotificationPrefs();
+  const kindOff = kinds && !kinds[type === "trains" ? "trains" : "bikes"];
   const { favorites } = useFavorites();
   const isMobile = useIsMobile();
   const location = useLocation();
@@ -583,6 +585,12 @@ export default function Alerts() {
           <Seg label="Type d'alertes" options={TYPE_OPTIONS} value={type}
             onChange={(v) => setParams(v === "trains" ? { type: "trains" } : {}, { replace: true })} />
           <PushBanner />
+          {kindOff && (
+            <div className="push-banner warn" role="status">
+              <Icon name="bell" size={18} />
+              <span>Alertes {type === "trains" ? "trains" : "vélos"} coupées pour votre compte : elles ne sont pas envoyées. <Link to="/compte?onglet=notifications">Paramètres</Link></span>
+            </div>
+          )}
           {(alerts.length > 0 || trains.alerts.length > 0) && <PauseControl pausedUntil={pausedUntil} onChange={setPausedUntil} />}
           {type === "trains" ? <TrainAlertsList t={trains} paused={!!pausedUntil} /> : (<>
           {alerts.length > 1 && <ListControls prefs={listPrefs} onChange={changeListPrefs} showFilter={showFilter} />}

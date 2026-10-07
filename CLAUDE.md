@@ -379,7 +379,8 @@ se fait dans `push.js` (`countForType`) et `routes/stations.js` (`extractCount`)
 
 Tables (créées/migrées par `database/migrations.js`, dialecte selon `DATABASE_URL`) :
 `stations` (référentiel statique), `config` (clé/valeur : secret JWT, clés VAPID),
-`users` (+ `alerts_paused_until`, `token_version`, `tutorial_done`), `sessions` (appareils connectés, horodatages
+`users` (+ `alerts_paused_until`, `token_version`, `tutorial_done`, `notify_bikes` / `notify_trains` — types
+d'alertes envoyés au compte, `GET|PUT /api/notifications/preferences`, respectés par les deux boucles d'alerte), `sessions` (appareils connectés, horodatages
 en ms), `push_subscriptions.session_id` (appareil de rattachement), `favorites` (unique `user_id+station_id`, `label`, `sort_order`
 — NULL tant que l'utilisateur n'a jamais ordonné : ordre alphabétique), `push_subscriptions`
 (unique `endpoint`), `alerts` (cf. modèle ci-dessus ; `group_stations` stocké en JSON texte,

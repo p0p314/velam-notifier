@@ -6,7 +6,7 @@ const {
   bumpTokenVersion, removeOtherSubscriptions,
   touchSession, listSessions, deleteSession, deleteOtherSessions, pruneSessions, setSubscriptionSession,
   getFavorites, getAlerts, getAlertsPause, getSubscriptionsByUser,
-  getTrainFavorites, getTrainAlerts, getTrainNotifications,
+  getTrainFavorites, getTrainAlerts, getTrainNotifications, getNotificationPrefs,
 } = require('../db');
 const {
   hashPassword, verifyPassword, signToken, requireAuth, startSession, userAgentOf, SESSION_TTL_MS,
@@ -256,7 +256,10 @@ router.get('/api/auth/export', requireAuth, async (req, res) => {
       export: {
         application: 'VéloPulse',
         exported_at: new Date().toISOString(),
-        account: { username: user.username, created_at: user.created_at, alerts_paused_until: pausedUntil },
+        account: {
+          username: user.username, created_at: user.created_at, alerts_paused_until: pausedUntil,
+          notifications: await getNotificationPrefs(user.id),
+        },
         favorites: favorites.map(({ user_id, id, ...f }) => f),
         alerts: alerts.map(({ user_id, ...a }) => a),
         devices: sessions.map((s) => ({

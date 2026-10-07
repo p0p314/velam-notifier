@@ -3,7 +3,7 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { useAuth } from "../auth";
 import { currentPushEndpoint } from "../push";
-import { usePushState, TestPushButton } from "../components/PushControls";
+import { usePushState, TestPushButton, useNotificationPrefs } from "../components/PushControls";
 import Icon from "../components/Icon";
 import { APP_VERSION } from "../theme";
 import { shareApp } from "../lib/share";
@@ -273,6 +273,34 @@ function Seg({ options, value, onChange, label }) {
 }
 
 /** Notifications de cet appareil : activer / désactiver, tester. */
+/** Types d'alertes envoyés au compte (tous les appareils) : vélos, trains. */
+function AlertKinds() {
+  const { prefs, toggle, error } = useNotificationPrefs();
+  const rows = [
+    { kind: "bikes",  title: "Alertes vélos",  text: "Disponibilité des stations et résumés à heure fixe." },
+    { kind: "trains", title: "Alertes trains", text: "Retards, suppressions et perturbations de vos trains et lignes." },
+  ];
+  return (
+    <div className="account-card">
+      <div className="form-title">Alertes envoyées</div>
+      <p className="account-text">Pour tous vos appareils. Couper un type ne supprime aucune alerte : elles ne sont simplement plus envoyées.</p>
+      {rows.map((r) => (
+        <div className="settings-row" key={r.kind}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div className="account-text"><b>{r.title}</b></div>
+            <p className="account-text">{r.text}</p>
+          </div>
+          <button role="switch" aria-checked={!!prefs?.[r.kind]} aria-label={r.title} disabled={!prefs}
+            className={"switch" + (prefs?.[r.kind] ? " on" : "")} onClick={() => toggle(r.kind)}>
+            <span className="switch-knob" />
+          </button>
+        </div>
+      ))}
+      {error && <div className="form-error" role="alert">{error}</div>}
+    </div>
+  );
+}
+
 function NotificationsTab() {
   const { status, busy, enable, disable } = usePushState();
   const [testMsg, setTestMsg] = useState(null);
@@ -309,6 +337,7 @@ function NotificationsTab() {
           </div>
         )}
       </div>
+      <AlertKinds />
       <p className="account-text settings-note">
         Pour suspendre toutes vos alertes quelques jours sur tous vos appareils, utilisez la pause
         dans <Link to="/alertes">Alertes</Link>.

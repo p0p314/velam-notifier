@@ -1,5 +1,5 @@
 // Notifications de cet appareil : état partagé par la page Alertes et les Paramètres.
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { api } from "../api";
 import { pushStatus, enablePush, disablePush } from "../push";
 
@@ -49,4 +49,33 @@ export function TestPushButton({ className = "push-banner-btn ghost", onResult }
       {busy ? "…" : "Tester"}
     </button>
   );
+}
+
+/**
+ * Types d'alertes notifiés pour le compte (tous ses appareils) : { bikes, trains }.
+ * `toggle(kind)` bascule l'un des deux (affichage immédiat, confirmé par le serveur).
+ */
+export function useNotificationPrefs() {
+  const [prefs, setPrefs] = useState(null);
+  const [error, setError] = useState(null);
+  useEffect(() => {
+    let alive = true;
+    api("/api/notifications/preferences")
+      .then((d) => { if (alive) setPrefs(d.preferences); })
+      .catch((e) => { if (alive) setError(e.message); });
+    return () => { alive = false; };
+  }, []);
+  const toggle = useCallback(async (kind) => {
+    if (!prefs) return;
+    const next = !prefs[kind];
+    setPrefs((p) => ({ ...p, [kind]: next }));
+    setError(null);
+    try {
+      setPrefs((await api("/api/notifications/preferences", { method: "PUT", body: { [kind]: next } })).preferences);
+    } catch (e) {
+      setPrefs((p) => ({ ...p, [kind]: !next }));
+      setError(e.message);
+    }
+  }, [prefs]);
+  return { prefs, toggle, error };
 }
