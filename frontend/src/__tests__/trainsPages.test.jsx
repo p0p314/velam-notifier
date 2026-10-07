@@ -38,6 +38,13 @@ function mockApi() {
     const body = init.body ? JSON.parse(init.body) : undefined;
     calls.push({ method, path: u.pathname, query: u.search, body });
     if (u.pathname === "/api/trains/stations") return jsonResponse({ ok: true, stations: [LILLE, { id: "x", name: "Lille Europe" }] });
+    if (u.pathname === "/api/trains/search" && u.searchParams.get("line")) {
+      // Recherche par ligne : les deux sens.
+      const back = journey(843925, "2026-10-07T05:00:00.000Z", { departureStation: AMIENS, arrivalStation: LILLE, terminus: "Lille Flandres", directionId: 0 });
+      return jsonResponse({ ok: true, date: "2026-10-07", count: 3, lines: [J1.line], coverage: { from: "2026-10-06", until: "2027-03-31" }, out_of_coverage: false, realtime,
+        directions: [{ id: 0, label: "Lille Flandres" }, { id: 1, label: "Amiens" }],
+        journeys: [back, { ...J1, directionId: 1 }, { ...J2, directionId: 1 }] });
+    }
     if (u.pathname === "/api/trains/search") {
       return jsonResponse({ ok: true, date: "2026-10-07", count: 2, lines: null, coverage: { from: "2026-10-06", until: "2027-03-31" }, out_of_coverage: false, realtime, journeys: [J1, J2] });
     }
@@ -117,10 +124,34 @@ describe("page Trains", () => {
     expect(within(cards[0]).getByRole("link", { name: /Voir sur la carte/ }).getAttribute("href")).toMatch(/^\/trains\/carte\?id=trip843924/);
   });
 
-  test("bouton Actualiser : force la relecture du temps réel", async () => {
+  test("tirer vers le bas force la relecture du temps réel ; plus de bouton Actualiser", async () => {
     renderAt(SEARCH);
-    fireEvent.click(await screen.findByRole("button", { name: "Actualiser" }));
+    expect(await screen.findByText(/Temps réel — mis à jour il y a 1 min/)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Actualiser" })).toBeNull();
+    const target = screen.getByText(/Temps réel — mis à jour/);
+    fireEvent.touchStart(target, { touches: [{ clientX: 100, clientY: 100 }] });
+    fireEvent.touchMove(target, { touches: [{ clientX: 100, clientY: 300 }] });
+    fireEvent.touchEnd(target);
     await waitFor(() => expect(calls.some((c) => c.path === "/api/trains/search" && c.query.includes("refresh=1"))).toBe(true));
+  });
+
+  test("recherche par ligne : choix de la direction", async () => {
+    renderAt("/trains?line=L44&lineName=K44&date=2026-10-07");
+    await screen.findByText(/3 trains/);
+    const dir = screen.getByRole("group", { name: "Direction" });
+    fireEvent.click(within(dir).getByRole("button", { name: "Vers Lille Flandres" }));
+    expect(screen.getByText(/1 train\b/)).toBeTruthy();
+    expect(screen.getAllByRole("article")).toHaveLength(1);
+    fireEvent.click(within(dir).getByRole("button", { name: "Vers Amiens" }));
+    expect(screen.getAllByRole("article")).toHaveLength(2);
+    fireEvent.click(within(dir).getByRole("button", { name: "Les deux sens" }));
+    expect(screen.getAllByRole("article")).toHaveLength(3);
+  });
+
+  test("recherche d'un trajet (un seul sens) : pas de choix de direction", async () => {
+    renderAt(SEARCH);
+    await screen.findByText(/2 trains/);
+    expect(screen.queryByRole("group", { name: "Direction" })).toBeNull();
   });
 
   test("temps réel indisponible : « horaires théoriques »", async () => {

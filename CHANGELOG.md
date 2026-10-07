@@ -9,6 +9,21 @@ Toutes les évolutions notables de VéloPulse. Format inspiré de
 section `## [x.y.z] - AAAA-MM-JJ` ci-dessous, puis merger sur `main` : le workflow
 `release.yml` crée le tag `vx.y.z` et la release GitHub à partir de cette section.
 
+## [1.9.1] - 2026-10-07
+
+### Améliorations
+- **Glisser pour supprimer** (stations de Mes trajets, alertes) : le geste est verrouillé
+  sur un axe — en glissant une carte sur le côté, la page ne défile plus en même temps
+  (et un défilement ne déplace plus la carte).
+- **Plus de bouton « Actualiser »** : on actualise en tirant la page vers le bas (désormais
+  aussi sur la carte d'un train) ; « Temps réel — mis à jour il y a X min » reste affiché.
+- **Recherche par ligne** (ex. K44) : choix de la direction (« Vers Amiens », « Vers Lille
+  Flandres » ou les deux sens).
+
+### Corrections
+- « Suivre une ligne » : les lignes proposées s'affichent directement sous le champ (elles
+  étaient cachées en bas du panneau).
+
 ## [1.9.0] - 2026-10-07
 
 ### Choisir ses fonctionnalités : vélos, trains, ou les deux

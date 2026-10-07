@@ -171,7 +171,7 @@ export default function MyTrains({ t, stations = [] }) {
         </div>
       ) : (
         <>
-          <Freshness realtime={t.data?.realtime} onRefresh={t.refresh} refreshing={t.refreshing} />
+          <Freshness realtime={t.data?.realtime} />
           {error && <div className="form-error" role="alert">{error}</div>}
           {t.favorites.map((f) => (
             <FavoriteTrain key={f.id} f={f} stations={stations} onToggleAlert={toggleAlert}

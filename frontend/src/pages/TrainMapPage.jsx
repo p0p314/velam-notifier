@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import TrainMap from "../components/map/TrainMap";
+import PullToRefresh from "../components/PullToRefresh";
 import Icon from "../components/Icon";
 import LineBadge from "../components/trains/LineBadge";
 import TrainStatus from "../components/trains/TrainStatus";
@@ -63,7 +64,7 @@ export default function TrainMapPage() {
   const [params] = useSearchParams();
   const navigate = useNavigate();
   const id = params.get("id");
-  const { data, error, loading, refresh, refreshing, load } = useTrainJourney(id, { refreshMs: mapRefreshMs });
+  const { data, error, loading, refresh, load } = useTrainJourney(id, { refreshMs: mapRefreshMs });
   const routeRes = useTrainRoute(id);
   const { theme } = useTheme();
   const modules = useModules();
@@ -99,7 +100,9 @@ export default function TrainMapPage() {
   // Couche Vélam : seulement si la fonctionnalité vélos est active et le trajet passe par Amiens.
   const nearAmiens = modules.bikes && routeNear(route, DEFAULT_CENTER);
 
+  // Tirer pour actualiser depuis le panneau (la carte garde ses propres gestes).
   return (
+    <PullToRefresh onRefresh={refresh}>
     <div className="train-map-page">
       <div className="tm-map">
         <TrainMap ref={mapRef} route={route} journey={j} position={data?.position ?? null} bikeStations={showBikes ? bikes : null} theme={theme} />
@@ -129,7 +132,7 @@ export default function TrainMapPage() {
             </div>
             <h1 className="page-title tm-title">{j.departureStation.name} → {j.arrivalStation.name}</h1>
             <div className="page-count">{fmtDayLong(j.serviceDate)}</div>
-            <Freshness realtime={data.realtime} onRefresh={data.realtime?.applicable ? refresh : null} refreshing={refreshing} />
+            <Freshness realtime={data.realtime} />
             {j.status === "cancelled" && j.cancellation?.reason && <div className="train-note danger">{j.cancellation.reason}</div>}
             <ProgressPanel data={data} now={now} />
           </>
@@ -145,5 +148,6 @@ export default function TrainMapPage() {
         {j && <Link className="form-hint" to={`/trains/trajet?id=${encodeURIComponent(j.id)}`}>Détail du trajet</Link>}
       </aside>
     </div>
+    </PullToRefresh>
   );
 }

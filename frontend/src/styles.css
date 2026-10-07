@@ -884,6 +884,9 @@ select option { background: var(--surface); color: var(--text); }
 .ac-box .search-input { font-size: 16px; }
 .ac-clear { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border: none; background: none; color: var(--text-3); cursor: pointer; border-radius: var(--r-sm); }
 .ac-list { position: absolute; z-index: 40; left: 0; right: 0; top: calc(100% + 4px); margin: 0; padding: 4px; list-style: none; background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--r-md); box-shadow: var(--shadow-pop); max-height: 280px; overflow-y: auto; }
+/* Dans un panneau (zone qui défile) : liste dans le flux, sinon elle déborde sous le bas
+   du contenu et reste invisible tant qu'on ne fait pas défiler le panneau. */
+.sheet-content .ac-list { position: static; margin-top: 4px; }
 .ac-item { padding: 10px 12px; border-radius: var(--r-sm); font-size: 14px; color: var(--text); cursor: pointer; }
 .ac-item.active, .ac-item:hover { background: var(--inset); }
 .ac-empty { padding: 10px 12px; font-size: 13px; color: var(--text-3); }
@@ -896,8 +899,6 @@ select option { background: var(--surface); color: var(--text); }
 .freshness.ok > .ic { color: var(--ok); }
 .freshness.warn > .ic { color: var(--warn); }
 .freshness.neutral > .ic { color: var(--text-3); }
-.freshness-btn { display: inline-flex; align-items: center; gap: 6px; min-height: 32px; padding: 0 10px; border-radius: var(--r-sm); border: 1px solid var(--border-strong); background: var(--surface); color: var(--accent); font-size: 12px; font-weight: 600; cursor: pointer; }
-.freshness-btn:disabled { opacity: .6; cursor: default; }
 .spin { animation: spin 1s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 

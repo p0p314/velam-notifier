@@ -88,6 +88,7 @@ trains/
 | `id` | `trip_id|jour de service|gare départ|gare arrivée` (détail : `/api/trains/journey?id=`) |
 | `lineId`, `lineName`, `line` | ligne (`{ id, name, longName, color, textColor }`) |
 | `trainNumber`, `brand`, `mode` | numéro, marque (TER…), `train` ou `car` |
+| `directionId` | sens sur la ligne (`direction_id` GTFS : 0 / 1), `null` s'il n'est pas publié |
 | `departureStation`, `arrivalStation`, `terminus` | `{ id, name }` |
 | `scheduledDeparture`, `estimatedDeparture` | ISO 8601 ; estimé `null` sans temps réel |
 | `scheduledArrival`, `estimatedArrival` | idem |
@@ -209,7 +210,9 @@ Publiques (données ouvertes) :
 | `GET /api/trains/route?id=` | itinéraire géographique (`TrainRoute`) — `Cache-Control: max-age=3600`, `ETag` |
 
 Réponse de recherche : `{ ok, date, count, journeys, realtime: { applicable, available,
-updated_at, age_s }, coverage: { from, until }, out_of_coverage, truncated, lines }`.
+updated_at, age_s }, coverage: { from, until }, out_of_coverage, truncated, lines, directions }`
+(`directions` : recherche par ligne aux deux sens → `[{ id, label }]`, label = terminus le plus
+fréquent du sens ; sinon `null`).
 Erreurs : 400 (paramètres), 404 (gare / ligne / trajet inconnus), 503 (horaires en
 chargement). Une date hors période renvoie une liste vide avec `out_of_coverage`.
 

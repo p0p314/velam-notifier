@@ -113,6 +113,7 @@ router.get('/api/trains/search', async (req, res) => {
       count: result.journeys.length,
       truncated: result.truncated,
       lines: result.lines,
+      directions: result.directions,
       coverage: result.coverage,
       out_of_coverage: result.outOfCoverage,
       realtime: result.realtime,
