@@ -281,10 +281,15 @@ sont derrière `<Protected>` + `<Layout>` (header mobile / navbar desktop / bott
 est lazy-loadée** (`React.lazy`) pour garder mapbox-gl hors du bundle principal.
 
 **Navigation (v1.7) — 4 onglets, organisés par usage et non par mode de transport** :
-`/trajets` **Mes trajets** (`pages/MyTrips.jsx` : trains favoris via `components/trains/MyTrains`
-+ stations favorites via `FavoriteStations` de `pages/Favorites.jsx`, une seule lecture de
-`useStations` partagée ; correspondance Vélam d'un train = `nearbyVelam` de `lib/trains.js`,
-≤ 1 km : places au départ, vélos à l'arrivée), `/velos` **Vélos** (`pages/Bikes.jsx` : `Stations`
+`/trajets` **Mes trajets** (`pages/MyTrips.jsx` : **une catégorie à la fois**, bascule
+Trains / Vélos (`?vue=trains|velos`, dernier choix en `localStorage` `velopulse-trajets-vue` ;
+sans choix : `tripsView` → vélos si aucun train suivi mais des stations, ou hors ligne) —
+trains favoris via `components/trains/MyTrains`, stations favorites via `FavoriteStations` de
+`pages/Favorites.jsx`, une seule lecture de `useStations` partagée ; correspondance Vélam d'un
+train = `nearbyVelam` de `lib/trains.js`, ≤ 1 km : places au départ, vélos à l'arrivée ; un
+train favori n'affiche que sa **prochaine circulation**, les autres jours s'ouvrent par
+**appui long** (`useLongPress.js` : ~0,5 s, clic droit / menu contextuel, clic du lâcher
+ignoré) dans un panneau, ou par le bouton « Autres jours » masqué visuellement (clavier)), `/velos` **Vélos** (`pages/Bikes.jsx` : `Stations`
 ou `MapPage` selon `?vue=liste|carte`, dernier choix en `localStorage`), `/trains` **Trains**
 (recherche seule), `/alertes` **Alertes** (`?type=velos|trains` ; trains =
 `components/trains/TrainAlertsList`). Anciennes routes redirigées : `/favoris` → `/trajets`,
