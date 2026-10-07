@@ -42,7 +42,7 @@ const weekday = (ymd) => { const d = new Date(`${ymd}T12:00:00Z`).getUTCDay(); r
  * `variant` : 'v1' (référence), 'v2' (nouvelle version : trip_id changés, 16:53 → 16:55),
  * 'renumbered' (le 16:53 change de numéro de train).
  */
-function buildGtfs({ start, days = 30, variant = 'v1' } = {}) {
+function buildGtfs({ start, days = 30, variant = 'v1', shapes = false } = {}) {
   const end = addDays(start, days - 1);
   const suffix = variant === 'v1' ? end : addDays(end, 7);
   const n1 = variant === 'renumbered' ? '843950' : '843924';
@@ -116,7 +116,22 @@ function buildGtfs({ start, days = 30, variant = 'v1' } = {}) {
     'calendar.txt': 'service_id,monday,tuesday,wednesday,thursday,friday,saturday,sunday,start_date,end_date\r\n',
     'calendar_dates.txt': csv('service_id,date,exception_type', cal),
     'trips.txt': csv('route_id,service_id,trip_id,trip_headsign,direction_id,block_id,shape_id',
-      trips.map((t) => [t.route, t.service, t.id, t.headsign, t.dir, '', ''])),
+      trips.map((t, i) => [t.route, t.service, t.id, t.headsign, t.dir, '', shapes && i === 0 ? 'SHP_K44' : ''])),
+    // Tracé (variante « shapes ») : points volontairement dans le désordre, un tracé
+    // non utilisé (ignoré) et un point invalide.
+    ...(shapes ? {
+      'shapes.txt': csv('shape_id,shape_pt_lat,shape_pt_lon,shape_pt_sequence,shape_dist_traveled', [
+        ['SHP_K44', ST.AMIENS.lat, ST.AMIENS.lon, 50, ''],
+        ['SHP_K44', ST.LILLE.lat, ST.LILLE.lon, 1, ''],
+        ['SHP_K44', 50.5, 3.08, 5, ''],
+        ['SHP_K44', ST.DOUAI.lat, ST.DOUAI.lon, 10, ''],
+        ['SHP_K44', 'x', 'y', 11, ''],
+        ['SHP_K44', ST.ARRAS.lat, ST.ARRAS.lon, 20, ''],
+        ['SHP_K44', ST.ALBERT.lat, ST.ALBERT.lon, 40, ''],
+        ['SHP_UNUSED', 1, 1, 1, ''],
+        ['SHP_UNUSED', 2, 2, 2, ''],
+      ]),
+    } : {}),
     'stop_times.txt': csv('trip_id,arrival_time,departure_time,stop_id,stop_sequence,stop_headsign,pickup_type,drop_off_type,shape_dist_traveled', stopTimes),
   };
 }
@@ -218,6 +233,43 @@ function alertsFeed(alerts, ts = Date.now()) {
   });
 }
 
+/**
+ * Positions de véhicules (VehiclePosition) encodées. `vehicles` : [{ tripId, routeId,
+ * startDate, startTime, directionId, vehicleId, lat, lon, bearing, speed, timestamp (ms),
+ * stopId, seq, status }].
+ */
+function vehiclesFeed(vehicles, ts = Date.now()) {
+  return encodeFeed({
+    header: header(ts),
+    entity: vehicles.map((v, i) => ({
+      id: v.entityId ?? `vp-${i}`,
+      vehicle: {
+        ...(v.tripId || v.routeId ? {
+          trip: {
+            ...(v.tripId ? { tripId: v.tripId } : {}),
+            ...(v.routeId ? { routeId: v.routeId } : {}),
+            ...(v.startDate ? { startDate: compact(v.startDate) } : {}),
+            ...(v.startTime ? { startTime: v.startTime } : {}),
+            ...(v.directionId !== undefined ? { directionId: v.directionId } : {}),
+          },
+        } : {}),
+        ...(v.vehicleId ? { vehicle: { id: v.vehicleId } } : {}),
+        ...(v.lat !== undefined ? {
+          position: {
+            latitude: v.lat, longitude: v.lon,
+            ...(v.bearing !== undefined ? { bearing: v.bearing } : {}),
+            ...(v.speed !== undefined ? { speed: v.speed } : {}),
+          },
+        } : {}),
+        ...(v.timestamp ? { timestamp: Math.floor(v.timestamp / 1000) } : {}),
+        ...(v.stopId ? { stopId: v.stopId } : {}),
+        ...(v.seq !== undefined ? { currentStopSequence: v.seq } : {}),
+        ...(v.status ? { currentStatus: v.status } : {}),
+      },
+    })),
+  });
+}
+
 /** Date locale (Europe/Paris) d'un instant. */
 function parisDate(ms = Date.now()) {
   return new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Paris', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(ms));
@@ -235,5 +287,5 @@ function parisTime(ymd, hhmm) {
 }
 
 module.exports = {
-  ST, LINES, area, point, tripId, buildGtfs, zipFiles, tripUpdatesFeed, alertsFeed, addDays, parisDate, parisTime,
+  ST, LINES, area, point, tripId, buildGtfs, zipFiles, tripUpdatesFeed, alertsFeed, vehiclesFeed, addDays, parisDate, parisTime,
 };

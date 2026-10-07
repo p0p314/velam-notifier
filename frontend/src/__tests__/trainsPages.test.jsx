@@ -106,12 +106,15 @@ describe("page Trains", () => {
     renderAt(SEARCH);
     await screen.findByText("Lille Flandres → Amiens", { selector: "h2" });
     expect(screen.getByText(/Temps réel — mis à jour il y a 1 min/)).toBeTruthy();
-    const cards = screen.getAllByRole("link");
+    const cards = screen.getAllByRole("article");
     expect(within(cards[0]).getByText("17:02")).toBeTruthy();
     expect(within(cards[0]).getAllByText("+9 min").length).toBe(2);
     expect(within(cards[0]).getByText("En retard")).toBeTruthy();
     expect(within(cards[1]).getByText("Supprimé")).toBeTruthy();
     expect(within(cards[1]).queryByText(/min/)).toBeNull();
+    // Chaque carte : un lien vers le détail (toute la carte) et un lien « Carte ».
+    expect(within(cards[0]).getByRole("link", { name: /^Lille Flandres Amiens/ }).getAttribute("href")).toMatch(/^\/trains\/trajet\?id=/);
+    expect(within(cards[0]).getByRole("link", { name: /Voir sur la carte/ }).getAttribute("href")).toMatch(/^\/trains\/carte\?id=trip843924/);
   });
 
   test("bouton Actualiser : force la relecture du temps réel", async () => {
@@ -130,7 +133,7 @@ describe("page Trains", () => {
     renderAt(SEARCH);
     await screen.findByText("Lille Flandres → Amiens", { selector: "h2" });
     fireEvent.change(screen.getByRole("combobox", { name: "État" }), { target: { value: "cancelled" } });
-    expect(screen.getAllByRole("link").length).toBe(1);
+    expect(screen.getAllByRole("article").length).toBe(1);
     expect(screen.getByText("Train supprimé")).toBeTruthy();
   });
 });

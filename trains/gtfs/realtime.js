@@ -114,18 +114,49 @@ function normalizeAlert(entity) {
   };
 }
 
-/** Décode un FeedMessage protobuf → { timestamp, tripUpdates, alerts }. */
+/**
+ * VehiclePosition GTFS-RT → objet normalisé, ou null sans coordonnées exploitables.
+ * `currentStatus` absent = IN_TRANSIT_TO (valeur par défaut de la spécification).
+ */
+function normalizeVehicle(entity) {
+  const v = entity.vehicle;
+  const p = v.position;
+  if (!p || !Number.isFinite(p.latitude) || !Number.isFinite(p.longitude) || (p.latitude === 0 && p.longitude === 0)) return null;
+  const trip = v.trip ?? {};
+  return {
+    entityId: entity.id,
+    tripId: trip.tripId ?? null,
+    routeId: trip.routeId ?? null,
+    startDate: ymdOf(trip.startDate),
+    startTime: trip.startTime ?? null,
+    directionId: trip.directionId ?? null,
+    vehicleId: v.vehicle?.id ?? null,
+    label: v.vehicle?.label ?? null,
+    lat: p.latitude,
+    lon: p.longitude,
+    bearing: Number.isFinite(p.bearing) ? p.bearing : null,
+    speed: Number.isFinite(p.speed) ? p.speed : null, // m/s
+    timestamp: ms(v.timestamp),
+    stopId: v.stopId ?? null,
+    currentStopSequence: v.currentStopSequence ?? null,
+    currentStatus: v.currentStatus ?? 'IN_TRANSIT_TO',
+  };
+}
+
+/** Décode un FeedMessage protobuf → { timestamp, tripUpdates, alerts, vehicles }. */
 function decodeFeed(bytes) {
   const Type = feedType();
   const msg = Type.toObject(Type.decode(bytes), { longs: Number, enums: String });
   const tripUpdates = [];
   const alerts = [];
+  const vehicles = [];
   for (const e of msg.entity ?? []) {
     if (e.isDeleted) continue;
     if (e.tripUpdate) tripUpdates.push(normalizeTripUpdate(e));
     if (e.alert) alerts.push(normalizeAlert(e));
+    if (e.vehicle) { const v = normalizeVehicle(e); if (v) vehicles.push(v); }
   }
-  return { timestamp: ms(msg.header?.timestamp), tripUpdates, alerts };
+  return { timestamp: ms(msg.header?.timestamp), tripUpdates, alerts, vehicles };
 }
 
 /** Encode un FeedMessage (objet JS au format protobufjs) — tests et outillage. */
@@ -168,7 +199,7 @@ function createFeed({ url, ttlMs, timeoutMs }) {
         console.error(`[trains] flux temps réel en échec (${url}) :`, err.message);
         return lastGood
           ? { ...lastGood, upstreamOk: false, error: err.message }
-          : { tripUpdates: [], alerts: [], feedTimestamp: null, fetchedAt: null, upstreamOk: false, error: err.message };
+          : { tripUpdates: [], alerts: [], vehicles: [], feedTimestamp: null, fetchedAt: null, upstreamOk: false, error: err.message };
       })
       .then((snapshot) => {
         cache = { at: Date.now(), snapshot };
@@ -192,20 +223,29 @@ function createFeed({ url, ttlMs, timeoutMs }) {
  * (perturbations), chacun avec son cache. Les alertes changent moins vite que les
  * retards : TTL plus long.
  */
-function createRealtimeProvider({ tripUpdatesUrl, serviceAlertsUrl, env = process.env }) {
+function createRealtimeProvider({ tripUpdatesUrl, serviceAlertsUrl, vehiclePositionsUrl = null, env = process.env }) {
   const timeoutMs = Number(env.TRAINS_RT_TIMEOUT_MS) || 15_000;
   const tripUpdates = createFeed({ url: tripUpdatesUrl, ttlMs: Number(env.TRAINS_RT_TTL_MS) || 120_000, timeoutMs });
   const serviceAlerts = createFeed({ url: serviceAlertsUrl, ttlMs: Number(env.TRAINS_ALERTS_TTL_MS) || 300_000, timeoutMs });
+  // Positions des véhicules : flux facultatif (la SNCF n'en publie pas), lu seulement
+  // quand une carte de train est ouverte ; cache plus court (les positions bougent vite).
+  const vehicles = vehiclePositionsUrl
+    ? createFeed({ url: vehiclePositionsUrl, ttlMs: Number(env.TRAINS_RT_VEHICLES_TTL_MS) || 30_000, timeoutMs })
+    : null;
   return {
+    /** Le fournisseur publie-t-il des positions de véhicules ? */
+    hasVehiclePositions: !!vehicles,
+    /** Positions (null si le fournisseur n'en publie pas). */
+    getVehicles: ({ force = false } = {}) => (vehicles ? vehicles.get({ force, minForceMs: 10_000 }) : Promise.resolve(null)),
     /** Les deux flux (appels en parallèle, chacun mutualisé). */
     async get({ force = false } = {}) {
       const [tu, sa] = await Promise.all([tripUpdates.get({ force }), serviceAlerts.get({ force })]);
       return { tripUpdates: tu, serviceAlerts: sa };
     },
-    peek: () => ({ tripUpdates: tripUpdates.peek(), serviceAlerts: serviceAlerts.peek() }),
+    peek: () => ({ tripUpdates: tripUpdates.peek(), serviceAlerts: serviceAlerts.peek(), vehicles: vehicles?.peek() ?? null }),
     peekCheckedAt: () => ({ tripUpdates: tripUpdates.peekCheckedAt(), serviceAlerts: serviceAlerts.peekCheckedAt() }),
-    reset: () => { tripUpdates.reset(); serviceAlerts.reset(); },
+    reset: () => { tripUpdates.reset(); serviceAlerts.reset(); vehicles?.reset(); },
   };
 }
 
-module.exports = { createRealtimeProvider, decodeFeed, encodeFeed, normalizeTripUpdate, normalizeAlert, toPlainText };
+module.exports = { createRealtimeProvider, decodeFeed, encodeFeed, normalizeTripUpdate, normalizeAlert, normalizeVehicle, toPlainText };

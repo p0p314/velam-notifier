@@ -35,8 +35,10 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
  * Appel API. Ajoute le Bearer token par défaut. Lève une Error si la réponse
  * n'est pas ok (HTTP ou enveloppe { ok:false }). Les GET sont rejoués sur erreur
  * réseau / 502-504 (réveil du serveur) ; un 401 authentifié déconnecte.
+ * `cache` : « no-store » par défaut (données vivantes) ; « default » pour une ressource
+ * statique que le serveur rend cachable (ex. tracé d'un train, ETag).
  */
-export async function api(path, { method = "GET", body, auth = true } = {}) {
+export async function api(path, { method = "GET", body, auth = true, cache = "no-store" } = {}) {
   const headers = {};
   if (body !== undefined) headers["Content-Type"] = "application/json";
   const token = getToken();
@@ -54,7 +56,7 @@ export async function api(path, { method = "GET", body, auth = true } = {}) {
         method,
         headers,
         body: body !== undefined ? JSON.stringify(body) : undefined,
-        cache: "no-store",
+        cache,
       });
       if (!RETRYABLE.has(res.status) || attempt >= retries.length) break;
     } catch (err) {

@@ -23,6 +23,7 @@ import { tutorialPending } from "./lib/tutorial";
 // Module Trains, lui aussi chargé à la demande (hors du bundle principal).
 const Trains = lazy(() => import("./pages/Trains"));
 const TrainJourney = lazy(() => import("./pages/TrainJourney"));
+const TrainMapPage = lazy(() => import("./pages/TrainMapPage"));
 const trainsFallback = <div className="view-state">Chargement…</div>;
 
 function Protected() {
@@ -101,6 +102,7 @@ export default function App() {
                 <Route path="/alertes" element={<OnlineOnly><Alerts /></OnlineOnly>} />
                 <Route path="/trains" element={<OnlineOnly><Suspense fallback={trainsFallback}><Trains /></Suspense></OnlineOnly>} />
                 <Route path="/trains/trajet" element={<OnlineOnly><Suspense fallback={trainsFallback}><TrainJourney /></Suspense></OnlineOnly>} />
+                <Route path="/trains/carte" element={<OnlineOnly><Suspense fallback={trainsFallback}><TrainMapPage /></Suspense></OnlineOnly>} />
                 <Route path="/compte" element={<OnlineOnly><Account /></OnlineOnly>} />
               </Route>
             </Route>

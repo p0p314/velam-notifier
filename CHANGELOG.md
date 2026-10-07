@@ -9,6 +9,34 @@ Toutes les évolutions notables de VéloPulse. Format inspiré de
 section `## [x.y.z] - AAAA-MM-JJ` ci-dessous, puis merger sur `main` : le workflow
 `release.yml` crée le tag `vx.y.z` et la release GitHub à partir de cette section.
 
+## [1.8.0] - 2026-10-07
+
+### Carte des trains
+- **« Carte »** sur chaque train (résultats de recherche, Mes trajets) et **« Voir sur la
+  carte »** dans le détail : le trajet, toutes ses gares (horaires prévus / estimés,
+  retard, gare desservie, prochain arrêt, arrêt supprimé), votre portion du trajet en
+  couleur de ligne, et les stations Vélam en option pour les trajets passant par Amiens.
+- **Où en est le train** : « Prochaine gare : Arras · arrivée 17:30 · +3 min », « En gare
+  de Douai », « Arrivé à Amiens », avec la liste des gares restantes — aussi rappelé dans
+  le détail du trajet.
+- **Transparence sur les données** : la SNCF ne publie ni le tracé des voies ni la
+  position des trains. Le tracé affiché est donc approximatif (de gare en gare, en
+  pointillés) et l'avancement est « estimé d'après les horaires » (estimés en cas de
+  retard) — aucune position n'est inventée.
+- Prêt pour les sources qui publient davantage : tracé réel (GTFS `shapes.txt`) et
+  positions en temps réel (GTFS-RT VehiclePosition, `TRAINS_RT_VEHICLES_URL`) avec
+  « Position mise à jour il y a 30 s » / « Position connue il y a 8 min », marqueur
+  orienté et actualisation toutes les 30 s.
+
+### Technique
+- `GET /api/trains/route?id=` : itinéraire (`TrainRoute`), mis en cache par version des
+  horaires et 1 h par le navigateur (`ETag`). `GET /api/trains/journey` : bloc `position`
+  (disponibilité, position, progression) ; arrêts avec `seq` / `stopId`.
+- Rattachement des positions au trajet côté serveur (trip_id, alias SNCF, ligne + heure
+  de départ ; jamais par le seul véhicule). État du flux de positions dans `/api/health`.
+- Couches de carte réutilisables (`components/map/layers.js`) pour une future carte
+  commune vélos + trains. Documentation : `docs/TRAINS.md` § 12.
+
 ## [1.7.0] - 2026-10-07
 
 ### Nouvelle organisation : 4 onglets

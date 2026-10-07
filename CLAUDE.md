@@ -145,7 +145,11 @@ Modules CommonJS, séparation nette des responsabilités :
   cache disque, **index mémoire compact** — rien en base ; `realtime.js` = RealtimeTrainProvider :
   GTFS-RT décodé avec le `.proto` officiel via `protobufjs`, cache TTL 2 min / 5 min, dernière
   réponse valide ; `zip.js`, `csv.js`, `time.js`), `merge.js` (fusion pure → `TrainJourney`),
-  `service.js` (recherche, détail, rapprochement des favoris), `alertLoop.js` (boucle 60 s,
+  `service.js` (recherche, détail, rapprochement des favoris), `route.js` (TrainRoute : tracé
+  `shapes.txt`, sinon gare en gare — la SNCF n'en publie pas ; cache par version), `vehicles.js`
+  (GTFS-RT VehiclePosition facultatif — la SNCF n'en publie pas — : rattachement au trajet par
+  trip_id / alias / ligne + heure, jamais par le seul véhicule ; progression « prochaine gare »
+  d'après la position ou les horaires), `alertLoop.js` (boucle 60 s,
   idempotente via `train_notifications`), `notifier.js` (canal Web Push → `push.sendToUser`).
   Sans temps réel frais : horaires théoriques, **jamais** « supprimé », aucune notification.
 - **server.js** — boot séquentiel : `initialize()` → `initAuth()` → `initPush()` →
@@ -186,7 +190,7 @@ enveloppe `ok` ; le client `api()` lève sur `!res.ok || data.ok === false`. Rou
 `POST /api/stations/refresh`, `/api/trains/favorites` (GET, POST, PATCH/DELETE `/:id`),
 `/api/trains/alerts` (GET, POST, PATCH/DELETE `/:id`)) : Bearer requis. Publiques : login/register,
 `GET /api/stations`, `GET /api/rental-apps`, `GET /api/push/vapid-public-key`,
-`GET /api/trains/status|stations|lines|search|journey`.
+`GET /api/trains/status|stations|lines|search|journey|route`.
 Cron (`CRON_SECRET`) : `/cron/sync-rental-apps`, `/cron/refresh-stations`, `/cron/sync-trains`
 (workflow `sync-rental-apps.yml`, 02:00 UTC).
 
@@ -343,6 +347,11 @@ ou `MapPage` selon `?vue=liste|carte`, dernier choix en `localStorage`), `/train
   `MyTrains` (section de Mes trajets), `TrainAlertsList` (page Alertes)) ; `trainHooks.js` (actualisation 2 min si visible) ; `lib/trains.js` (logique pure :
   heures affichées en Europe/Paris, estimé masqué s'il est identique au prévu, filtres, tris).
   `components/DayPicker` et `components/Seg` sont partagés avec la page Alertes.
+  **Carte d'un train** : `pages/TrainMapPage.jsx` (`/trains/carte?id=`, lazy ; « Carte » sur
+  chaque `JourneyCard`, « Voir sur la carte » dans le détail), `components/map/TrainMap.jsx`
+  + `components/map/layers.js` (couches GL d'une future carte commune : `TrainRoutesLayer`,
+  `RailwayStationsLayer`, `TrainPositionsLayer`, `BikeStationsLayer` ; réinstallées après
+  `setStyle(…, { diff: false })`), `lib/trainMap.js` (logique pure). Voir `docs/TRAINS.md` § 12.
 - **pages/** — `Login` (connexion / inscription : présentation, `validateAuth` avant envoi —
   confirmation du mot de passe à l'inscription —, afficher le mot de passe, champs 16 px), `Stations` (recherche/tri/filtre + détail), `Favorites` (swipe-to-delete,
   tri proximité / ordre choisi, mode « Organiser »), `MapPage` (carte + filtres + « Autour de moi » : position mesurée au clic, 3 stations les plus proches recalculées en continu selon les filtres),

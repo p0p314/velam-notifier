@@ -38,6 +38,7 @@ export const TUTORIAL_SLIDES = [
     text: "Cherchez un trajet (Lille Flandres → Amiens), une gare ou une ligne (K44) : les trains du jour, avec les retards en temps réel.",
     points: [
       "Ouvrez un train pour l'ajouter à vos trajets",
+      "« Carte » : son trajet, ses gares et où il en est",
       "Tirez la page vers le bas pour l'actualiser",
     ],
   },
