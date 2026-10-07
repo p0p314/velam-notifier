@@ -96,54 +96,97 @@ function lineEvents(alert, index, rtIndex, lineSet, now) {
 
 const appBase = () => (process.env.APP_URL || 'https://velam-notifier.onrender.com').replace(/\/$/, '');
 const hm = (isoStr, tz) => (isoStr ? localParts(Date.parse(isoStr), tz).hhmm : '');
-const truncate = (s, n = 180) => (s && s.length > n ? `${s.slice(0, n - 1)}…` : s ?? '');
+// Causes GTFS-RT → libellé court (corps des notifications).
+const CAUSES = {
+  TECHNICAL_PROBLEM: 'incident technique', STRIKE: 'mouvement social', DEMONSTRATION: 'manifestation',
+  ACCIDENT: 'accident', WEATHER: 'conditions météo', MAINTENANCE: 'maintenance', CONSTRUCTION: 'travaux',
+  POLICE_ACTIVITY: 'intervention des forces de l\'ordre', MEDICAL_EMERGENCY: 'urgence médicale', HOLIDAY: 'jour férié',
+};
+const causeText = (cause) => (CAUSES[cause] ? `Cause : ${CAUSES[cause]}` : null);
 
+// Lignes génériques des messages SNCF, sans information (« Plus d'informations : … »).
+const GENERIC_LINE = /^(pour )?(plus d['’]\s*informations?|en savoir plus|retrouvez|consultez|informations? (voyageurs?|trafic))\b/i;
+
+/**
+ * Texte d'une perturbation SNCF, réduit à l'utile pour une notification : lignes
+ * génériques et liens retirés, coupé à `max` caractères. null s'il ne reste rien.
+ */
+function cleanAlertText(alert, max = 140) {
+  const raw = [alert.header, alert.description].filter(Boolean).join('\n');
+  const lines = raw.split('\n')
+    .map((l) => l.replace(/https?:\/\/\S+/g, '').replace(/\s+/g, ' ').trim())
+    .filter((l) => l && !GENERIC_LINE.test(l));
+  const unique = [...new Set(lines)];
+  const text = unique.join(' · ');
+  if (!text) return null;
+  return text.length > max ? `${text.slice(0, max - 1).trimEnd()}…` : text;
+}
+
+/** « K44 16:53 Lille Flandres → Amiens » : identifie le train en une ligne. */
 function tripTitle(j, tz) {
   return `${j.lineName ? `${j.lineName} ` : ''}${hm(j.scheduledDeparture, tz)} ${j.departureStation.name} → ${j.arrivalStation.name}`;
 }
 
-/** Titre + corps + lien d'une notification d'alerte de trajet. */
+/**
+ * Notification d'alerte de trajet. Titre : le train + son état en un mot
+ * (« K44 16:53 Lille Flandres → Amiens · +12 min ») ; corps : les faits utiles,
+ * rédigés par l'app (nouvelles heures, cause), le texte SNCF nettoyé en complément.
+ */
 function tripMessage(event, j, tz) {
   const url = `${appBase()}/trains/trajet?id=${encodeURIComponent(j.id)}`;
   const tag = `train-${j.trainNumber || j.tripId}-${j.serviceDate}`;
   const what = tripTitle(j, tz);
+  const join = (...parts) => parts.filter(Boolean).join('\n');
   switch (event.type) {
     case 'cancel':
-      return { title: `❌ Train supprimé — ${what}`, body: j.cancellation?.reason ?? 'Train supprimé', url, tag };
+      return {
+        title: `${what} · ${j.cancellation?.partial ? 'Arrêt supprimé' : 'Supprimé'}`,
+        body: join(j.cancellation?.partial ? j.cancellation.reason : 'Ce train ne circulera pas.', ...(j.alerts ?? []).slice(0, 1).map((a) => cleanAlertText(a))),
+        url, tag,
+      };
     case 'delay': {
-      const parts = [];
-      if (j.estimatedDeparture) parts.push(`Départ estimé ${hm(j.estimatedDeparture, tz)}`);
-      if (j.estimatedArrival) parts.push(`arrivée estimée ${hm(j.estimatedArrival, tz)}`);
-      return { title: `⏱ +${event.delay} min — ${what}`, body: parts.join(' · ') || 'Retard annoncé', url, tag };
+      const dep = j.estimatedDeparture
+        ? `Départ ${hm(j.estimatedDeparture, tz)} au lieu de ${hm(j.scheduledDeparture, tz)}`
+        : null;
+      const arr = j.estimatedArrival ? `arrivée ${hm(j.estimatedArrival, tz)}` : null;
+      return { title: `${what} · +${event.delay} min`, body: [dep, arr].filter(Boolean).join(' · ') || 'Retard annoncé', url, tag };
     }
     case 'delay_cleared':
-      return { title: `✅ Retard résorbé — ${what}`, body: `Départ ${hm(j.estimatedDeparture ?? j.scheduledDeparture, tz)} · arrivée ${hm(j.estimatedArrival ?? j.scheduledArrival, tz)}`, url, tag };
+      return {
+        title: `${what} · À l'heure`,
+        body: `Retard rattrapé : départ ${hm(j.estimatedDeparture ?? j.scheduledDeparture, tz)}, arrivée ${hm(j.estimatedArrival ?? j.scheduledArrival, tz)}`,
+        url, tag,
+      };
     default:
-      return { title: `⚠️ Perturbation — ${what}`, body: truncate(event.alert.header || event.alert.description || 'Perturbation signalée'), url, tag: `${tag}-alert` };
+      return {
+        title: `${what} · Perturbé`,
+        body: join(causeText(event.alert.cause), cleanAlertText(event.alert)) || 'Perturbation annoncée sur ce train',
+        url, tag: `${tag}-alert`,
+      };
   }
 }
 
-function lineLabel(alert) {
-  return `${alert.line_name || 'Ligne'}${alert.line_long_name ? ` (${alert.line_long_name})` : ''}`;
-}
-
+/** Notification d'alerte de ligne : « Ligne K44 · Perturbation » / « Ligne K44 · Train supprimé ». */
 function lineMessage(event, alert, index) {
   const url = `${appBase()}/trains?onglet=mes-trains`;
+  const line = `Ligne ${alert.line_name || ''}`.trim();
   if (event.type === 'line_cancel') {
     const t = event.tripIdx;
     const first = index.trips.start[t];
     const last = index.trips.start[t + 1] - 1;
     const st = (k) => index.stations[index.stopTimes.station[k]].name;
     const dep = localParts(gtfsToEpoch(event.date, index.stopTimes.dep[first], index.tz), index.tz).hhmm;
+    const num = index.trips.number[t];
     return {
-      title: `❌ ${alert.line_name || 'Ligne'} : train ${index.trips.number[t] || ''} supprimé`.replace('  ', ' '),
-      body: `${dep} ${st(first)} → ${st(last)}`,
-      url, tag: `line-${alert.id}-cancel-${index.trips.number[t]}-${event.date}`,
+      title: `${line} · Train supprimé`,
+      body: `${dep} ${st(first)} → ${st(last)}${num ? ` (n° ${num})` : ''} ne circulera pas.`,
+      url, tag: `line-${alert.id}-cancel-${num}-${event.date}`,
     };
   }
   return {
-    title: `⚠️ ${lineLabel(alert)}`,
-    body: truncate(event.alert.header || event.alert.description || 'Perturbation signalée'),
+    title: `${line} · Perturbation`,
+    body: [causeText(event.alert.cause), cleanAlertText(event.alert)].filter(Boolean).join('\n')
+      || `Perturbation annoncée${alert.line_long_name ? ` sur ${alert.line_long_name}` : ''}`,
     url, tag: `line-${alert.id}-${event.alert.id}`,
   };
 }
@@ -275,5 +318,5 @@ function getTrainLoopHealth(nowMs = Date.now()) {
 
 module.exports = {
   checkTrainAlerts, runTrainCycle, startTrainAlerts, stopTrainAlerts, getTrainLoopHealth,
-  tripEvents, lineEvents, lineAlertDue, tripMessage, LEAD_MIN,
+  tripEvents, lineEvents, lineAlertDue, tripMessage, lineMessage, cleanAlertText, LEAD_MIN,
 };

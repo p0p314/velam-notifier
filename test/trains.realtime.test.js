@@ -2,7 +2,7 @@
 const { sncf, resetSncf } = require('./helpers');
 const { test, describe, beforeEach } = require('node:test');
 const assert = require('node:assert/strict');
-const { decodeFeed, createRealtimeProvider } = require('../trains/gtfs/realtime');
+const { decodeFeed, createRealtimeProvider, toPlainText } = require('../trains/gtfs/realtime');
 const { tripUpdatesFeed, alertsFeed } = require('./trainsFixture');
 const { TRIP_UPDATES_URL, SERVICE_ALERTS_URL } = require('../trains/providers/sncf');
 
@@ -43,6 +43,19 @@ describe('décodage GTFS-RT', () => {
     assert.equal(a1.entities[0].routeId, 'L1');
     assert.equal(a2.entities[0].tripId, 'OCESN843924F');
     assert.deepEqual(a2.periods, []);
+  });
+});
+
+describe('texte des perturbations', () => {
+  test('le HTML des messages SNCF devient du texte brut (balises, entités, paragraphes)', () => {
+    assert.equal(
+      toPlainText('<p>Train <b>supprim&eacute;</b>&nbsp;:</p><p>Plus d&#39;informations <a href="https://x">ici</a><br/>Fin</p>'),
+      "Train supprimé :\nPlus d'informations ici\nFin",
+    );
+    assert.equal(toPlainText('<script>alert(1)</script>'), 'alert(1)');
+    assert.equal(toPlainText('<p> </p>'), null);
+    const feed = decodeFeed(alertsFeed([{ id: 'H', header: '<p>Travaux &agrave; Arras</p>' }]));
+    assert.equal(feed.alerts[0].header, 'Travaux à Arras');
   });
 });
 

@@ -1,4 +1,5 @@
 import { useState, useRef } from "react";
+import PullToRefresh from "../components/PullToRefresh";
 import StationListItem from "../components/StationListItem";
 import StationDetailSheet from "../components/StationDetailSheet";
 import Icon from "../components/Icon";
@@ -91,8 +92,8 @@ function OrganizeItem({ fav, index, count, onMove, onRename }) {
 }
 
 export default function Favorites() {
-  const { stations, loading, stale, staleReason, lastUpd } = useStations();
-  const { favorites, favIds, toggleFav, rename, reorder, loading: favLoading, stale: favStale } = useFavorites();
+  const { stations, loading, stale, staleReason, lastUpd, reload: reloadStations } = useStations();
+  const { favorites, favIds, toggleFav, rename, reorder, loading: favLoading, stale: favStale, reload: reloadFavorites } = useFavorites();
   const { coords, status: geoStatus, locate } = useGeolocation();
   const [selId, setSelId] = useState(null);
   const [sort, setSort] = useState(loadSortPref);
@@ -121,6 +122,7 @@ export default function Favorites() {
   const selected = stations.find((s) => s.station_id === selId) ?? null;
 
   return (
+    <PullToRefresh onRefresh={() => Promise.all([reloadStations(), reloadFavorites()])}>
     <div className="view-pad">
       <div className="page-head">
         <h2 className="page-title">Mes favoris</h2>
@@ -183,5 +185,6 @@ export default function Favorites() {
         onToggleFav={toggleFav}
       />
     </div>
+    </PullToRefresh>
   );
 }

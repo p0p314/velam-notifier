@@ -9,6 +9,23 @@ Toutes les évolutions notables de VéloPulse. Format inspiré de
 section `## [x.y.z] - AAAA-MM-JJ` ci-dessous, puis merger sur `main` : le workflow
 `release.yml` crée le tag `vx.y.z` et la release GitHub à partir de cette section.
 
+## [1.6.2] - 2026-10-07
+
+### Trains
+- Événements d'un train : les messages SNCF s'affichaient avec leurs balises HTML ; ils
+  sont désormais convertis en texte (côté serveur, pour l'app comme pour les notifications).
+- Notifications trains réécrites : titre court qui identifie le train et son état
+  (« K44 16:53 Lille Flandres → Amiens · +12 min », « · Supprimé », « · Perturbé »,
+  « Ligne K44 · Perturbation »), corps factuel (« Départ 17:05 au lieu de 16:53 »,
+  « Cause : travaux ») ; le texte SNCF n'est plus qu'un complément, sans ses formules
+  génériques (« Plus d'informations : … »).
+- Recherche : champ « À partir de » corrigé sur iPhone (champ heure natif écrasé) ;
+  « Toute la journée » pour l'effacer.
+
+### Partout
+- **Tirer pour actualiser** : tirer la page vers le bas remplit un anneau ; relâché
+  plein, la page se recharge (Stations, Favoris, Trains, détail d'un train).
+
 ## [1.6.1] - 2026-10-07
 
 ### Déploiement

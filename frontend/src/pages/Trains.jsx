@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import Icon from "../components/Icon";
 import Seg from "../components/Seg";
+import PullToRefresh from "../components/PullToRefresh";
 import BottomSheet from "../components/BottomSheet";
 import TrainSearchForm from "../components/trains/TrainSearchForm";
 import TrainFilters from "../components/trains/TrainFilters";
@@ -68,6 +69,7 @@ function Results({ search }) {
   );
 
   return (
+    <PullToRefresh onRefresh={refresh}>
     <div className="train-results">
       <div className="train-results-head">
         <div>
@@ -107,6 +109,7 @@ function Results({ search }) {
       </div>
       {isMobile && <BottomSheet open={sheet} onClose={() => setSheet(false)} heightVh={85}>{filtersPanel}</BottomSheet>}
     </div>
+    </PullToRefresh>
   );
 }
 

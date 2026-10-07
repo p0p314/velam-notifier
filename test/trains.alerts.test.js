@@ -6,7 +6,7 @@ const { test, describe, beforeEach } = require('node:test');
 const assert = require('node:assert/strict');
 const webpush = require('web-push');
 const { getProvider } = require('../trains');
-const { checkTrainAlerts, tripEvents } = require('../trains/alertLoop');
+const { checkTrainAlerts, tripEvents, cleanAlertText } = require('../trains/alertLoop');
 const {
   createUser, addSubscription, addTrainFavorite, createTrainAlert, setAlertsPause, recordTrainNotification, updateTrainAlert,
 } = require('../db');
@@ -92,8 +92,8 @@ describe('alerte de trajet', () => {
     await tripAlert();
     await cycle('16:30', { delayMin: 12 });
     assert.equal(sent.length, 1);
-    assert.match(sent[0].title, /^⏱ \+12 min — K44 16:53 Lille Flandres → Amiens$/);
-    assert.match(sent[0].body, /Départ estimé 17:05 · arrivée estimée 18:22/);
+    assert.equal(sent[0].title, 'K44 16:53 Lille Flandres → Amiens · +12 min');
+    assert.equal(sent[0].body, 'Départ 17:05 au lieu de 16:53 · arrivée 18:22');
     assert.match(sent[0].url, /\/trains\/trajet\?id=/);
     await cycle('16:31', { delayMin: 12 });
     await cycle('16:32', { delayMin: 14 }); // même palier (10-19 min)
@@ -105,7 +105,7 @@ describe('alerte de trajet', () => {
     await cycle('16:30', { delayMin: 12 });
     await cycle('16:40', { delayMin: 21 });
     assert.equal(sent.length, 2);
-    assert.match(sent[1].title, /\+21 min/);
+    assert.equal(sent[1].title, 'K44 16:53 Lille Flandres → Amiens · +21 min');
   });
 
   test('retard qui disparaît : « retard résorbé », une seule fois', async () => {
@@ -114,7 +114,8 @@ describe('alerte de trajet', () => {
     await cycle('16:40', { delayMin: 1 });
     await cycle('16:41', { delayMin: 0 });
     assert.equal(sent.length, 2);
-    assert.match(sent[1].title, /^✅ Retard résorbé/);
+    assert.equal(sent[1].title, "K44 16:53 Lille Flandres → Amiens · À l'heure");
+    assert.equal(sent[1].body, 'Retard rattrapé : départ 16:54, arrivée 18:11');
   });
 
   test('« retard résorbé » jamais envoyé sans retard notifié auparavant', async () => {
@@ -128,7 +129,8 @@ describe('alerte de trajet', () => {
     await cycle('16:00', { cancelled: true });
     await cycle('16:01', { cancelled: true });
     assert.equal(sent.length, 1);
-    assert.match(sent[0].title, /^❌ Train supprimé — K44 16:53/);
+    assert.equal(sent[0].title, 'K44 16:53 Lille Flandres → Amiens · Supprimé');
+    assert.equal(sent[0].body, 'Ce train ne circulera pas.');
   });
 
   test('suppression non suivie (on_cancel = false) : rien', async () => {
@@ -161,7 +163,8 @@ describe('alerte de trajet', () => {
     await cycle('16:00', { alerts });
     await cycle('16:01', { alerts });
     assert.equal(sent.length, 1);
-    assert.equal(sent[0].body, 'Retard dû à un incident technique');
+    assert.equal(sent[0].title, 'K44 16:53 Lille Flandres → Amiens · Perturbé');
+    assert.equal(sent[0].body, 'Cause : incident technique\nRetard dû à un incident technique');
   });
 
   test('compte en pause : rien', async () => {
@@ -203,7 +206,7 @@ describe('alerte de ligne', () => {
     await cycle('09:00', { alerts });
     await cycle('09:01', { alerts });
     assert.equal(sent.length, 1);
-    assert.equal(sent[0].title, '⚠️ K44 (Lille Flandres - Amiens)');
+    assert.equal(sent[0].title, 'Ligne K44 · Perturbation');
     assert.match(sent[0].body, /Travaux/);
   });
 
@@ -218,8 +221,8 @@ describe('alerte de ligne', () => {
     await cycle('09:00', { cancelled: true });
     await cycle('09:30', { cancelled: true });
     assert.equal(sent.length, 1);
-    assert.equal(sent[0].title, '❌ K44 : train 843924 supprimé');
-    assert.equal(sent[0].body, '16:53 Lille Flandres → Amiens');
+    assert.equal(sent[0].title, 'Ligne K44 · Train supprimé');
+    assert.equal(sent[0].body, '16:53 Lille Flandres → Amiens (n° 843924) ne circulera pas.');
   });
 
   test('hors créneau horaire : pas due', async () => {
@@ -243,5 +246,16 @@ describe('idempotence', () => {
     assert.deepEqual(ev.map((e) => e.key), [`delay:${D}:20`]);
     const theoretical = tripEvents({ delay_threshold: 10, on_cancel: true }, { ...base, realtime: false, status: 'scheduled' });
     assert.deepEqual(theoretical, []);
+  });
+});
+
+describe('texte des notifications', () => {
+  test('texte SNCF : lignes génériques et liens retirés, longueur bornée', () => {
+    assert.equal(cleanAlertText({
+      header: 'Trafic perturbé entre Arras et Amiens',
+      description: "Plus d'informations : https://www.ter.sncf.com/hauts-de-france\nTrafic perturbé entre Arras et Amiens",
+    }), 'Trafic perturbé entre Arras et Amiens');
+    assert.equal(cleanAlertText({ header: "Plus d'informations :", description: null }), null);
+    assert.equal(cleanAlertText({ header: 'x'.repeat(300) }).length, 140);
   });
 });

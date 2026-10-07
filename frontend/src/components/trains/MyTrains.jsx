@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import Icon from "../Icon";
 import BottomSheet from "../BottomSheet";
+import PullToRefresh from "../PullToRefresh";
 import LineBadge from "./LineBadge";
 import JourneyCard from "./JourneyCard";
 import TrainStatus from "./TrainStatus";
@@ -118,6 +119,7 @@ export default function MyTrains() {
 
   const empty = !t.favorites.length && !t.lineAlerts.length;
   return (
+    <PullToRefresh onRefresh={t.refresh}>
     <div className="my-trains">
       {t.favorites.length > 0 && <Freshness realtime={t.data?.realtime} onRefresh={t.refresh} refreshing={t.refreshing} />}
       {error && <div className="form-error" role="alert">{error}</div>}
@@ -170,5 +172,6 @@ export default function MyTrains() {
         )}
       </BottomSheet>
     </div>
+    </PullToRefresh>
   );
 }

@@ -998,3 +998,32 @@ select option { background: var(--surface); color: var(--text); }
   .journey-actions .detail-cta { width: auto; padding: 0 18px; }
 }
 @media (prefers-reduced-motion: reduce) { .spin { animation: none; } }
+
+/* Champs date / heure : sur iPhone (Safari), un champ natif vide s'affiche écrasé et
+   son texte centré déborde. On neutralise l'apparence native pour garder la hauteur et
+   l'alignement des autres champs (formulaires Trains et Alertes). */
+input.field[type="time"],
+input.field[type="date"] {
+  -webkit-appearance: none;
+  appearance: none;
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  min-height: 40px;
+  line-height: normal;
+}
+input.field[type="time"]::-webkit-date-and-time-value,
+input.field[type="date"]::-webkit-date-and-time-value { text-align: left; min-height: 1.2em; margin: 0; }
+.field-clear { align-self: flex-start; }
+
+/* Tirer pour actualiser */
+html { overscroll-behavior-y: contain; } /* pas de rechargement natif de toute la page */
+.ptr { overflow: hidden; display: flex; align-items: flex-end; justify-content: center; }
+.ptr.settle { transition: height .2s ease; }
+.ptr-inner { display: flex; align-items: center; gap: 8px; padding-bottom: 10px; font-size: 12px; color: var(--text-3); }
+.ptr-ring { transform: rotate(-90deg); }
+.ptr-track, .ptr-fill { fill: none; stroke-width: 2.5; }
+.ptr-track { stroke: var(--border-strong); }
+.ptr-fill { stroke: var(--accent); stroke-linecap: round; transition: stroke-dashoffset .05s linear; }
+.ptr.busy .ptr-ring { animation: spin 1s linear infinite; }
+@media (prefers-reduced-motion: reduce) { .ptr.busy .ptr-ring { animation: none; } }
