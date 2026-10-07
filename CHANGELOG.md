@@ -9,6 +9,14 @@ Toutes les évolutions notables de VéloPulse. Format inspiré de
 section `## [x.y.z] - AAAA-MM-JJ` ci-dessous, puis merger sur `main` : le workflow
 `release.yml` crée le tag `vx.y.z` et la release GitHub à partir de cette section.
 
+## [1.6.1] - 2026-10-07
+
+### Déploiement
+- Le build installe désormais aussi les dépendances du serveur (`npm run build`) : le
+  déploiement de la 1.6.0 échouait au démarrage (`Cannot find module 'protobufjs'`), la
+  nouvelle dépendance n'étant pas présente dans le cache de Render. La 1.5.2 était restée
+  en ligne.
+
 ## [1.6.0] - 2026-10-07
 
 ### Trains (nouveau)
