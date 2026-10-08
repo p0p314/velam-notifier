@@ -5,6 +5,11 @@ const { requireAuth } = require('../auth');
 
 const router = express.Router();
 
+// Plafonds par compte : la base et la boucle d'alerte restent bornées quel que soit le client.
+const FAVORITES_MAX = 100;
+const STATION_ID_MAX = 64;
+const STATION_NAME_MAX = 128;
+
 router.get('/api/favorites', requireAuth, async (req, res) => {
   try {
     res.json({ ok: true, favorites: await getFavorites(req.user.id) });
@@ -17,10 +22,16 @@ router.get('/api/favorites', requireAuth, async (req, res) => {
 router.post('/api/favorites', requireAuth, async (req, res) => {
   try {
     const { station_id, station_name } = req.body ?? {};
-    if (!station_id || !station_name) {
-      return res.status(400).json({ ok: false, error: 'station_id et station_name requis' });
+    const id = typeof station_id === 'number' ? String(station_id) : station_id;
+    if (typeof id !== 'string' || !id.trim() || id.length > STATION_ID_MAX
+      || typeof station_name !== 'string' || !station_name.trim() || station_name.length > STATION_NAME_MAX) {
+      return res.status(400).json({ ok: false, error: `station_id (≤ ${STATION_ID_MAX}) et station_name (≤ ${STATION_NAME_MAX} caractères) requis` });
     }
-    await addFavorite(req.user.id, String(station_id), String(station_name));
+    const current = await getFavorites(req.user.id);
+    if (current.length >= FAVORITES_MAX && !current.some((f) => f.station_id === id)) {
+      return res.status(400).json({ ok: false, error: `${FAVORITES_MAX} stations favorites au maximum` });
+    }
+    await addFavorite(req.user.id, id, station_name.trim());
     res.status(201).json({ ok: true, favorites: await getFavorites(req.user.id) });
   } catch (err) {
     console.error('[POST /api/favorites]', err.message);

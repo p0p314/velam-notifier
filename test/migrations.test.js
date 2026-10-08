@@ -28,7 +28,7 @@ test('push_subscriptions : rétro-remplissage de endpoint + dédoublonnage', asy
     user_id INTEGER NOT NULL,
     subscription TEXT NOT NULL
   )`);
-  const sub = (ep) => JSON.stringify({ endpoint: `https://push.example.com/${ep}`, keys: {} });
+  const sub = (ep) => JSON.stringify({ endpoint: `https://fcm.googleapis.com/fcm/${ep}`, keys: {} });
   await dbc.run('INSERT INTO push_subscriptions (user_id, subscription) VALUES (?, ?)', [1, sub('a')]);
   await dbc.run('INSERT INTO push_subscriptions (user_id, subscription) VALUES (?, ?)', [2, sub('a')]); // même appareil
   await dbc.run('INSERT INTO push_subscriptions (user_id, subscription) VALUES (?, ?)', [1, sub('b')]);
@@ -38,13 +38,13 @@ test('push_subscriptions : rétro-remplissage de endpoint + dédoublonnage', asy
 
   const { rows } = await dbc.query('SELECT user_id, endpoint FROM push_subscriptions ORDER BY endpoint');
   assert.deepEqual(rows.map((r) => [Number(r.user_id), r.endpoint]), [
-    [2, 'https://push.example.com/a'], // le plus récent gagne
-    [1, 'https://push.example.com/b'],
+    [2, 'https://fcm.googleapis.com/fcm/a'], // le plus récent gagne
+    [1, 'https://fcm.googleapis.com/fcm/b'],
   ]);
 
   // L'index unique est bien posé
   await assert.rejects(dbc.run('INSERT INTO push_subscriptions (user_id, endpoint, subscription) VALUES (?, ?, ?)',
-    [1, 'https://push.example.com/b', '{}']));
+    [1, 'https://fcm.googleapis.com/fcm/b', '{}']));
 });
 
 test('alertes v1.1 : min_count → threshold, last_notified_count → last_notified_key', async (t) => {

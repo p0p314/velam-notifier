@@ -34,6 +34,18 @@ const loginLimiter = rateLimit({
   standardHeaders: true, legacyHeaders: false, skip,
   message: { ok: false, error: 'Trop de tentatives, réessayez dans 15 minutes.' },
 });
+// Second compteur, par compte visé : freine une attaque répartie sur de nombreuses adresses IP.
+// Seuls les échecs comptent (une connexion réussie ne consomme rien), et le seuil est plus
+// haut que par IP pour qu'un tiers ne puisse pas bloquer facilement le compte de quelqu'un.
+const accountKey = (req) => {
+  const u = req.body?.username;
+  return `compte:${typeof u === 'string' ? u.trim().toLowerCase().slice(0, 64) : ''}`;
+};
+const accountLoginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, max: 20, skipSuccessfulRequests: true,
+  standardHeaders: false, legacyHeaders: false, skip, keyGenerator: accountKey,
+  message: { ok: false, error: 'Trop de tentatives sur ce compte, réessayez dans 15 minutes.' },
+});
 const registerLimiter = rateLimit({
   windowMs: 60 * 60 * 1000, max: 5,
   standardHeaders: true, legacyHeaders: false, skip,
@@ -65,7 +77,7 @@ router.post('/api/auth/register', registerLimiter, async (req, res) => {
   }
 });
 
-router.post('/api/auth/login', loginLimiter, async (req, res) => {
+router.post('/api/auth/login', loginLimiter, accountLoginLimiter, async (req, res) => {
   try {
     const { username, password } = req.body ?? {};
     if (!username?.trim() || !password) {

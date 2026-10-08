@@ -9,6 +9,22 @@ Toutes les évolutions notables de VéloPulse. Format inspiré de
 section `## [x.y.z] - AAAA-MM-JJ` ci-dessous, puis merger sur `main` : le workflow
 `release.yml` crée le tag `vx.y.z` et la release GitHub à partir de cette section.
 
+## [1.15.0] - 2026-10-08
+
+### Paramètres
+- Le logotype et le slogan « Ton train, ton vélo, dans un instant. » en haut de la page.
+
+### Sécurité (suite à l'audit)
+- **Notifications** : seuls les services de notification des navigateurs (Google, Apple,
+  Mozilla, Microsoft) sont acceptés comme destination, et chaque envoi a un délai maximal.
+  Un compte ne peut plus bloquer l'envoi des alertes de tous les utilisateurs, ni faire
+  contacter une adresse quelconque au serveur.
+- **Plafonds par compte** : 50 alertes vélos, 100 stations favorites, 10 appareils (les plus
+  anciens sont retirés automatiquement), rechargement des stations limité.
+- **Connexion** : en plus de la limite par adresse IP, 20 échecs au plus par compte en
+  15 minutes (les connexions réussies ne comptent pas).
+- **Dépendances** : mises à jour de sécurité (Express et ses modules, React Router 7).
+
 ## [1.14.0] - 2026-10-08
 
 ### VéloPulse devient Mox

@@ -183,6 +183,9 @@ select option { background: var(--surface); color: var(--text); }
 /* Logotype « mox » (components/Wordmark) : Geist 800 resserré, « o » = cadran du logo, posé
    sur la ligne de base avec le léger débord d'une lettre ronde. */
 .wordmark { display: inline-block; white-space: nowrap; font-family: var(--font-ui); font-weight: 800; letter-spacing: -.045em; line-height: 1; }
+.account-brand { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 12px; padding: 4px 0 14px; margin-bottom: 14px; border-bottom: 1px solid var(--hairline); }
+.account-brand-name { font-size: 30px; color: var(--text); }
+.account-brand-slogan { margin: 0; font-size: 15px; font-weight: 500; color: var(--text-2); }
 .wordmark-o { display: inline-block; width: .53em; height: .53em; vertical-align: -.013em; margin-inline: .035em .03em; overflow: visible; }
 .brand-sub { font-size: 11px; color: var(--text-3); }
 

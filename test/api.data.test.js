@@ -25,6 +25,22 @@ describe('favoris', () => {
     assert.deepEqual(brief(del.body.favorites), [{ station_id: '2', station_name: 'zoo' }]);
   });
 
+  test('plafonds : types et longueurs bornés, 100 stations au plus (une déjà favorite reste modifiable)', async () => {
+    const { token, user } = await registerUser(api);
+    const post = (body) => api.post('/api/favorites', { token, body });
+    assert.equal((await post({ station_id: { $gt: '' }, station_name: 'x' })).status, 400);
+    assert.equal((await post({ station_id: '1', station_name: ['x'] })).status, 400);
+    assert.equal((await post({ station_id: 'x'.repeat(65), station_name: 'x' })).status, 400);
+    assert.equal((await post({ station_id: '1', station_name: 'x'.repeat(129) })).status, 400);
+    assert.equal((await post({ station_id: 7, station_name: 'Sept' })).status, 201); // numéro accepté
+    const { addFavorite } = require('../db');
+    for (let i = 100; i < 199; i++) await addFavorite(user.id, String(i), `S${i}`);
+    const full = await post({ station_id: '999', station_name: 'Trop' });
+    assert.equal(full.status, 400);
+    assert.match(full.body.error, /100 stations favorites au maximum/);
+    assert.equal((await post({ station_id: '7', station_name: 'Sept bis' })).status, 201);
+  });
+
   test('payload incomplet → 400', async () => {
     const { token } = await registerUser(api);
     assert.equal((await api.post('/api/favorites', { token, body: { station_id: '1' } })).status, 400);
@@ -43,6 +59,15 @@ describe('alertes', () => {
     station_id: '1', station_name: 'Gare', bike_type: 'mechanical',
     threshold: 2, time_start: '07:30', time_end: '09:00', days: '1,2,3,4,5',
   };
+
+  test('plafond : 50 alertes vélos par compte', async () => {
+    const { token, user } = await registerUser(api);
+    const { createAlert } = require('../db');
+    for (let i = 0; i < 50; i++) await createAlert(user.id, { ...body, kind: 'threshold', target: 'bikes', comparison: 'at_most' });
+    const res = await api.post('/api/alerts', { token, body });
+    assert.equal(res.status, 400);
+    assert.match(res.body.error, /50 alertes vélos au maximum/);
+  });
 
   test('création puis lecture', async () => {
     const { token } = await registerUser(api);

@@ -5,6 +5,8 @@ import { useAuth } from "../auth";
 import { currentPushEndpoint } from "../push";
 import { usePushState, TestPushButton, useNotificationPrefs } from "../components/PushControls";
 import Icon from "../components/Icon";
+import Wordmark from "../components/Wordmark";
+import { SLOGAN } from "../lib/brand";
 import { APP_VERSION } from "../theme";
 import { shareApp } from "../lib/share";
 import { fmtLastSeen, exportFileName, downloadJson } from "../lib/devices";
@@ -490,6 +492,10 @@ export default function Account() {
 
   return (
     <div className="view-pad account-page">
+      <div className="account-brand">
+        <Wordmark className="account-brand-name" />
+        <p className="account-brand-slogan">{SLOGAN}</p>
+      </div>
       <div className="page-head"><h2 className="page-title">Paramètres</h2></div>
       <div className="account-card">
         <div className="account-id"><Icon name="user" size={20} /> <b>{user?.username}</b></div>
