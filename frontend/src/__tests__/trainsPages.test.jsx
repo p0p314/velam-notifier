@@ -50,7 +50,7 @@ function mockApi() {
     }
     if (u.pathname === "/api/trains/journey") {
       return jsonResponse({ ok: true, realtime, journey: { ...J1, stops: [
-        { station: LILLE, scheduledArrival: J1.scheduledDeparture, scheduledDeparture: J1.scheduledDeparture, estimatedDeparture: J1.estimatedDeparture, estimatedArrival: null, delay: 9, skipped: false, inJourney: true, platform: "4" },
+        { station: LILLE, scheduledArrival: J1.scheduledDeparture, scheduledDeparture: J1.scheduledDeparture, estimatedDeparture: J1.estimatedDeparture, estimatedArrival: null, delay: 9, skipped: false, inJourney: true, platform: "4", passed: true },
         { station: AMIENS, scheduledArrival: J1.scheduledArrival, scheduledDeparture: J1.scheduledArrival, estimatedArrival: J1.estimatedArrival, estimatedDeparture: null, delay: 9, skipped: false, inJourney: true },
       ] } });
     }
@@ -208,6 +208,11 @@ describe("détail d'un train", () => {
     expect(screen.getAllByText("Estimé").length).toBe(2);
     expect(screen.getByText("Voie 4")).toBeTruthy();          // bloc Départ
     expect(screen.getByText(/· voie 4/)).toBeTruthy();         // liste des arrêts
+    // Gare de départ desservie (passage signalé) : point plein + légende ; l'arrivée non.
+    const stops = screen.getAllByRole("listitem").filter((li) => li.classList.contains("journey-stop"));
+    expect(stops.map((li) => li.classList.contains("passed"))).toEqual([true, false]);
+    expect(within(stops[0]).getByText("(desservie)")).toBeTruthy();
+    expect(screen.getByText(/gare déjà desservie/)).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: "Ajouter aux favoris" }));
     await screen.findByRole("button", { name: "Retirer des favoris" });
@@ -215,8 +220,11 @@ describe("détail d'un train", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Créer une alerte" }));
     fireEvent.click(await screen.findByRole("button", { name: "+15 min" }));
+    const platform = screen.getByRole("checkbox", { name: /Voie de départ/ });
+    expect(platform.checked).toBe(true); // proposée par défaut
+    fireEvent.click(platform);
     fireEvent.click(screen.getByRole("button", { name: "Créer l'alerte" }));
-    await waitFor(() => expect(alerts).toEqual([{ scope: "trip", favorite_id: 7, delay_threshold: 15, on_cancel: true, on_disruption: true, days: "1,2,3,4,5,6,7" }]));
+    await waitFor(() => expect(alerts).toEqual([{ scope: "trip", favorite_id: 7, delay_threshold: 15, on_cancel: true, on_disruption: true, on_platform: false, days: "1,2,3,4,5,6,7" }]));
     expect(await screen.findByRole("button", { name: "Modifier l'alerte" })).toBeTruthy();
   });
 });

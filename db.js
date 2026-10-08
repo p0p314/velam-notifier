@@ -578,16 +578,17 @@ async function removeTrainFavorite(userId, id) {
 
 const TRAIN_ALERT_FIELDS = [
   'scope', 'favorite_id', 'provider', 'line_id', 'line_name', 'line_long_name',
-  'delay_threshold', 'on_cancel', 'on_disruption', 'days', 'time_start', 'time_end', 'active',
+  'delay_threshold', 'on_cancel', 'on_disruption', 'on_platform', 'days', 'time_start', 'time_end', 'active',
 ];
 const flag = (v) => (v ? 1 : 0);
 const toTrainAlert = (row) => row && {
   ...row,
   on_cancel: !!Number(row.on_cancel),
   on_disruption: !!Number(row.on_disruption),
+  on_platform: !!Number(row.on_platform),
   active: !!Number(row.active),
 };
-const trainAlertValue = (k, v) => (['on_cancel', 'on_disruption', 'active'].includes(k) ? flag(v) : v);
+const trainAlertValue = (k, v) => (['on_cancel', 'on_disruption', 'on_platform', 'active'].includes(k) ? flag(v) : v);
 
 async function getTrainAlerts(userId) {
   const { rows } = await dbc.query('SELECT * FROM train_alerts WHERE user_id = ? ORDER BY id', [userId]);
@@ -676,6 +677,15 @@ async function hasTrainNotification(alertId, prefix) {
   return !!row;
 }
 
+/** Clé du dernier événement notifié commençant par `prefix` pour cette alerte (null sinon). */
+async function lastTrainNotification(alertId, prefix) {
+  const row = await dbc.get(
+    'SELECT event_key FROM train_notifications WHERE alert_id = ? AND event_key LIKE ? ORDER BY sent_at DESC, id DESC LIMIT 1',
+    [alertId, `${prefix.replace(/[%_]/g, '')}%`]
+  );
+  return row?.event_key ?? null;
+}
+
 async function getTrainNotifications(userId, limit = 50) {
   const { rows } = await dbc.query(
     'SELECT alert_id, event_key, type, sent_at FROM train_notifications WHERE user_id = ? ORDER BY sent_at DESC LIMIT ?',
@@ -713,6 +723,6 @@ module.exports = {
   // trains
   getTrainFavorites, getTrainFavorite, countTrainFavorites, addTrainFavorite, setTrainFavoriteLabel, removeTrainFavorite,
   getTrainAlerts, getTrainAlert, createTrainAlert, updateTrainAlert, deleteTrainAlert,
-  countActiveTrainAlerts, getActiveTrainAlerts, recordTrainNotification, hasTrainNotification,
+  countActiveTrainAlerts, getActiveTrainAlerts, recordTrainNotification, hasTrainNotification, lastTrainNotification,
   getTrainNotifications, purgeTrainNotifications,
 };

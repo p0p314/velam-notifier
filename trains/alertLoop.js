@@ -7,9 +7,12 @@
 //    (horaires théoriques ⇒ ni retard ni suppression inventés) ;
 //  - idempotence : chaque événement a une clé (« delay:2026-10-07:10 »,
 //    « cancel:2026-10-07 », « alert:<id> »…) enregistrée AVANT l'envoi dans
-//    train_notifications (unique par alerte) : un même événement ne part qu'une fois.
+//    train_notifications (unique par alerte) : un même événement ne part qu'une fois ;
+//  - voie de départ (flux SIRI, lu seulement pour un train suivi partant dans l'heure) :
+//    annoncée dès qu'elle est connue, puis à chaque changement, jamais après le départ.
 const {
-  countActiveTrainAlerts, getActiveTrainAlerts, recordTrainNotification, hasTrainNotification, purgeTrainNotifications,
+  countActiveTrainAlerts, getActiveTrainAlerts, recordTrainNotification, hasTrainNotification, lastTrainNotification,
+  purgeTrainNotifications,
 } = require('../db');
 const { getProvider, DEFAULT_PROVIDER } = require('./index');
 const { buildJourney, isMajorAlert } = require('./merge');
@@ -21,6 +24,7 @@ const LEAD_MIN = 180;            // surveillance à partir de 3 h avant le dépa
 const DELAY_STEP_MIN = 10;       // nouvelle notification par palier de 10 min de retard en plus
 const DELAY_CLEARED_MAX_MIN = 2; // « retard résorbé » quand il retombe à 2 min ou moins
 const PURGE_AFTER_MS = 45 * 86_400_000;
+const PLATFORM_AHEAD_MIN = 60;   // voie cherchée dans l'heure qui précède le départ (portée du flux SIRI)
 
 // ── Évaluation (pure) ───────────────────────────────────────────────────────
 
@@ -54,6 +58,32 @@ function tripEvents(alert, j) {
     }
   }
   return events;
+}
+
+const platformPrefix = (j) => `platform:${j.serviceDate}:`;
+
+/**
+ * Événement « voie » d'un train suivi, d'après la dernière voie notifiée (`lastKey`) :
+ * première voie connue ⇒ « platform » (clé « platform:<jour>:=4 ») ; voie différente de la
+ * dernière notifiée ⇒ « platform_change » (« platform:<jour>:4>6 », donc 4 → 6 → 4 notifie
+ * deux fois). Rien sans voie, pour un train supprimé, parti ou déjà desservi.
+ */
+function platformEvent(j, lastKey) {
+  const v = j.departurePlatform;
+  if (!v || j.status === 'cancelled' || j.phase !== 'upcoming' || j.passage?.departed) return null;
+  const prefix = platformPrefix(j);
+  const prev = lastKey?.startsWith(prefix) ? lastKey.slice(prefix.length).split('>').pop().replace(/^=/, '') : null;
+  if (prev === v) return null;
+  return prev === null
+    ? { type: 'platform', key: `${prefix}=${v}`, platform: v }
+    : { type: 'platform_change', key: `${prefix}${prev}>${v}`, platform: v, previous: prev };
+}
+
+/** Le train part-il dans l'heure (heure estimée si connue) ? Seul cas où la voie est cherchée. */
+function platformDue(j, now) {
+  if (j.status === 'cancelled' || j.phase !== 'upcoming') return false;
+  const dep = Date.parse(j.estimatedDeparture ?? j.scheduledDeparture);
+  return dep - now <= PLATFORM_AHEAD_MIN * 60_000;
 }
 
 /** Une alerte de ligne est-elle due maintenant (jour + créneau facultatif) ? */
@@ -150,6 +180,13 @@ function tripMessage(event, j, tz) {
         : null;
       const arr = j.estimatedArrival ? `arrivée ${hm(j.estimatedArrival, tz)}` : null;
       return { title: `${what} · +${event.delay} min`, body: [dep, arr].filter(Boolean).join(' · ') || 'Retard annoncé', url, tag };
+    }
+    case 'platform':
+    case 'platform_change': {
+      const dep = `départ ${hm(j.estimatedDeparture ?? j.scheduledDeparture, tz)}${j.departureDelay > 0 ? ` (+${j.departureDelay} min)` : ''}`;
+      return event.type === 'platform'
+        ? { title: `${what} · Voie ${event.platform}`, body: `Voie ${event.platform} à ${j.departureStation.name} · ${dep}`, url, tag: `${tag}-voie` }
+        : { title: `${what} · Changement de voie`, body: `Voie ${event.platform} au lieu de ${event.previous} · ${dep}`, url, tag: `${tag}-voie` };
     }
     case 'delay_cleared':
       return {
@@ -258,6 +295,11 @@ async function checkTrainAlerts(date = new Date()) {
         // Un train arrivé (heure estimée dépassée) ne génère plus rien.
         if (j.phase === 'arrived') continue;
         for (const ev of tripEvents(a, j)) await emit(a, ev, tripMessage(ev, j, index.tz), now);
+        if (a.on_platform && platformDue(j, now)) {
+          await service.withPlatforms(index, [j], { now });
+          const ev = platformEvent(j, await lastTrainNotification(a.id, platformPrefix(j)));
+          if (ev) await emit(a, ev, tripMessage(ev, j, index.tz), now);
+        }
       }
     } catch (err) {
       console.error(`[trains] alerte ${a.id} :`, err.message);
@@ -318,5 +360,5 @@ function getTrainLoopHealth(nowMs = Date.now()) {
 
 module.exports = {
   checkTrainAlerts, runTrainCycle, startTrainAlerts, stopTrainAlerts, getTrainLoopHealth,
-  tripEvents, lineEvents, lineAlertDue, tripMessage, lineMessage, cleanAlertText, LEAD_MIN,
+  tripEvents, lineEvents, lineAlertDue, tripMessage, lineMessage, cleanAlertText, platformEvent, platformDue, LEAD_MIN,
 };

@@ -88,6 +88,7 @@ describe("lib/trainMap", () => {
     expect(p.basisLabel).toBe("Estimé d'après les horaires");
     expect(p.upcoming.map((s) => s.name)).toEqual(["Arras", "Amiens"]);
     expect(progressInfo(JOURNEY, { ...BETWEEN, basis: "position" }).basisLabel).toBe("D'après la position du train");
+    expect(progressInfo(JOURNEY, { ...BETWEEN, basis: "passages" }).basisLabel).toBe("D'après les passages en gare signalés par la SNCF");
     expect(progressInfo(JOURNEY, { basis: "schedule", state: "at_stop", previous: 1, next: 2, upcoming: [2, 3] }).title).toBe("En gare de Douai");
     expect(progressInfo(JOURNEY, { basis: "schedule", state: "not_departed", previous: null, next: 0, upcoming: [0, 1, 2, 3] }))
       .toMatchObject({ title: "Pas encore parti", sub: "Départ de Lille Flandres à 16:53" });

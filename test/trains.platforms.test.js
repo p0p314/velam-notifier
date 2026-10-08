@@ -4,6 +4,7 @@ const { sncf, resetSncf, startServer, client } = require('./helpers');
 const { test, describe, before, after, beforeEach } = require('node:test');
 const assert = require('node:assert/strict');
 const { getProvider, trainsHealth } = require('../trains');
+const { phaseWithPassage } = require('../trains/service');
 const { parseEstimatedTimetable, createParser, uicOf } = require('../trains/siri');
 const { ST, buildGtfs, siriEtFeed, tripUpdatesFeed, alertsFeed, area, parisTime, LINES, tripId } = require('./trainsFixture');
 
@@ -35,24 +36,27 @@ describe('lecture du flux SIRI Lite ET', () => {
     const { index, stats } = parseEstimatedTimetable(siriEtFeed([k44(), { number: '848908', frameDate: D, calls: [{ uic: ST.LILLE.uic, aimedDep: at('17:53') }] }]));
     assert.equal(stats.journeys, 2);
     assert.equal(stats.calls, 6);
+    assert.equal(stats.recorded, 0);
     assert.equal(stats.depPlatforms, 2);
     assert.equal(stats.arrPlatforms, 2);
-    assert.deepEqual(index.get(`843924|${ST.LILLE.uic}|${D}`), { dep: '4', arr: null });
-    assert.deepEqual(index.get(`843924|${ST.ARRAS.uic}|${D}`), { dep: '2', arr: '2' });
-    assert.deepEqual(index.get(`843924|${ST.AMIENS.uic}|${D}`), { dep: null, arr: '1' });
-    assert.equal(index.has(`843924|${ST.DOUAI.uic}|${D}`), false);
-    assert.equal(index.has(`848908|${ST.LILLE.uic}|${D}`), false);
+    assert.deepEqual(index.get(`843924|${ST.LILLE.uic}|${D}`), { dep: '4', arr: null, recorded: false });
+    assert.deepEqual(index.get(`843924|${ST.ARRAS.uic}|${D}`), { dep: '2', arr: '2', recorded: false });
+    assert.deepEqual(index.get(`843924|${ST.AMIENS.uic}|${D}`), { dep: null, arr: '1', recorded: false });
+    // Passage sans voie : gardé (gare à venir ou desservie), voies nulles.
+    assert.deepEqual(index.get(`843924|${ST.DOUAI.uic}|${D}`), { dep: null, arr: null, recorded: false });
+    assert.deepEqual(index.get(`848908|${ST.LILLE.uic}|${D}`), { dep: null, arr: null, recorded: false });
   });
 
   test('préfixe d\'espace de noms, passages déjà effectués (RecordedCall), zéros de tête', () => {
     const feed = siriEtFeed([k44({ number: '0843924', calls: [{ uic: ST.LILLE.uic, aimedDep: at('16:53'), dep: '4', recorded: true }] })], { prefix: 'siri:' });
-    const { index } = parseEstimatedTimetable(feed);
-    assert.deepEqual(index.get(`843924|${ST.LILLE.uic}|${D}`), { dep: '4', arr: null });
+    const { index, stats } = parseEstimatedTimetable(feed);
+    assert.deepEqual(index.get(`843924|${ST.LILLE.uic}|${D}`), { dep: '4', arr: null, recorded: true });
+    assert.equal(stats.recorded, 1);
   });
 
   test('sans TrainNumberRef : numéro lu dans la référence du trajet', () => {
     const { index } = parseEstimatedTimetable(siriEtFeed([k44({ numberTag: false, datedRef: 'SNCF:VehicleJourney::843924_F:LOC' })]));
-    assert.deepEqual(index.get(`843924|${ST.LILLE.uic}|${D}`), { dep: '4', arr: null });
+    assert.deepEqual(index.get(`843924|${ST.LILLE.uic}|${D}`), { dep: '4', arr: null, recorded: false });
   });
 
   test('lecture incrémentale : document découpé n\'importe où', () => {
@@ -125,6 +129,61 @@ describe('voies dans les trajets', () => {
     const fav = svc.favoriteFromJourney(ID);
     const { occurrences } = await svc.nextOccurrences(fav, { now: NOW });
     assert.equal(occurrences[0].departurePlatform, '4');
+  });
+});
+
+describe('passages en gare (gares desservies signalées)', () => {
+  beforeEach(async () => {
+    resetSncf();
+    await provider.schedule.loadFiles(buildGtfs({ start: START, days: 30 }));
+    sncf.alerts = alertsFeed([], at('16:00'));
+  });
+  const passed = (calls) => k44({ calls: k44().calls.map((c, i) => ({ ...c, recorded: i < calls })) });
+
+  test('train parti : gares desservies, progression d\'après les passages', async () => {
+    const NOW = at('17:20');
+    sncf.tripUpdates = tripUpdatesFeed([], NOW);
+    sncf.siri = siriEtFeed([passed(2)]); // Lille et Douai desservies
+    const { journey: j, position } = await svc.getJourney(ID, { now: NOW });
+    assert.deepEqual(j.stops.map((s) => s.passed), [true, true, false, false, false]);
+    assert.deepEqual(j.passage, { departed: true, arrived: false });
+    assert.equal(j.phase, 'en_route');
+    assert.deepEqual(position.progress, { basis: 'passages', state: 'between', previous: 1, next: 2, upcoming: [2, 3, 4] });
+  });
+
+  test('heure de départ passée mais gare de départ pas encore desservie : pas encore parti', async () => {
+    const NOW = at('17:00'); // 16:53 prévu, aucun retard publié en GTFS-RT
+    sncf.tripUpdates = tripUpdatesFeed([], NOW);
+    sncf.siri = siriEtFeed([passed(0)]);
+    const { journey: j, position } = await svc.getJourney(ID, { now: NOW });
+    assert.equal(j.phase, 'upcoming');
+    assert.equal(j.passage.departed, false);
+    assert.equal(position.progress.state, 'not_departed');
+    assert.equal(position.progress.basis, 'passages');
+  });
+
+  test('gare d\'arrivée desservie : arrivé ; sans flux : horaires', async () => {
+    const NOW = at('18:05');
+    sncf.tripUpdates = tripUpdatesFeed([], NOW);
+    sncf.siri = siriEtFeed([passed(5)]);
+    const { journey: j } = await svc.getJourney(ID, { now: NOW });
+    assert.equal(j.phase, 'arrived');
+    resetSncf();
+    await provider.schedule.loadFiles(buildGtfs({ start: START, days: 30 }));
+    sncf.tripUpdates = tripUpdatesFeed([], NOW);
+    const { journey: k, position } = await svc.getJourney(ID, { now: NOW });
+    assert.equal(k.phase, 'en_route');
+    assert.deepEqual(k.passage, { departed: null, arrived: null });
+    assert.equal(position.progress.basis, 'schedule');
+  });
+
+  test('phaseWithPassage (pur)', () => {
+    assert.equal(phaseWithPassage('upcoming', { departed: true, arrived: false }), 'en_route');
+    assert.equal(phaseWithPassage('en_route', { departed: false, arrived: false }), 'upcoming');
+    assert.equal(phaseWithPassage('arrived', { departed: true, arrived: false }), 'en_route');
+    assert.equal(phaseWithPassage('arrived', { departed: true, arrived: null }), 'arrived');
+    assert.equal(phaseWithPassage('en_route', { departed: null, arrived: true }), 'arrived');
+    assert.equal(phaseWithPassage(null, { departed: true, arrived: true }), null); // supprimé
   });
 });
 

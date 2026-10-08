@@ -70,6 +70,12 @@ export function stopTime(stop, i, n) {
   };
 }
 
+const BASIS_LABEL = {
+  position: "D'après la position du train",
+  passages: "D'après les passages en gare signalés par la SNCF",
+  schedule: "Estimé d'après les horaires",
+};
+
 /**
  * Où en est le train, en texte :
  *   { title, sub, basis, basisLabel, upcoming: [{ index, name, time, inJourney }] }
@@ -109,7 +115,7 @@ export function progressInfo(journey, progress, { max = Infinity } = {}) {
     title,
     sub,
     basis: progress.basis,
-    basisLabel: progress.basis === "position" ? "D'après la position du train" : "Estimé d'après les horaires",
+    basisLabel: BASIS_LABEL[progress.basis] ?? BASIS_LABEL.schedule,
     upcoming: progress.upcoming.slice(0, max).map((i) => ({ index: i, name: name(i), time: timeOf(i), inJourney: !!stops[i].inJourney })),
   };
 }

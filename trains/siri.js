@@ -6,7 +6,8 @@
 //  - lu à la demande seulement (un train proche de son horaire est consulté), jamais par
 //    la boucle d'alerte ;
 //  - parcouru en flux, trajet par trajet (EstimatedVehicleJourney), sans garder le texte :
-//    seul un petit index « numéro de train | gare (UIC) | jour » → voies est conservé ;
+//    seul un petit index « numéro de train | gare (UIC) | jour » → { voies, passage effectué }
+//    est conservé (RecordedCall = gare déjà desservie, EstimatedCall = à venir) ;
 //  - mis en cache 2 min, appels coalescés, dernière réponse valide resservie en cas d'échec.
 //
 // Format lu de façon tolérante (préfixes d'espace de noms acceptés, champs absents ignorés) :
@@ -72,7 +73,7 @@ function trainNumbersOf(block) {
 function createParser({ inventory = false } = {}) {
   let buf = '';
   const index = new Map();
-  const stats = { journeys: 0, calls: 0, depPlatforms: 0, arrPlatforms: 0, withoutNumber: 0, tags: inventory ? new Map() : null, sample: null };
+  const stats = { journeys: 0, calls: 0, recorded: 0, depPlatforms: 0, arrPlatforms: 0, withoutNumber: 0, tags: inventory ? new Map() : null, sample: null };
 
   function journey(block) {
     stats.journeys++;
@@ -85,16 +86,17 @@ function createParser({ inventory = false } = {}) {
     const frameDate = first(T.frameDate, block);
     for (const c of block.matchAll(RE_CALL)) {
       const call = c[2];
+      const recorded = c[1] === 'RecordedCall';
       stats.calls++;
+      if (recorded) stats.recorded++;
       const dep = platformOf(first(T.depPlatform, call));
       const arr = platformOf(first(T.arrPlatform, call));
       if (dep) stats.depPlatforms++;
       if (arr) stats.arrPlatforms++;
-      if (!dep && !arr) continue;
       const uic = uicOf(first(T.stop, call));
       const day = dayOf(first(T.aimedDep, call) ?? first(T.aimedArr, call), /^\d{4}-\d{2}-\d{2}$/.test(frameDate ?? '') ? frameDate : null);
       if (!uic || !day) continue;
-      for (const n of numbers) index.set(`${n}|${uic}|${day}`, { dep, arr });
+      for (const n of numbers) index.set(`${n}|${uic}|${day}`, { dep, arr, recorded });
     }
   }
 
@@ -163,7 +165,7 @@ function createPlatformsProvider({ url, env = process.env, log = console }) {
     if (!stats.journeys) throw new Error('SIRI ET : aucun trajet lu');
     if (!inventoryLogged) {
       inventoryLogged = true;
-      log.log(`[trains] SIRI ET : ${stats.journeys} trajets, ${stats.calls} passages, voies départ ${stats.depPlatforms} / arrivée ${stats.arrPlatforms}, sans numéro ${stats.withoutNumber}, ${index.size} entrées, ${(bytes / 1e6).toFixed(1)} Mo en ${Date.now() - started} ms`);
+      log.log(`[trains] SIRI ET : ${stats.journeys} trajets, ${stats.calls} passages (${stats.recorded} effectués), voies départ ${stats.depPlatforms} / arrivée ${stats.arrPlatforms}, sans numéro ${stats.withoutNumber}, ${index.size} entrées, ${(bytes / 1e6).toFixed(1)} Mo en ${Date.now() - started} ms`);
       log.log(`[trains] SIRI ET — balises : ${inventoryText(stats)}`);
       log.log(`[trains] SIRI ET — extrait : ${stats.sample?.replace(/\s+/g, ' ')}`);
       stats.tags = null;
@@ -194,7 +196,7 @@ function createPlatformsProvider({ url, env = process.env, log = console }) {
   return {
     enabled,
     get,
-    /** Voies d'un passage : { dep, arr } (chacune null si inconnue). */
+    /** Passage d'un train en gare : { dep, arr, recorded } (voies null si inconnues), null s'il n'est pas dans le flux. */
     platform(snapshot, trainNumber, uic, day) {
       if (!snapshot || !trainNumber || !uic || !day) return null;
       return snapshot.index.get(`${normNumber(trainNumber)}|${uic}|${day}`) ?? null;

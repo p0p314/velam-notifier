@@ -75,6 +75,13 @@ describe("filtres et tris", () => {
     expect(applyFilters(list, { ...DEFAULT_FILTERS, past: "arrived" }, mid).map((x) => x.id)).toEqual(["1", "2", "3"]);
     expect(applyFilters(list, { ...DEFAULT_FILTERS, past: "left" }, mid).map((x) => x.id)).toEqual(["3"]);
     expect(activeFilterCount({ ...DEFAULT_FILTERS, past: "left" })).toBe(1);
+    // Passages signalés par la SNCF : priment sur les heures.
+    const noon = at("2026-10-07T10:00:00Z"); // bien avant le départ prévu
+    expect(journeyPhase(j({ passage: { departed: true, arrived: false } }), noon)).toBe("left");
+    expect(journeyPhase(j({ passage: { departed: true, arrived: true } }), noon)).toBe("arrived");
+    expect(journeyPhase(j({ passage: { departed: false, arrived: false } }), at("2026-10-07T15:00:00Z"))).toBe("upcoming"); // 17:00, pas encore parti
+    expect(journeyPhase(j({ passage: { departed: true, arrived: false } }), at("2026-10-07T16:20:00Z"))).toBe("left"); // arrivée prévue passée
+    expect(journeyPhase(j({ status: "cancelled", passage: { departed: false, arrived: false } }), at("2026-10-07T16:20:00Z"))).toBe("arrived");
   });
 
   test("tris : départ, arrivée, retard (supprimés en tête)", () => {
@@ -112,9 +119,10 @@ describe("recherche", () => {
 describe("alertes", () => {
   test("formulaire de trajet → API, et retour", () => {
     const form = tripAlertForm();
-    expect(tripAlertPayload(form)).toEqual({ delay_threshold: 10, on_cancel: true, on_disruption: true, days: "1,2,3,4,5,6,7" });
-    expect(tripAlertForm({ delay_threshold: null, on_cancel: true, on_disruption: false, days: "1,2" })).toEqual({ delay: "", onCancel: true, onDisruption: false, days: [1, 2] });
-    expect(alertFormError({ ...form, delay: "", onCancel: false, onDisruption: false })).toMatch(/au moins un motif/);
+    expect(tripAlertPayload(form)).toEqual({ delay_threshold: 10, on_cancel: true, on_disruption: true, on_platform: true, days: "1,2,3,4,5,6,7" });
+    expect(tripAlertForm({ delay_threshold: null, on_cancel: true, on_disruption: false, on_platform: false, days: "1,2" })).toEqual({ delay: "", onCancel: true, onDisruption: false, onPlatform: false, days: [1, 2] });
+    expect(alertFormError({ ...form, delay: "", onCancel: false, onDisruption: false, onPlatform: false })).toMatch(/au moins un motif/);
+    expect(alertFormError({ ...form, delay: "", onCancel: false, onDisruption: false })).toBeNull(); // la voie seule suffit
   });
 
   test("formulaire de ligne : créneau facultatif", () => {
@@ -126,6 +134,7 @@ describe("alertes", () => {
   test("résumés lisibles", () => {
     expect(describeTrainAlert({ scope: "trip", delay_threshold: 10, on_cancel: true, on_disruption: false, days: "1,2,3,4,5" })).toBe("Retard ≥ 10 min · suppression — lun.–ven.");
     expect(describeTrainAlert({ scope: "line", on_cancel: true, on_disruption: true, days: "6,7", time_start: "07:00", time_end: "09:00" })).toBe("Trains supprimés · perturbations — le week-end de 07:00 à 09:00");
+    expect(describeTrainAlert({ scope: "trip", delay_threshold: null, on_cancel: true, on_disruption: false, on_platform: true, days: "1,2,3,4,5,6,7" })).toBe("Suppression · voie — tous les jours");
     expect(daysLabel("1,3")).toBe("lun., mer.");
     expect(favoriteTitle({ departure_time: "16:53", origin_name: "Lille Flandres", destination_name: "Amiens" })).toBe("16:53 Lille Flandres → Amiens");
     expect(favoriteTitle({ label: "Retour", departure_time: "16:53" })).toBe("Retour");

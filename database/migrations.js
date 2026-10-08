@@ -195,6 +195,8 @@ async function migrateTrains(db) {
     UNIQUE(user_id, line_id)
   )`);
   await db.run('CREATE INDEX IF NOT EXISTS train_alerts_user_idx ON train_alerts (user_id)');
+  // v1.13 — voie de départ notifiée (annonce puis changements, flux SIRI) : activée par défaut.
+  await addColumn(db, 'train_alerts', 'on_platform', 'INTEGER NOT NULL DEFAULT 1');
   await db.run(`CREATE TABLE IF NOT EXISTS train_notifications (
     id         ${id},
     user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
