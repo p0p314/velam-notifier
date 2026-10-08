@@ -238,7 +238,8 @@ router.delete('/api/trains/favorites/:id', requireAuth, async (req, res) => {
 
 /**
  * Valide une alerte train (création, ou PATCH fusionné sur `current`).
- *  - `scope` : `trip` (favori : retard ≥ `delay_threshold` min, suppression, perturbation)
+ *  - `scope` : `trip` (favori : retard ≥ `delay_threshold` min, suppression, perturbation,
+ *    voie de départ `on_platform` — annonce puis changements)
  *    ou `line` (ligne : suppressions, perturbations ; créneau `time_start`–`time_end` facultatif) ;
  *  - au moins un déclencheur ; `days` : jours ISO (1 = lundi).
  * Renvoie { fields, errors }.
@@ -254,9 +255,9 @@ function validateTrainAlert(body, { current = null } = {}) {
   if (t === null || t === undefined || t === '') fields.delay_threshold = null;
   else if (Number.isInteger(Number(t)) && Number(t) >= 1 && Number(t) <= DELAY_MAX) fields.delay_threshold = Number(t);
   else errors.push(`delay_threshold (1 à ${DELAY_MAX} min)`);
-  for (const k of ['on_cancel', 'on_disruption']) {
+  for (const k of ['on_cancel', 'on_disruption', 'on_platform']) {
     const v = src[k];
-    if (v === undefined) fields[k] = k === 'on_cancel';
+    if (v === undefined) fields[k] = k === 'on_cancel' || (k === 'on_platform' && fields.scope === 'trip');
     else if (typeof v === 'boolean' || v === 0 || v === 1) fields[k] = !!v;
     else errors.push(k);
   }
@@ -271,6 +272,7 @@ function validateTrainAlert(body, { current = null } = {}) {
 
   if (fields.scope === 'line') {
     if (fields.delay_threshold !== null) errors.push('delay_threshold : non disponible pour une ligne');
+    fields.on_platform = false; // la voie n'a de sens que pour un train précis
     const s = src.time_start ?? null;
     const e = src.time_end ?? null;
     if ((s === null) !== (e === null)) errors.push('time_start et time_end ensemble');
@@ -281,15 +283,15 @@ function validateTrainAlert(body, { current = null } = {}) {
     fields.time_start = null;
     fields.time_end = null;
   }
-  if (fields.delay_threshold === null && !fields.on_cancel && !fields.on_disruption) {
-    errors.push('au moins un déclencheur (retard, suppression ou perturbation)');
+  if (fields.delay_threshold === null && !fields.on_cancel && !fields.on_disruption && !fields.on_platform) {
+    errors.push('au moins un déclencheur (retard, suppression, perturbation ou voie)');
   }
   return { fields, errors };
 }
 
 /**
  * POST /api/trains/alerts
- *  trajet : { scope:'trip', favorite_id | journey_id, delay_threshold?, on_cancel?, on_disruption?, days? }
+ *  trajet : { scope:'trip', favorite_id | journey_id, delay_threshold?, on_cancel?, on_disruption?, on_platform?, days? }
  *           (journey_id ⇒ le trajet est ajouté aux favoris s'il n'y est pas) ;
  *  ligne  : { scope:'line', line, on_cancel?, on_disruption?, time_start?, time_end?, days? }.
  */

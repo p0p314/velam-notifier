@@ -1004,6 +1004,9 @@ select option { background: var(--surface); color: var(--text); }
 .journey-stop.in::before { background: var(--accent); }
 .journey-stop-dot { position: relative; z-index: 1; width: 10px; height: 10px; border-radius: 50%; background: var(--surface); border: 2px solid var(--border-strong); flex-shrink: 0; }
 .journey-stop.in .journey-stop-dot { border-color: var(--accent); }
+/* Gare desservie (passage signalé par la SNCF) : point plein. */
+.journey-stop.passed .journey-stop-dot { background: var(--border-strong); }
+.journey-stop.in.passed .journey-stop-dot { background: var(--accent); }
 .journey-stop-name { flex: 1; min-width: 0; }
 .journey-stop.skipped .journey-stop-name { text-decoration: line-through; }
 .journey-stop-flag { color: var(--danger); text-decoration: none; display: inline; }
@@ -1027,7 +1030,7 @@ a.detail-cta { text-decoration: none; }
 .tm-progress-title { font-size: 16px; font-weight: 600; color: var(--text); }
 .tm-progress-sub { font-size: 13px; color: var(--text-2); }
 .tm-basis { font-size: 12px; color: var(--text-3); }
-.tm-basis.position { color: var(--ok); }
+.tm-basis.position, .tm-basis.passages { color: var(--ok); }
 .tm-position { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-2); }
 .tm-position.ok .ic { color: var(--ok); }
 .tm-position.warn .ic { color: var(--warn); }

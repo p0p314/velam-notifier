@@ -6,7 +6,7 @@ import {
 } from "../../lib/trains";
 
 /**
- * Alerte sur un trajet favori (retard ≥ seuil, suppression, perturbation) ou sur une
+ * Alerte sur un trajet favori (retard ≥ seuil, suppression, perturbation, voie) ou sur une
  * ligne (perturbations, trains supprimés, créneau facultatif). `alert` : alerte
  * existante (modification) ou null (création).
  */
@@ -51,6 +51,13 @@ export default function TrainAlertForm({ scope, alert = null, subject, onSubmit,
         <input type="checkbox" checked={form.onDisruption} onChange={(e) => set("onDisruption", e.target.checked)} />
         <span>{scope === "line" ? "Perturbation importante sur la ligne" : "Perturbation annoncée sur ce train ou sa ligne"}</span>
       </label>
+
+      {scope === "trip" && (
+        <label className="check-row">
+          <input type="checkbox" checked={form.onPlatform} onChange={(e) => set("onPlatform", e.target.checked)} />
+          <span>Voie de départ : dès qu'elle est annoncée, puis si elle change</span>
+        </label>
+      )}
 
       {scope === "line" && (
         <>

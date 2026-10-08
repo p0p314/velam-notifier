@@ -184,6 +184,16 @@ Boucle dédiée (`trains/alertLoop.js`), une passe par minute, sans chevauchemen
 | Perturbation (trajet) | `alert:<id>` | une fois par perturbation |
 | Perturbation importante (ligne) | `alert:<id>` | une fois par perturbation, même si elle dure des semaines |
 | Train de la ligne supprimé | `cancel:<jour>:<numéro>` | une fois par train |
+| Voie de départ annoncée (`on_platform`) | `platform:<jour>:=<voie>` | une fois, dès que la voie est connue |
+| Changement de voie | `platform:<jour>:<avant>><après>` | à chaque changement (4 → 6 → 4 : deux notifications) |
+
+**Voie de départ** (alerte de trajet, option `on_platform`, activée par défaut) : le flux
+SIRI (§ 13) n'est lu par la boucle que pour un train suivi qui **part dans l'heure** et
+n'est ni supprimé ni déjà parti (heure estimée, ou gare de départ signalée desservie).
+La voie notifiée est comparée à la dernière enregistrée (`lastTrainNotification`) : le flux
+ne signale pas les changements, ils sont déduits de deux lectures successives. Même
+étiquette pour l'annonce et les changements : la nouvelle voie remplace l'ancienne sur le
+téléphone. Rien sans voie connue, et rien après le départ.
 
 L'événement est **enregistré avant l'envoi** (`INSERT … ON CONFLICT DO NOTHING`) : s'il
 existe déjà, rien ne part — même si deux cycles se chevauchaient. Une variation de retard
@@ -379,7 +389,9 @@ instantané du flux.
   actuelle, avancement calculé sur les horaires) ; au-delà de 30 min : masquée.
 - Progression : avec une position fraîche, arrêt courant du flux (`current_stop_sequence`
   / `stop_id` + `current_status`), sinon projection sur la ligne des gares ; sans
-  position, horaires. Les gares supprimées (`SKIPPED`) sont retirées des prochaines gares.
+  position, **passages en gare signalés** (`stops[].passed`, flux SIRI, § 13 : dernière gare
+  desservie ; « en gare » tant que son départ estimé n'est pas passé ; `basis: 'passages'`),
+  sinon horaires. Les gares supprimées (`SKIPPED`) sont retirées des prochaines gares.
 - Le flux de positions n'est lu que pour un train **proche de son horaire** (30 min avant
   le départ → 1 h après l'arrivée) et jamais pour un train supprimé.
 
@@ -436,16 +448,30 @@ Contraintes du flux : ~25 Mo de XML **non compressé**, filtres SIRI sans effet 
 réseau à chaque lecture). D'où (`trains/siri.js`) :
 
 - **lecture à la demande** : seulement si un trajet consulté part dans les 90 min ou est
-  parti depuis moins de 3 h ; jamais pour un train lointain ni par la boucle d'alerte ;
+  parti depuis moins de 3 h ; jamais pour un train lointain ; par la boucle d'alerte,
+  seulement pour un train suivi (option voie) qui part dans l'heure (§ 6) ;
 - **lecture en flux** : le XML est parcouru trajet par trajet (`EstimatedVehicleJourney`),
-  sans être gardé ; seul un index `numéro de train | UIC | jour → { dep, arr }` reste en
-  mémoire ; préfixes d'espace de noms tolérés ;
+  sans être gardé ; seul un index `numéro de train | UIC | jour → { dep, arr, recorded }`
+  reste en mémoire ; préfixes d'espace de noms tolérés ;
 - **cache 2 min**, appels coalescés, dernière réponse valide resservie en cas d'échec
   (ignorée au-delà de 15 min) ; état dans `/api/health` (`trains[].platforms`).
 
 Rattachement : numéro de train (`TrainNumberRef`, sinon nom ou référence du trajet, zéros
 de tête retirés) + gare (code UIC extrait de `StopPointRef`) + jour de service (heure
 prévue, Europe/Paris). Une voie inconnue reste `null` : **jamais devinée**.
+
+**Passages en gare** : `RecordedCall` = gare déjà desservie, `EstimatedCall` = à venir.
+Chaque arrêt d'un trajet proche porte `passed` (true / false / null si absent du flux) et
+le trajet `passage: { departed, arrived }`. Ils corrigent `phase` (`phaseWithPassage`) :
+gare de départ desservie ⇒ parti, même si l'heure estimée n'est pas atteinte ; encore à
+venir alors que l'heure est passée (retard non publié) ⇒ pas encore parti ; gare d'arrivée
+desservie ⇒ arrivé. Ils fondent la progression (§ 12) et les points pleins de la liste
+des arrêts. Lus seulement sur des données de **moins de 5 min** (les voies : 15 min).
+Les heures des passages effectués ne sont pas reprises : le flux ne publie que l'heure
+attendue (`ExpectedDepartureTime`), pas d'heure réelle (`Actual…` absent).
+
+Mesures du premier téléchargement en production (soir, 920 trains) : 7,1 Mo, 11 130
+passages dont environ la moitié effectués, voies au départ 58 %, à l'arrivée 56 %.
 
 Diagnostic : le premier téléchargement de chaque instance journalise le nombre de trajets,
 de passages et de voies, l'inventaire des balises du flux et un extrait — pour vérifier le

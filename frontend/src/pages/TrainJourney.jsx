@@ -157,6 +157,7 @@ export default function TrainJourney() {
 
       <section className="journey-section">
         <h2 className="section-title">Arrêts</h2>
+        {j.stops.some((st) => st.passed) && <div className="form-hint">Point plein : gare déjà desservie (signalé par la SNCF).</div>}
         <ol className="journey-stops">
           {j.stops.map((st, i) => {
             const at = st.estimatedDeparture ?? st.estimatedArrival;
@@ -164,9 +165,9 @@ export default function TrainJourney() {
             const est = i === 0 ? st.estimatedDeparture : st.estimatedArrival;
             const changed = est && fmtClock(est) !== fmtClock(sched);
             return (
-              <li key={`${st.station.id}-${i}`} className={"journey-stop" + (st.inJourney ? " in" : "") + (st.skipped ? " skipped" : "")}>
+              <li key={`${st.station.id}-${i}`} className={"journey-stop" + (st.inJourney ? " in" : "") + (st.skipped ? " skipped" : "") + (st.passed ? " passed" : "")}>
                 <span className="journey-stop-dot" aria-hidden="true" />
-                <span className="journey-stop-name">{st.station.name}{st.skipped && <span className="journey-stop-flag"> · supprimé</span>}{st.platform && !st.skipped && <span className="journey-stop-platform"> · voie {st.platform}</span>}</span>
+                <span className="journey-stop-name">{st.station.name}{st.passed && <span className="sr-only"> (desservie)</span>}{st.skipped && <span className="journey-stop-flag"> · supprimé</span>}{st.platform && !st.skipped && <span className="journey-stop-platform"> · voie {st.platform}</span>}</span>
                 <span className="journey-stop-time mono">
                   <span className={changed ? "old" : ""}>{fmtClock(sched)}</span>
                   {changed && <span className="t-est"> {fmtClock(est)}</span>}

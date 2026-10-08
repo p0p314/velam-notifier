@@ -11,7 +11,7 @@ const {
   createUser, addSubscription, addTrainFavorite, createTrainAlert, setAlertsPause, recordTrainNotification, updateTrainAlert,
   setNotificationPrefs,
 } = require('../db');
-const { buildGtfs, tripUpdatesFeed, alertsFeed, area, LINES, tripId, parisTime } = require('./trainsFixture');
+const { buildGtfs, tripUpdatesFeed, alertsFeed, siriEtFeed, area, LINES, tripId, parisTime, ST } = require('./trainsFixture');
 
 const START = '2026-10-05';
 const D = '2026-10-07'; // mercredi
@@ -208,6 +208,62 @@ describe('alerte de trajet', () => {
     sncf.tripUpdates = tripUpdatesFeed([{ tripId: T1, startDate: D, stops: [{ seq: 4, arr: 900 }] }], +at('18:40'));
     sncf.alerts = alertsFeed([], +at('18:40'));
     await checkTrainAlerts(at('18:40')); // arrivée estimée 18:25 dépassée
+    assert.equal(sent.length, 0);
+  });
+});
+
+describe('voie de départ (flux SIRI)', () => {
+  /** Flux SIRI du 16:53 : voie au départ de Lille (`dep`), gare déjà desservie (`recorded`). */
+  function siriFor({ dep = null, recorded = false } = {}) {
+    provider.platforms.reset(); // nouveau flux publié (le cache des voies dure 2 min réelles)
+    sncf.siri = siriEtFeed([{ number: '843924', frameDate: D, calls: [{ uic: ST.LILLE.uic, aimedDep: parisTime(D, '16:53'), dep, recorded }] }]);
+  }
+  const bodies = () => sent.map((n) => `${n.title} | ${n.body}`);
+
+  test('voie annoncée une fois, puis à chaque changement (4 → 6 → 4)', async () => {
+    await tripAlert({ delay_threshold: null, on_cancel: false, on_disruption: false });
+    siriFor({ dep: '4' });
+    await cycle('16:30');
+    await cycle('16:31');
+    assert.deepEqual(bodies(), ['K44 16:53 Lille Flandres → Amiens · Voie 4 | Voie 4 à Lille Flandres · départ 16:53']);
+    siriFor({ dep: '6' });
+    await cycle('16:35');
+    await cycle('16:36');
+    siriFor({ dep: '4' });
+    await cycle('16:40');
+    assert.deepEqual(bodies().slice(1), [
+      'K44 16:53 Lille Flandres → Amiens · Changement de voie | Voie 6 au lieu de 4 · départ 16:53',
+      'K44 16:53 Lille Flandres → Amiens · Changement de voie | Voie 4 au lieu de 6 · départ 16:53',
+    ]);
+    // Même étiquette : sur le téléphone, la nouvelle voie remplace l'ancienne notification.
+    assert.equal(new Set(sent.map((n) => n.tag)).size, 1);
+  });
+
+  test('train en retard : heure de départ estimée dans le message', async () => {
+    await tripAlert({ delay_threshold: null, on_cancel: false, on_disruption: false });
+    siriFor({ dep: '4' });
+    await cycle('16:30', { delayMin: 12 });
+    assert.deepEqual(bodies(), ['K44 16:53 Lille Flandres → Amiens · Voie 4 | Voie 4 à Lille Flandres · départ 17:05 (+12 min)']);
+  });
+
+  test('plus d\'une heure avant le départ : flux des voies non téléchargé', async () => {
+    await tripAlert();
+    siriFor({ dep: '4' });
+    await cycle('15:30');
+    assert.equal(sncf.calls.siri, 0);
+    assert.equal(sent.length, 0);
+  });
+
+  test('voie non suivie (on_platform = false), voie inconnue ou train déjà parti : rien', async () => {
+    const a = await tripAlert({ on_platform: false });
+    siriFor({ dep: '4' });
+    await cycle('16:30');
+    assert.equal(sncf.calls.siri, 0);
+    await updateTrainAlert(userId, a.id, { on_platform: true });
+    siriFor({ dep: null });
+    await cycle('16:31');
+    siriFor({ dep: '4', recorded: true }); // gare de départ déjà desservie
+    await cycle('16:32');
     assert.equal(sent.length, 0);
   });
 });

@@ -216,11 +216,25 @@ describe('alertes', () => {
     assert.equal((await post({ scope: 'bus' })).status, 400);
     assert.equal((await post({ scope: 'trip', favorite_id: fav.id, delay_threshold: 0 })).status, 400);
     assert.equal((await post({ scope: 'trip', favorite_id: fav.id, delay_threshold: 500 })).status, 400);
-    assert.equal((await post({ scope: 'trip', favorite_id: fav.id, on_cancel: false, on_disruption: false })).status, 400);
+    assert.equal((await post({ scope: 'trip', favorite_id: fav.id, on_cancel: false, on_disruption: false, on_platform: false })).status, 400);
+    assert.equal((await post({ scope: 'trip', favorite_id: fav.id, on_platform: 'oui' })).status, 400);
     assert.equal((await post({ scope: 'trip', favorite_id: fav.id, on_cancel: true, days: '8' })).status, 400);
     assert.equal((await post({ scope: 'trip', favorite_id: 999999, on_cancel: true })).status, 404);
     assert.equal((await post({ scope: 'line', line: LINES.K44, delay_threshold: 10 })).status, 400);
     assert.equal((await post({ scope: 'line', line: LINES.K44, on_disruption: true, time_start: '07:00' })).status, 400);
+  });
+
+  test('voie de départ : activée par défaut pour un trajet, seule suffit ; jamais pour une ligne', async () => {
+    const fav = await addFavorite();
+    const only = await api.post('/api/trains/alerts', { token, body: { scope: 'trip', favorite_id: fav.id, on_cancel: false, on_disruption: false } });
+    assert.equal(only.status, 201, only.text);
+    assert.equal(only.body.alert.on_platform, true);
+    const off = await api.patch(`/api/trains/alerts/${only.body.alert.id}`, { token, body: { on_platform: false, on_cancel: true } });
+    assert.equal(off.status, 200, off.text);
+    assert.equal(off.body.alert.on_platform, false);
+    const line = await api.post('/api/trains/alerts', { token, body: { scope: 'line', line: LINES.K44, on_disruption: true, on_platform: true } });
+    assert.equal(line.status, 201, line.text);
+    assert.equal(line.body.alert.on_platform, false);
   });
 
   test('alerte de ligne : nom ambigu refusé, ligne précise acceptée, une seule par ligne', async () => {

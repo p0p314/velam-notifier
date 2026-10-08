@@ -98,10 +98,11 @@ function distToSegment(p, a, b) {
 
 /**
  * Où en est le train ? Positions dans `journey.stops` (0 = origine du trajet) :
- *   { basis: 'position' | 'schedule', state: 'not_departed' | 'at_stop' | 'between' | 'arrived',
+ *   { basis: 'position' | 'passages' | 'schedule', state: 'not_departed' | 'at_stop' | 'between' | 'arrived',
  *     previous, next, upcoming: [positions des prochaines gares desservies] }
  * - avec une position fraîche : arrêt courant du flux (stop_sequence / stop_id +
  *   current_status), sinon projection sur la ligne des gares ;
+ * - sinon, passages en gare signalés (`stops[].passed`, flux SIRI) : dernière gare desservie ;
  * - sinon : horaires (estimés si le temps réel en donne, théoriques sinon).
  * null pour un train supprimé.
  */
@@ -140,6 +141,18 @@ function journeyProgress(journey, vehicle, now = Date.now()) {
       if (!best || d < best.d) best = { i, d };
     }
     if (best) return { basis: 'position', state: 'between', previous: best.i, next: best.i + 1, upcoming: upcomingFrom(best.i + 1) };
+  }
+
+  // Passages signalés : la dernière gare desservie ; en gare tant que son départ n'est pas passé.
+  let last = -1;
+  stops.forEach((s, i) => { if (s.passed === true) last = i; });
+  // « Pas encore parti » seulement si l'origine elle-même est signalée à venir.
+  if (last !== -1 || stops[0].passed === false) {
+    if (last === -1) return { basis: 'passages', state: 'not_departed', previous: null, next: 0, upcoming: upcomingFrom(0) };
+    if (last === n - 1) return { basis: 'passages', state: 'arrived', previous: n - 1, next: null, upcoming: [] };
+    const upcoming = upcomingFrom(last + 1);
+    const state = last > 0 && now < depAt(last) ? 'at_stop' : 'between';
+    return { basis: 'passages', state, previous: last, next: upcoming[0] ?? null, upcoming };
   }
 
   // Horaires (estimés si disponibles).

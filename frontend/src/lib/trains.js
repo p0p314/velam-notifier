@@ -122,14 +122,18 @@ export const initialFilters = () => ({ ...DEFAULT_FILTERS, past: loadPastFilter(
 /**
  * Phase d'un train à l'instant `now` (recalculée côté client : la liste reste affichée
  * entre deux actualisations) : « upcoming », « left » (parti) ou « arrived ». Heures
- * estimées si connues ; un train supprimé suit ses heures prévues.
+ * estimées si connues ; un train supprimé suit ses heures prévues. Les passages en gare
+ * signalés par la SNCF (`passage`, trains proches) priment sur les heures.
  */
 export function journeyPhase(j, now = Date.now()) {
   const live = j.status !== "cancelled";
+  const p = live ? j.passage ?? {} : {};
+  if (p.arrived === true) return "arrived";
+  if (p.departed === false) return "upcoming";
   const dep = Date.parse((live && j.estimatedDeparture) || j.scheduledDeparture);
   const arr = Date.parse((live && j.estimatedArrival) || j.scheduledArrival);
-  if (now >= arr) return "arrived";
-  return now >= dep ? "left" : "upcoming";
+  if (now >= arr && p.arrived !== false) return "arrived";
+  return now >= dep || p.departed === true ? "left" : "upcoming";
 }
 
 const maxDelay = (j) => Math.max(j.departureDelay ?? 0, j.arrivalDelay ?? 0);
@@ -243,6 +247,7 @@ export function tripAlertForm(alert = null) {
     delay: alert ? (alert.delay_threshold ? String(alert.delay_threshold) : "") : "10",
     onCancel: alert ? !!alert.on_cancel : true,
     onDisruption: alert ? !!alert.on_disruption : true,
+    onPlatform: alert ? !!alert.on_platform : true,
     days: alert ? alert.days.split(",").map(Number) : [...ALL_DAYS],
   };
 }
@@ -261,7 +266,7 @@ export function lineAlertForm(alert = null) {
 
 /** Erreur bloquante du formulaire, ou null. */
 export function alertFormError(form, scope = "trip") {
-  const any = (scope === "trip" && form.delay) || form.onCancel || form.onDisruption;
+  const any = (scope === "trip" && (form.delay || form.onPlatform)) || form.onCancel || form.onDisruption;
   if (!any) return "Choisissez au moins un motif d'alerte.";
   if (!form.days.length) return "Choisissez au moins un jour.";
   if (scope === "line" && form.window && (!form.timeStart || !form.timeEnd)) return "Indiquez le début et la fin du créneau.";
@@ -273,6 +278,7 @@ export function tripAlertPayload(form) {
     delay_threshold: form.delay ? Number(form.delay) : null,
     on_cancel: form.onCancel,
     on_disruption: form.onDisruption,
+    on_platform: form.onPlatform,
     days: form.days.join(","),
   };
 }
@@ -304,6 +310,7 @@ export function describeTrainAlert(a) {
   if (a.delay_threshold) parts.push(`retard ≥ ${a.delay_threshold} min`);
   if (a.on_cancel) parts.push(a.scope === "line" ? "trains supprimés" : "suppression");
   if (a.on_disruption) parts.push("perturbations");
+  if (a.on_platform && a.scope !== "line") parts.push("voie");
   const what = parts.join(" · ");
   const when = a.scope === "line" && a.time_start ? ` de ${a.time_start} à ${a.time_end}` : "";
   return `${what.charAt(0).toUpperCase()}${what.slice(1)} — ${daysLabel(a.days)}${when}`;

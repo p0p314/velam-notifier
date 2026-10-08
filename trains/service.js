@@ -18,6 +18,21 @@ const MAX_RESULTS = 300;
 // Au-delà, les données temps réel sont trop anciennes pour être affichées comme telles.
 const RT_MAX_AGE_MS = 10 * 60_000;
 
+/**
+ * Phase d'un trajet corrigée par les passages en gare signalés (SIRI) : la gare d'arrivée
+ * desservie ⇒ arrivé ; la gare de départ desservie ⇒ parti ; l'une ou l'autre encore à
+ * venir alors que l'heure estimée est passée ⇒ pas encore parti / pas encore arrivé.
+ * Un train supprimé (phase null) n'est jamais modifié.
+ */
+function phaseWithPassage(phase, { departed, arrived }) {
+  if (!phase) return phase;
+  if (arrived === true) return 'arrived';
+  if (departed === false) return 'upcoming';
+  if (phase === 'upcoming' && departed === true) return 'en_route';
+  if (phase === 'arrived' && arrived === false) return 'en_route';
+  return phase;
+}
+
 function createTrainService(provider, env = process.env) {
   const { schedule, realtime, conventions } = provider;
   const rtMaxAge = Number(env.TRAINS_RT_MAX_AGE_MS) || RT_MAX_AGE_MS;
@@ -76,6 +91,7 @@ function createTrainService(provider, env = process.env) {
   const PLATFORM_AHEAD_MS = 90 * 60_000;
   const PLATFORM_BEHIND_MS = 3 * 3600_000;
   const PLATFORM_MAX_AGE_MS = 15 * 60_000;
+  const PASSAGE_MAX_AGE_MS = 5 * 60_000;
   const platforms = provider.platforms ?? null;
 
   const nearNow = (j, now) => {
@@ -85,32 +101,45 @@ function createTrainService(provider, env = process.env) {
   };
 
   /**
-   * Ajoute les voies connues : `departurePlatform` / `arrivalPlatform` du trajet et
-   * `platform` de chaque arrêt (null si inconnue — souvent : voie pas encore attribuée).
+   * Ajoute ce que publie le flux SIRI pour les trains proches de leur horaire :
+   *  - voies : `departurePlatform` / `arrivalPlatform` du trajet, `platform` de chaque arrêt
+   *    (null si inconnue — souvent : voie pas encore attribuée) ;
+   *  - passages : `passed` de chaque arrêt (true = gare desservie, false = à venir, null =
+   *    inconnu), `passage` du trajet { departed, arrived } (null chacun si inconnu), et
+   *    `phase` corrigée en conséquence (un train réellement parti, ou pas encore parti
+   *    malgré l'heure estimée). Passages lus seulement sur des données de moins de 5 min.
    * Aucun téléchargement si aucun trajet n'est proche de son horaire.
    */
   async function withPlatforms(index, journeys, { now = Date.now(), force = false } = {}) {
     for (const j of journeys) {
       j.departurePlatform = null;
       j.arrivalPlatform = null;
-      for (const st of j.stops ?? []) st.platform = null;
+      j.passage = { departed: null, arrived: null };
+      for (const st of j.stops ?? []) { st.platform = null; st.passed = null; }
     }
     if (!platforms?.enabled || !journeys.some((j) => nearNow(j, now))) return;
     const snap = await platforms.get({ force });
     if (!snap?.fetchedAt || now - snap.fetchedAt > PLATFORM_MAX_AGE_MS || !snap.index.size) return;
+    const passages = now - snap.fetchedAt <= PASSAGE_MAX_AGE_MS;
     const code = (station) => conventions.stationCode?.(station.id) ?? null;
     const day = (iso) => (iso ? localParts(Date.parse(iso), index.tz).date : null);
     const at = (j, station, iso) => platforms.platform(snap, j.trainNumber, code(station), day(iso));
     for (const j of journeys) {
       if (!nearNow(j, now) || !j.trainNumber) continue;
-      j.departurePlatform = at(j, j.departureStation, j.scheduledDeparture)?.dep ?? null;
-      j.arrivalPlatform = at(j, j.arrivalStation, j.scheduledArrival)?.arr ?? null;
+      const d = at(j, j.departureStation, j.scheduledDeparture);
+      const a = at(j, j.arrivalStation, j.scheduledArrival);
+      j.departurePlatform = d?.dep ?? null;
+      j.arrivalPlatform = a?.arr ?? null;
       const stops = j.stops ?? [];
       stops.forEach((st, i) => {
         if (st.skipped) return;
         const p = at(j, st.station, st.scheduledDeparture ?? st.scheduledArrival);
         st.platform = (i === stops.length - 1 ? p?.arr ?? p?.dep : p?.dep ?? p?.arr) ?? null;
+        if (passages && p) st.passed = !!p.recorded;
       });
+      if (!passages) continue;
+      j.passage = { departed: d ? !!d.recorded : null, arrived: a ? !!a.recorded : null };
+      j.phase = phaseWithPassage(j.phase, j.passage);
     }
   }
 
@@ -490,8 +519,8 @@ function createTrainService(provider, env = process.env) {
     provider,
     requireIndex, today, realtimeContext,
     searchStations, searchLines, resolveLines, searchJourneys, getJourney, getJourneyRoute, locateJourney,
-    matchFavorite, nextOccurrences, favoriteFromJourney, lineForAlert,
+    matchFavorite, nextOccurrences, favoriteFromJourney, lineForAlert, withPlatforms,
   };
 }
 
-module.exports = { createTrainService, TrainsError };
+module.exports = { createTrainService, TrainsError, phaseWithPassage };

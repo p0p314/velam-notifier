@@ -153,8 +153,11 @@ Modules CommonJS, séparation nette des responsabilités :
   cache disque, **index mémoire compact** — rien en base ; `realtime.js` = RealtimeTrainProvider :
   GTFS-RT décodé avec le `.proto` officiel via `protobufjs`, cache TTL 2 min / 5 min, dernière
   réponse valide ; `zip.js`, `csv.js`, `time.js`), `merge.js` (fusion pure → `TrainJourney`),
-  `siri.js` (**voies** : flux SIRI Lite Estimated Timetable ~25 Mo, lu à la demande pour les
-  trains proches, parcouru en flux → index `numéro|UIC|jour`, cache 2 min ; `TRAINS_SIRI_ET_URL=off`),
+  `siri.js` (**voies et passages** : flux SIRI Lite Estimated Timetable ~25 Mo, lu à la demande pour les
+  trains proches, parcouru en flux → index `numéro|UIC|jour` → `{ dep, arr, recorded }`, cache 2 min ;
+  `TRAINS_SIRI_ET_URL=off` ; `stops[].passed` / `passage` corrigent `phase` et la progression ;
+  la boucle d'alerte notifie la **voie de départ** (`train_alerts.on_platform`, annonce puis
+  changements, train suivi partant dans l'heure)),
   `service.js` (recherche, détail, rapprochement des favoris, `withPlatforms`), `route.js` (TrainRoute : tracé
   `shapes.txt`, sinon gare en gare — la SNCF n'en publie pas ; cache par version), `vehicles.js`
   (GTFS-RT VehiclePosition facultatif — la SNCF n'en publie pas — : rattachement au trajet par

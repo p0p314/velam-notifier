@@ -9,6 +9,19 @@ Toutes les évolutions notables de VéloPulse. Format inspiré de
 section `## [x.y.z] - AAAA-MM-JJ` ci-dessous, puis merger sur `main` : le workflow
 `release.yml` crée le tag `vx.y.z` et la release GitHub à partir de cette section.
 
+## [1.13.0] - 2026-10-08
+
+### Trains : voies et passages en gare
+- **Notification de voie** : pour un train suivi par une alerte, « Voie 4 » dès que la voie
+  de départ est annoncée, puis « Changement de voie : 6 au lieu de 4 » si elle change.
+  Option « Voie de départ » du formulaire d'alerte, activée par défaut (alertes existantes
+  comprises), désactivable. Rien après le départ du train.
+- **Passages en gare** : les gares déjà desservies signalées par la SNCF apparaissent en
+  point plein dans la liste des arrêts. « Parti », « Arrivé », la prochaine gare et le
+  filtre « Trains passés » s'appuient sur ces passages plutôt que sur les seules heures :
+  un train en retard non encore annoncé n'est plus affiché parti trop tôt.
+- Source : flux SNCF « SIRI Lite », lu seulement pour les trains proches de leur départ.
+
 ## [1.12.0] - 2026-10-07
 
 ### Trains
