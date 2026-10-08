@@ -9,6 +9,19 @@ Toutes les évolutions notables de VéloPulse. Format inspiré de
 section `## [x.y.z] - AAAA-MM-JJ` ci-dessous, puis merger sur `main` : le workflow
 `release.yml` crée le tag `vx.y.z` et la release GitHub à partir de cette section.
 
+## [1.16.0] - 2026-10-08
+
+### Notifications de retard des trains
+- **Plus courtes** : « +12 min » en titre, « Nouvelle heure 17:05 · retard estimé 12 min »
+  dans le texte (« Nouvelle arrivée » une fois le train parti).
+- **Retard réduit** : nouvelle notification quand le retard baisse d'au moins 5 minutes
+  (par exemple de 10 à 5 min), en plus de l'aggravation et du retour à l'heure.
+- Pas de rafale si le retard oscille autour du seuil (11, 9, 11 min…) : une seule notification.
+
+### Sécurité
+- Limites de tentatives par adresse IP : l'adresse réelle du client est désormais lue derrière
+  les 3 intermédiaires de l'hébergement (Cloudflare et Render).
+
 ## [1.15.0] - 2026-10-08
 
 ### Paramètres

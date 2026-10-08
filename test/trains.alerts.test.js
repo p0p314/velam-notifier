@@ -6,7 +6,7 @@ const { test, describe, beforeEach } = require('node:test');
 const assert = require('node:assert/strict');
 const webpush = require('web-push');
 const { getProvider } = require('../trains');
-const { checkTrainAlerts, tripEvents, cleanAlertText } = require('../trains/alertLoop');
+const { checkTrainAlerts, tripEvents, delayEvent, cleanAlertText } = require('../trains/alertLoop');
 const {
   createUser, addSubscription, addTrainFavorite, createTrainAlert, setAlertsPause, recordTrainNotification, updateTrainAlert,
   setNotificationPrefs,
@@ -97,7 +97,7 @@ describe('alerte de trajet', () => {
     await cycle('16:30', { delayMin: 12 });
     assert.equal(sent.length, 1);
     assert.equal(sent[0].title, 'K44 16:53 Lille Flandres → Amiens · +12 min');
-    assert.equal(sent[0].body, 'Départ 17:05 au lieu de 16:53 · arrivée 18:22');
+    assert.equal(sent[0].body, 'Nouvelle heure 17:05 · retard estimé 12 min');
     assert.match(sent[0].url, /\/trains\/trajet\?id=/);
     await cycle('16:31', { delayMin: 12 });
     await cycle('16:32', { delayMin: 14 }); // même palier (10-19 min)
@@ -119,7 +119,32 @@ describe('alerte de trajet', () => {
     await cycle('16:41', { delayMin: 0 });
     assert.equal(sent.length, 2);
     assert.equal(sent[1].title, "K44 16:53 Lille Flandres → Amiens · À l'heure");
-    assert.equal(sent[1].body, 'Retard rattrapé : départ 16:54, arrivée 18:11');
+    assert.equal(sent[1].body, 'Retard rattrapé · nouvelle heure 16:54');
+  });
+
+  test('retard qui baisse d\'au moins 5 min (10 → 5) : « retard réduit », puis plus rien tant qu\'il ne change pas', async () => {
+    await tripAlert();
+    await cycle('16:30', { delayMin: 10 });
+    await cycle('16:35', { delayMin: 5 });
+    await cycle('16:36', { delayMin: 5 });
+    assert.equal(sent.length, 2);
+    assert.equal(sent[1].title, 'K44 16:53 Lille Flandres → Amiens · Retard réduit');
+    assert.equal(sent[1].body, 'Nouvelle heure 16:58 · retard estimé 5 min (au lieu de 10)');
+  });
+
+  test('variations autour du seuil (11 ↔ 9 min) : pas de notification à chaque cycle', async () => {
+    await tripAlert();
+    for (const [t, m] of [['16:30', 11], ['16:31', 9], ['16:32', 11], ['16:33', 9], ['16:34', 12]]) await cycle(t, { delayMin: m });
+    assert.equal(sent.length, 1);
+  });
+
+  test('retard réduit puis de nouveau aggravé : nouvelle notification ; puis rattrapé', async () => {
+    await tripAlert();
+    await cycle('16:30', { delayMin: 25 });
+    await cycle('16:35', { delayMin: 8 });
+    await cycle('16:40', { delayMin: 14 });
+    await cycle('16:45', { delayMin: 1 });
+    assert.deepEqual(sent.map((n) => n.title.split(' · ').pop()), ['+25 min', 'Retard réduit', '+14 min', "À l'heure"]);
   });
 
   test('« retard résorbé » jamais envoyé sans retard notifié auparavant', async () => {
@@ -318,12 +343,24 @@ describe('idempotence', () => {
     assert.equal(await recordTrainNotification(userId, a.id, 'cancel:2026-10-08', 'cancel'), true);
   });
 
-  test('tripEvents (pur) : clés d\'événement datées et par palier', () => {
-    const base = { serviceDate: D, realtime: true, status: 'delayed', alerts: [], departureDelay: 23, arrivalDelay: 25 };
-    const ev = tripEvents({ delay_threshold: 10, on_cancel: true, on_disruption: false }, base);
-    assert.deepEqual(ev.map((e) => e.key), [`delay:${D}:20`]);
-    const theoretical = tripEvents({ delay_threshold: 10, on_cancel: true }, { ...base, realtime: false, status: 'scheduled' });
-    assert.deepEqual(theoretical, []);
+  test('delayEvent (pur) : clés datées et numérotées, paliers, baisse, retour à l\'heure', () => {
+    const a = { delay_threshold: 10 };
+    const j = (delay) => ({ serviceDate: D, realtime: true, status: 'delayed', alerts: [], departureDelay: delay - 2, arrivalDelay: delay });
+    const p = `delay:${D}:`;
+    assert.deepEqual(delayEvent(a, j(25), null), { type: 'delay', key: `${p}1:25`, delay: 25 });
+    assert.equal(delayEvent(a, j(7), null), null);                         // sous le seuil, rien notifié avant
+    assert.equal(delayEvent(a, j(28), `${p}1:25`), null);                  // même palier (20)
+    assert.equal(delayEvent(a, j(31), `${p}1:25`).type, 'delay');          // palier 30
+    assert.deepEqual(delayEvent(a, j(19), `${p}2:25`), { type: 'delay_improved', key: `${p}3:19`, delay: 19, previous: 25 });
+    assert.equal(delayEvent(a, j(22), `${p}2:25`), null);                  // baisse de 3 min seulement
+    assert.equal(delayEvent(a, j(2), `${p}2:25`).type, 'delay_cleared');
+    assert.equal(delayEvent(a, j(2), `${p}3:1`), null);                    // déjà à l'heure
+    assert.equal(delayEvent(a, j(12), `${p}3:1`).type, 'delay');          // de nouveau en retard
+    assert.equal(delayEvent(a, j(25), `${p}20`), null);                    // clé d'avant la v1.16 : palier 20 déjà notifié
+    assert.equal(delayEvent(a, j(31), `${p}20`).key, `${p}1:31`);
+    assert.equal(delayEvent({ delay_threshold: null }, j(25), null), null);
+    assert.equal(delayEvent(a, { ...j(25), realtime: false }, null), null);
+    assert.deepEqual(tripEvents({ delay_threshold: 10, on_cancel: true }, { ...j(25), realtime: false, status: 'scheduled' }), []);
   });
 });
 

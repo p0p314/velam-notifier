@@ -23,6 +23,7 @@ const POLL_MS = 60_000;
 const LEAD_MIN = 180;            // surveillance à partir de 3 h avant le départ prévu
 const DELAY_STEP_MIN = 10;       // nouvelle notification par palier de 10 min de retard en plus
 const DELAY_CLEARED_MAX_MIN = 2; // « retard résorbé » quand il retombe à 2 min ou moins
+const DELAY_IMPROVED_MIN = 5;    // « retard réduit » quand il baisse d'au moins 5 min depuis la dernière notification
 const PURGE_AFTER_MS = 45 * 86_400_000;
 const PLATFORM_AHEAD_MIN = 60;   // voie cherchée dans l'heure qui précède le départ (portée du flux SIRI)
 
@@ -30,10 +31,48 @@ const PLATFORM_AHEAD_MIN = 60;   // voie cherchée dans l'heure qui précède le
 
 const daysOf = (alert) => String(alert.days || '1,2,3,4,5,6,7').split(',').map(Number);
 
+const delayPrefix = (j) => `delay:${j.serviceDate}:`;
+const delayLevel = (delay, threshold) => (delay >= threshold
+  ? threshold + DELAY_STEP_MIN * Math.floor((delay - threshold) / DELAY_STEP_MIN) : null);
+
+/** Dernier retard notifié pour ce jour, d'après sa clé : { seq, delay } (null si aucun). */
+function lastDelayOf(lastKey, prefix) {
+  if (!lastKey?.startsWith(prefix)) return null;
+  const rest = lastKey.slice(prefix.length);
+  const m = /^(\d+):(-?\d+)$/.exec(rest);
+  if (m) return { seq: Number(m[1]), delay: Number(m[2]) };
+  return /^\d+$/.test(rest) ? { seq: 0, delay: Number(rest) } : null; // clé d'avant la v1.16 : le palier
+}
+
 /**
- * Événements d'une alerte de trajet pour un TrainJourney (avec temps réel).
- * Renvoie [{ type, key, requires? }] ; `requires` : préfixe d'un événement qui doit
- * avoir été notifié auparavant (« retard résorbé » seulement après un retard notifié).
+ * Événement « retard » d'une alerte de trajet, d'après le dernier retard notifié ce jour-là
+ * (`lastKey`, clé « delay:<jour>:<n°>:<minutes> ») :
+ *  - « delay » : seuil atteint (1re fois), ou palier de 10 min franchi vers le haut ;
+ *  - « delay_improved » : baisse d'au moins 5 min depuis la dernière notification ;
+ *  - « delay_cleared » : retour à 2 min ou moins.
+ * Rien sans retard notifié auparavant (hors 1re atteinte du seuil) : une petite variation
+ * autour du seuil (9 ↔ 11 min) ne produit donc pas une notification à chaque cycle.
+ */
+function delayEvent(alert, j, lastKey) {
+  const threshold = alert.delay_threshold;
+  if (threshold === null || threshold === undefined || !j.realtime || j.status === 'cancelled') return null;
+  const delay = Math.max(j.departureDelay ?? -Infinity, j.arrivalDelay ?? -Infinity);
+  if (delay === -Infinity) return null;
+  const prefix = delayPrefix(j);
+  const last = lastDelayOf(lastKey, prefix);
+  const key = `${prefix}${(last?.seq ?? 0) + 1}:${delay}`;
+  if (!last) return delay >= threshold ? { type: 'delay', key, delay } : null;
+  if (delay <= DELAY_CLEARED_MAX_MIN) return last.delay > DELAY_CLEARED_MAX_MIN ? { type: 'delay_cleared', key, delay } : null;
+  const level = delayLevel(delay, threshold);
+  const lastLevel = delayLevel(last.delay, threshold);
+  if (level !== null && (lastLevel === null || level > lastLevel)) return { type: 'delay', key, delay };
+  if (last.delay - delay >= DELAY_IMPROVED_MIN) return { type: 'delay_improved', key, delay, previous: last.delay };
+  return null;
+}
+
+/**
+ * Événements d'une alerte de trajet pour un TrainJourney (avec temps réel), hors retard
+ * (voir delayEvent) : suppression, perturbations. Renvoie [{ type, key }].
  */
 function tripEvents(alert, j) {
   const events = [];
@@ -42,15 +81,6 @@ function tripEvents(alert, j) {
   if (j.status === 'cancelled') {
     if (alert.on_cancel) events.push({ type: 'cancel', key: `cancel:${d}` });
     return events;
-  }
-  if (alert.delay_threshold !== null && alert.delay_threshold !== undefined && j.realtime) {
-    const delay = Math.max(j.departureDelay ?? -Infinity, j.arrivalDelay ?? -Infinity);
-    if (delay >= alert.delay_threshold) {
-      const level = alert.delay_threshold + DELAY_STEP_MIN * Math.floor((delay - alert.delay_threshold) / DELAY_STEP_MIN);
-      events.push({ type: 'delay', key: `delay:${d}:${level}`, delay });
-    } else if (delay !== -Infinity && delay <= DELAY_CLEARED_MAX_MIN) {
-      events.push({ type: 'delay_cleared', key: `delay_cleared:${d}`, requires: `delay:${d}:` });
-    }
   }
   if (alert.on_disruption) {
     for (const a of j.alerts) {
@@ -157,6 +187,13 @@ function tripTitle(j, tz) {
   return `${j.lineName ? `${j.lineName} ` : ''}${hm(j.scheduledDeparture, tz)} ${j.departureStation.name} → ${j.arrivalStation.name}`;
 }
 
+/** « Nouvelle heure 17:05 » (départ), ou « Nouvelle arrivée 18:22 » une fois le train parti. */
+function newTime(j, tz) {
+  return j.phase === 'en_route'
+    ? `Nouvelle arrivée ${hm(j.estimatedArrival ?? j.scheduledArrival, tz)}`
+    : `Nouvelle heure ${hm(j.estimatedDeparture ?? j.scheduledDeparture, tz)}`;
+}
+
 /**
  * Notification d'alerte de trajet. Titre : le train + son état en un mot
  * (« K44 16:53 Lille Flandres → Amiens · +12 min ») ; corps : les faits utiles,
@@ -174,13 +211,14 @@ function tripMessage(event, j, tz) {
         body: join(j.cancellation?.partial ? j.cancellation.reason : 'Ce train ne circulera pas.', ...(j.alerts ?? []).slice(0, 1).map((a) => cleanAlertText(a))),
         url, tag,
       };
-    case 'delay': {
-      const dep = j.estimatedDeparture
-        ? `Départ ${hm(j.estimatedDeparture, tz)} au lieu de ${hm(j.scheduledDeparture, tz)}`
-        : null;
-      const arr = j.estimatedArrival ? `arrivée ${hm(j.estimatedArrival, tz)}` : null;
-      return { title: `${what} · +${event.delay} min`, body: [dep, arr].filter(Boolean).join(' · ') || 'Retard annoncé', url, tag };
-    }
+    case 'delay':
+      return { title: `${what} · +${event.delay} min`, body: `${newTime(j, tz)} · retard estimé ${event.delay} min`, url, tag };
+    case 'delay_improved':
+      return {
+        title: `${what} · Retard réduit`,
+        body: `${newTime(j, tz)} · retard estimé ${event.delay} min (au lieu de ${event.previous})`,
+        url, tag,
+      };
     case 'platform':
     case 'platform_change': {
       const dep = `départ ${hm(j.estimatedDeparture ?? j.scheduledDeparture, tz)}${j.departureDelay > 0 ? ` (+${j.departureDelay} min)` : ''}`;
@@ -189,11 +227,7 @@ function tripMessage(event, j, tz) {
         : { title: `${what} · Changement de voie`, body: `Voie ${event.platform} au lieu de ${event.previous} · ${dep}`, url, tag: `${tag}-voie` };
     }
     case 'delay_cleared':
-      return {
-        title: `${what} · À l'heure`,
-        body: `Retard rattrapé : départ ${hm(j.estimatedDeparture ?? j.scheduledDeparture, tz)}, arrivée ${hm(j.estimatedArrival ?? j.scheduledArrival, tz)}`,
-        url, tag,
-      };
+      return { title: `${what} · À l'heure`, body: `Retard rattrapé · ${newTime(j, tz).toLowerCase()}`, url, tag };
     default:
       return {
         title: `${what} · Perturbé`,
@@ -295,6 +329,8 @@ async function checkTrainAlerts(date = new Date()) {
         // Un train arrivé (heure estimée dépassée) ne génère plus rien.
         if (j.phase === 'arrived') continue;
         for (const ev of tripEvents(a, j)) await emit(a, ev, tripMessage(ev, j, index.tz), now);
+        const delayEv = delayEvent(a, j, await lastTrainNotification(a.id, delayPrefix(j)));
+        if (delayEv) await emit(a, delayEv, tripMessage(delayEv, j, index.tz), now);
         if (a.on_platform && platformDue(j, now)) {
           await service.withPlatforms(index, [j], { now });
           const ev = platformEvent(j, await lastTrainNotification(a.id, platformPrefix(j)));
@@ -360,5 +396,5 @@ function getTrainLoopHealth(nowMs = Date.now()) {
 
 module.exports = {
   checkTrainAlerts, runTrainCycle, startTrainAlerts, stopTrainAlerts, getTrainLoopHealth,
-  tripEvents, lineEvents, lineAlertDue, tripMessage, lineMessage, cleanAlertText, platformEvent, platformDue, LEAD_MIN,
+  tripEvents, delayEvent, lineEvents, lineAlertDue, tripMessage, lineMessage, cleanAlertText, platformEvent, platformDue, LEAD_MIN,
 };

@@ -178,8 +178,15 @@ Boucle dédiée (`trains/alertLoop.js`), une passe par minute, sans chevauchemen
 
 | Événement | Clé | Notifié |
 |---|---|---|
-| Retard ≥ seuil | `delay:<jour>:<palier>` (palier = seuil, seuil+10, seuil+20…) | à la 1re atteinte puis à chaque aggravation de 10 min |
-| Retard résorbé (≤ 2 min) | `delay_cleared:<jour>` | une fois, seulement si un retard a été notifié |
+| Retard ≥ seuil | `delay:<jour>:<n°>:<minutes>` | à la 1re atteinte, puis à chaque palier de 10 min franchi vers le haut (seuil, seuil+10…) |
+| Retard réduit | `delay:<jour>:<n°>:<minutes>` | baisse d'au moins 5 min depuis la dernière notification de retard |
+| Retard rattrapé (≤ 2 min) | `delay:<jour>:<n°>:<minutes>` | une fois, seulement si un retard a été notifié |
+
+Retard (`delayEvent`, pur) : chaque notification est comparée à la **dernière notifiée ce jour-là**
+(`lastTrainNotification`, numéro croissant dans la clé), d'où une hystérésis naturelle — une
+variation autour du seuil (11 ↔ 9 min) ne notifie qu'une fois ; 10 → 5 min notifie « retard réduit » ;
+25 → 8 → 14 notifie de nouveau l'aggravation. Texte : « +12 min » / « Nouvelle heure 17:05 · retard
+estimé 12 min » (« Nouvelle arrivée » une fois le train parti).
 | Train supprimé (ou arrêt de départ/arrivée supprimé) | `cancel:<jour>` | une fois |
 | Perturbation (trajet) | `alert:<id>` | une fois par perturbation |
 | Perturbation importante (ligne) | `alert:<id>` | une fois par perturbation, même si elle dure des semaines |
