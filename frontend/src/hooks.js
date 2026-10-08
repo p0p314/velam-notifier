@@ -134,7 +134,7 @@ export function useOnline() {
  * Fraîcheur des disponibilités (`stale` + `staleReason`) :
  *  - "upstream" : le serveur répond mais le flux Vélam ne lui répond plus, répond mal,
  *    ou ses données ont ≥ 5 min (verdict `stale` calculé par le serveur) ;
- *  - "server"   : le serveur VéloPulse lui-même est injoignable (ou l'appareil hors ligne).
+ *  - "server"   : le serveur Mox lui-même est injoignable (ou l'appareil hors ligne).
  * `lastUpd` = date des données Vélam affichées. Les dernières données connues
  * (mémoire ou cache hors ligne) restent affichées dans tous les cas.
  */

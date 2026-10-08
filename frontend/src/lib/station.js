@@ -19,7 +19,7 @@ export const STALE_AFTER_MIN = 5;
 /**
  * Texte du bandeau de fraîcheur.
  *  - offline  : l'appareil n'a plus de réseau ;
- *  - server   : le serveur VéloPulse ne répond pas ;
+ *  - server   : le serveur Mox ne répond pas ;
  *  - upstream : le flux Vélam ne répond plus / répond mal à notre serveur,
  *               ou ses données ont au moins STALE_AFTER_MIN minutes.
  * `when` : heure lisible des données affichées (null si aucune).

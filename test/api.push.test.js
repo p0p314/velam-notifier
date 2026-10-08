@@ -90,7 +90,7 @@ test('notification de test : envoyée à tous les appareils du compte', async ()
   const res = await api.post('/api/push/test', { token });
   assert.equal(res.status, 200);
   assert.deepEqual({ sent: res.body.sent, total: res.body.total }, { sent: 2, total: 2 });
-  assert.equal(pushed[0].payload.title, 'VéloPulse — Notification de test');
+  assert.equal(pushed[0].payload.title, 'Mox — Notification de test');
   assert.match(pushed[0].payload.url, /\/alertes$/);
 });
 

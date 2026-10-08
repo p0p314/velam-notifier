@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="72 72 368 368">
+  <!-- Badge de notification (Android, une seule couleur) : la marque seule, recadrée. -->
+  <path d="M261.2 106.1 A150 150 0 1 1 123.6 185.6" fill="none" stroke="#FFFFFF" stroke-width="46" stroke-linecap="round"/>
+  <path d="M256 256 L214 183.3" fill="none" stroke="#FFFFFF" stroke-width="30" stroke-linecap="round"/>
+  <circle cx="256" cy="256" r="24" fill="#FFFFFF"/>
+  <circle cx="181" cy="126.1" r="34" fill="#FFFFFF"/>
+</svg>

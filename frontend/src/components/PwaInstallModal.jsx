@@ -48,7 +48,7 @@ export default function PwaInstallModal({ isOpen, onClose, isInstalled }) {
             </div>
           </div>
           <div style={{ fontSize: 13, color: "var(--text-3)", marginBottom: 16 }}>
-            Ajoutez VéloPulse à votre écran d'accueil pour des notifications fiables et un accès rapide.
+            Ajoutez Mox à votre écran d'accueil pour des notifications fiables et un accès rapide.
           </div>
 
           <div className="seg" role="tablist" aria-label="Plateforme" style={{ marginBottom: 18 }}>

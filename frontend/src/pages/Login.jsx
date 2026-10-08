@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth";
 import { syncPush } from "../push";
 import Logo from "../components/Logo";
+import Wordmark from "../components/Wordmark";
 import Icon from "../components/Icon";
 import { APP_VERSION } from "../theme";
 
@@ -86,7 +87,7 @@ export default function Login() {
       <div className="auth-inner">
         <header className="auth-hero">
           <span className="auth-logo"><Logo /></span>
-          <h1 className="auth-name">VéloPulse</h1>
+          <h1 className="auth-name"><Wordmark /></h1>
           <p className="auth-sub">Vos vélos en libre-service et vos trains, en temps réel</p>
           <ul className="auth-features">
             {FEATURES.map((f) => (

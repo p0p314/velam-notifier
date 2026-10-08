@@ -6,7 +6,9 @@ cette convention (commentaires, libellés UI, messages d'erreur).
 
 ## Projet
 
-**VéloPulse** — PWA de suivi des stations de vélos en libre-service **Vélam** (Amiens).
+**Mox** (v1.14, ex-Mox ; latin « bientôt, dans un instant ») — PWA de suivi des vélos en
+libre-service (Vélam à Amiens et 16 autres villes Cyclocity) et des trains SNCF, en temps réel, avec alertes.
+Identité : voir « Marque » plus bas.
 
 - **Backend** : proxy Express (CommonJS) au-dessus du flux **GBFS v2** de Cyclocity, avec
   auth JWT, favoris par utilisateur et **alertes de disponibilité** notifiées par **Web Push**.
@@ -19,7 +21,8 @@ cette convention (commentaires, libellés UI, messages d'erreur).
   Base **PostgreSQL** (Supabase) en prod, **SQLite** en dev.
 
 > Le dépôt s'appelle encore `velam-notifier` (et l'URL Render est
-> `velam-notifier.onrender.com`), mais le produit est **VéloPulse** (`package.json` → `velopulse`).
+> `velam-notifier.onrender.com`), mais le produit est **Mox** (`package.json` → `mox`). Les clés `localStorage` gardent leur
+> préfixe historique `velopulse-…` (réglages des appareils conservés) : ne pas les renommer.
 
 ## Commandes
 
@@ -268,12 +271,12 @@ par plateforme). Ils sont synchronisés **une fois par jour** par **GitHub Actio
 
 Les notifications pointent toujours vers une URL `https://` (`/open`, page HTML servie par
 `routes/rentalApps.js`) car le Service Worker iOS refuse les schemes custom (`velam://`).
-`/open` (publique, `noindex`) s'affiche **dans la fenêtre de VéloPulse** : elle ne doit jamais y
+`/open` (publique, `noindex`) s'affiche **dans la fenêtre de Mox** : elle ne doit jamais y
 charger un site externe (une PWA installée n'a ni barre d'adresse ni retour). « Ouvrir l'app
 Vélam » pointe vers le **site officiel** (`OFFICIAL_WEB`, `target="_blank"`, sur appui) : le deep
 link `discovery_uri` du flux ne s'ouvrait pas depuis une notification, il n'est plus proposé
 (toujours synchronisé en base). Le store est choisi **selon la plateforme de l'appareil** ;
-« Retour à VéloPulse » toujours présent ; si l'utilisateur a quitté la page, revenir ramène à `/`. Script externe `/open.js`
+« Retour à Mox » toujours présent ; si l'utilisateur a quitté la page, revenir ramène à `/`. Script externe `/open.js`
 (la CSP `script-src 'self'` bloque l'inline), liens passés en `data-*` échappés.
 
 ### Sécurité (backend)
@@ -463,6 +466,20 @@ Helpers de migration portables : `columnsOf` / `addColumn` / `dropColumn` (`migr
   automatique d'iOS au focus d'un champ < 16 px est **conservé**, et l'échelle est remise à 1
   en quittant les champs (`maximum-scale=1` posé 300 ms sur le viewport). Ne pas remettre
   `user-scalable=no` / `maximum-scale` en dur dans `index.html` : cela supprimerait ce zoom.
+
+## Marque (Mox)
+
+Nom latin « mox » = « bientôt, dans un instant ». Logo : cadran (grille 512, rayon 150, trait 46)
+ouvert de 64° à 11 h, aiguille unique pointée vers le **point de signal** posé sur le cercle.
+Sources SVG dans `frontend/public/` : `mox-icon.svg` (icône de l'app, fond bleu `#2C66E0`, point
+ambre `#FFB020`), `mox-icon-maskable.svg` (plein cadre, Android / Apple), `mox-icon-light.svg` /
+`mox-icon-dark.svg` (en-tête selon le thème — `components/Logo.jsx`), `mox-badge.svg` (badge de
+notification monochrome), `favicon.svg` (≤ 24 px : sans aiguille, trait 64). Les PNG
+(`icon-*`, `icon-maskable-*`, `apple-touch-icon`, `badge-72`, `favicon-32`) en sont **exportés** par
+`scripts/export-icons.cjs` (Playwright) : ne pas les retoucher à la main ; incrémenter `CACHE` dans
+`sw.js` après un nouvel export. Logotype « mox » : `components/Wordmark.jsx` (Geist 800, « o » =
+cadran complet aux proportions de la police, point posé dans l'anneau), couleurs `--brand-mark` /
+`--brand-signal` (`styles.css`) ; l'orange est réservé au logo, jamais à l'interface.
 
 ## Déploiement
 

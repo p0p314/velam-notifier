@@ -20,7 +20,7 @@ const PORT = process.env.PORT ?? 3001;
   startTrainAlerts();
 
   app.listen(PORT, '0.0.0.0', () => {
-    console.log(`\nVéloPulse server → port ${PORT} (0.0.0.0)`);
+    console.log(`\nMox server → port ${PORT} (0.0.0.0)`);
     console.log(`  DB : ${process.env.DATABASE_URL ? 'PostgreSQL' : 'SQLite (dev)'}`);
     console.log(`  CORS autorisé pour : ${ALLOWED_ORIGINS.join(', ')}`);
     console.log(`  GET  /health                — anti-sleep`);

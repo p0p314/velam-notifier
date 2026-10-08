@@ -77,12 +77,12 @@ const attr = (v) => String(v ?? '')
 /**
  * GET /open — cible des notifications push vers l'app Vélam.
  * Page HTML autonome (hors SPA React) servie same-origin pour satisfaire
- * iOS clients.openWindow(). Elle s'ouvre dans la fenêtre de VéloPulse : elle ne doit
+ * iOS clients.openWindow(). Elle s'ouvre dans la fenêtre de Mox : elle ne doit
  * donc JAMAIS y charger un site externe (une PWA installée n'a ni barre d'adresse
  * ni bouton retour). « Ouvrir l'app Vélam » pointe vers le site officiel, ouvert hors de
  * l'app (nouvel onglet) : c'est le lien qui fonctionne depuis une notification (le deep
  * link `discovery_uri` du flux ne s'ouvrait pas). Elle propose aussi le store et garde
- * toujours « Retour à VéloPulse ».
+ * toujours « Retour à Mox ».
  * Script externe (/open.js) : la CSP (script-src 'self') bloque les scripts inline ;
  * les liens lui sont passés en attributs data-*.
  */
@@ -111,7 +111,7 @@ router.get('/open', async (req, res) => {
   <meta charset="utf-8">
   <meta name="robots" content="noindex">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Ouvrir ${name} — VéloPulse</title>
+  <title>Ouvrir ${name} — Mox</title>
   <style>
     :root{--bg:#FBFBFA;--text:#1B1B19;--muted:#6B6B66;--accent:#2C66E0;--on:#fff;--line:#E3E3DE;--surface:#fff}
     @media (prefers-color-scheme: dark){:root{--bg:#0B0B0D;--text:#ECECEE;--muted:#9A9AA2;--accent:#4F8BFF;--line:#2A2A2E;--surface:#151517}}
@@ -133,7 +133,7 @@ router.get('/open', async (req, res) => {
   <div class="actions">
     <a class="btn primary" id="open-app" href="${attr(web)}" target="_blank" rel="noopener">Ouvrir l'app ${name}</a>
     <a class="btn" id="store" href="#" hidden target="_blank" rel="noopener">Installer l'app ${name}</a>
-    <a class="btn back" id="back" href="/">← Retour à VéloPulse</a>
+    <a class="btn back" id="back" href="/">← Retour à Mox</a>
   </div>
   <script src="/open.js"></script>
 </body>
@@ -143,7 +143,7 @@ router.get('/open', async (req, res) => {
 /**
  * Script de /open : choisit le store selon le système de l'appareil. Rien ne s'ouvre
  * automatiquement ; si l'utilisateur quitte la page (Vélam ou store ouvert), revenir
- * dans VéloPulse ramène à l'application. Jamais de page externe dans la fenêtre.
+ * dans Mox ramène à l'application. Jamais de page externe dans la fenêtre.
  */
 const OPEN_JS = `(function () {
   var data = document.body.dataset;
@@ -156,7 +156,7 @@ const OPEN_JS = `(function () {
 
   if (store) { storeLink.href = store; storeLink.hidden = false; }
 
-  // Retour dans VéloPulse : remplace /open dans l'historique.
+  // Retour dans Mox : remplace /open dans l'historique.
   function backToApp() { window.location.replace("/"); }
   document.getElementById("back").addEventListener("click", function (e) { e.preventDefault(); backToApp(); });
 

@@ -1,6 +1,6 @@
 # Module Trains
 
-Recherche et suivi de trains (TER, Intercités, TGV) dans VéloPulse : horaires du jour,
+Recherche et suivi de trains (TER, Intercités, TGV) dans Mox : horaires du jour,
 retards et suppressions en temps réel, trajets favoris, alertes par notification.
 Exemple de référence : **Lille Flandres ↔ Amiens, ligne K44** — mais rien n'est propre à
 cette ligne : tout fonctionne pour n'importe quelle ligne présente dans les données.
@@ -47,7 +47,7 @@ Toutes les données viennent du **Point d'Accès National** (transport.data.gouv
 ## 2. Architecture
 
 ```
-frontend ──► backend VéloPulse ──► cache / fournisseurs ──► SNCF (PAN)
+frontend ──► backend Mox ──► cache / fournisseurs ──► SNCF (PAN)
              (routes/trains.js)     (trains/)
 ```
 
