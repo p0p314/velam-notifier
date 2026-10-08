@@ -86,6 +86,7 @@ Backend (voir `render.yaml`) :
 - `TRUST_PROXY` — nombre de proxys devant l'app (défaut 1) : position de l'IP client dans
   `X-Forwarded-For`, base des limites par IP. À régler d'après la ligne `[proxy]` journalisée au
   premier appel `/api` après chaque démarrage (nombre d'entrées, jamais les adresses).
+  **Prod Render : 3** (Cloudflare + Render ; mesuré le 08/10/2026).
 - `PUSH_TIMEOUT_MS` — délai maximal d'un envoi Web Push (défaut 10 000).
 - `TRAINS_*` — module Trains, toutes facultatives (sources SNCF publiques, sans clé) :
   `TRAINS_ENABLED=0` (désactive), `TRAINS_GTFS_URL`, `TRAINS_RT_TRIP_UPDATES_URL`,

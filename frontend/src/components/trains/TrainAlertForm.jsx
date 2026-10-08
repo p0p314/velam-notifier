@@ -40,7 +40,7 @@ export default function TrainAlertForm({ scope, alert = null, subject, onSubmit,
         <div className="train-field">
           <span className="form-label">Me prévenir en cas de retard</span>
           <Seg label="Seuil de retard" options={DELAY_OPTIONS} value={form.delay} onChange={(v) => set("delay", v)} />
-          {form.delay && <span className="form-hint">Puis à chaque aggravation de 10 min, et quand le retard se résorbe.</span>}
+          {form.delay && <span className="form-hint">Puis à chaque aggravation de 10 min, quand il baisse d'au moins 5 min et quand il est rattrapé.</span>}
         </div>
       )}
       <label className="check-row">
