@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════════════════════════════════════════════
-   VéloPulse — Design system (modes clair / sombre)
+   Mox — Design system (modes clair / sombre)
    Tous les composants consomment ces variables. Bascule via
    document.documentElement.dataset.theme = 'light' | 'dark'.
    ═══════════════════════════════════════════════════════════════════════════ */
@@ -21,6 +21,9 @@
   --text-4: #92928B;
 
   --accent: #2C66E0;
+  /* Marque Mox : cadran (bleu de l'app) et point de signal, réservés au logo. */
+  --brand-mark: #2C66E0;
+  --brand-signal: #E8590C;
   --accent-hover: #275CCB;
   --on-accent: #FFFFFF;
   --neutral-bar: #8A8A82;
@@ -56,6 +59,8 @@
   --text-4: #6A6A72;
 
   --accent: #4F8BFF;
+  --brand-mark: #73A2FF;
+  --brand-signal: #FF8A4C;
   --accent-hover: #5E96FF;
   --on-accent: #FFFFFF;
   --neutral-bar: #71717A;
@@ -135,7 +140,7 @@ select option { background: var(--surface); color: var(--text); }
 .auth-inner { width: 100%; max-width: 380px; display: flex; flex-direction: column; gap: 22px; }
 .auth-hero { text-align: center; }
 .auth-logo { width: 56px; height: 56px; border-radius: 14px; overflow: hidden; display: inline-flex; align-items: center; justify-content: center; margin-bottom: 12px; }
-.auth-name { margin: 0; font-size: 26px; font-weight: 700; letter-spacing: -.02em; color: var(--text); }
+.auth-name { margin: 0; font-size: 40px; color: var(--text); }
 .auth-sub { margin: 4px 0 0; font-size: 14px; color: var(--text-2); }
 .auth-features { list-style: none; margin: 18px auto 0; padding: 0; display: inline-flex; flex-direction: column; gap: 8px; text-align: left; }
 .auth-features li { display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--text-2); }
@@ -174,7 +179,11 @@ select option { background: var(--surface); color: var(--text); }
 }
 /* Le logo apporte sa propre plaque/arrondi → l'image remplit le conteneur. */
 .app-logo { width: 100%; height: 100%; display: block; object-fit: contain; }
-.brand-name { font-size: 16px; font-weight: 600; letter-spacing: -.015em; color: var(--text); }
+.brand-name { font-size: 22px; color: var(--text); }
+/* Logotype « mox » (components/Wordmark) : Geist 800 resserré, « o » = cadran du logo, posé
+   sur la ligne de base avec le léger débord d'une lettre ronde. */
+.wordmark { display: inline-block; white-space: nowrap; font-family: var(--font-ui); font-weight: 800; letter-spacing: -.045em; line-height: 1; }
+.wordmark-o { display: inline-block; width: .53em; height: .53em; vertical-align: -.013em; margin-inline: .035em .03em; overflow: visible; }
 .brand-sub { font-size: 11px; color: var(--text-3); }
 
 .icon-btn {

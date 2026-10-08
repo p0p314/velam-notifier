@@ -478,7 +478,7 @@ describe('résumé à heure fixe', () => {
     await createAlert(userId, alertBase);
     await setStatus({ 1: { bikes: 0 }, 2: { bikes: 5 } });
     await checkAlerts(WED_0830);
-    assert.deepEqual(sent.map((n) => n.payload.title).sort(), ['⚠️ VéloPulse — Gare', '📊 Maison — vélos']);
+    assert.deepEqual(sent.map((n) => n.payload.title).sort(), ['⚠️ Mox — Gare', '📊 Maison — vélos']);
   });
 });
 

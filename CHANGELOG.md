@@ -9,6 +9,19 @@ Toutes les évolutions notables de VéloPulse. Format inspiré de
 section `## [x.y.z] - AAAA-MM-JJ` ci-dessous, puis merger sur `main` : le workflow
 `release.yml` crée le tag `vx.y.z` et la release GitHub à partir de cette section.
 
+## [1.14.0] - 2026-10-08
+
+### VéloPulse devient Mox
+- **Nouveau nom** : *Mox*, « bientôt, dans un instant » en latin. L'app ne parle plus
+  seulement de vélos : elle suit aussi les trains et prévient juste avant que ça arrive.
+- **Nouveau logo** : un cadran presque refermé, l'aiguille pointée vers le point orange
+  (le train ou le vélo qui arrive). Nouvelle icône d'app sur fond bleu, version adaptée
+  aux icônes Android et Apple, badge de notification et icône d'onglet.
+- **Logotype « mox »** dans l'en-tête et sur la page de connexion.
+- Rien d'autre ne change : comptes, favoris, alertes et réglages de vos appareils sont
+  conservés. Sur iPhone, une app déjà installée peut garder l'ancien nom et l'ancienne
+  icône : la supprimer de l'écran d'accueil puis la réinstaller depuis Safari.
+
 ## [1.13.0] - 2026-10-08
 
 ### Trains : voies et passages en gare

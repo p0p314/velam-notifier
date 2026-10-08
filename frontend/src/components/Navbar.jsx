@@ -3,6 +3,7 @@ import { useAuth } from "../auth";
 import { usePwaInstall } from "./PwaInstallContext";
 import Icon from "./Icon";
 import Logo from "./Logo";
+import Wordmark from "./Wordmark";
 import { APP_VERSION } from "../theme";
 
 // Top navbar — affichée uniquement en desktop (> 768px) via CSS.
@@ -16,7 +17,7 @@ export default function Navbar() {
     <header className="top-navbar">
       <div className="brand">
         <span className="brand-logo"><Logo /></span>
-        <span className="brand-name">VéloPulse</span>
+        <Wordmark className="brand-name" />
         <span className="app-version">v{APP_VERSION}</span>
       </div>
       <nav className="nav-links">

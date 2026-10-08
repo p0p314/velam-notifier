@@ -309,7 +309,7 @@ router.get('/api/auth/export', requireAuth, async (req, res) => {
     res.json({
       ok: true,
       export: {
-        application: 'VéloPulse',
+        application: 'Mox',
         exported_at: new Date().toISOString(),
         account: {
           username: user.username, created_at: user.created_at, alerts_paused_until: pausedUntil,

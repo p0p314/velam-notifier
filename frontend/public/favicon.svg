@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <!-- Mox, version petite taille (≤ 24 px) : sans aiguille, trait 64, ouverture 80°. -->
+  <rect width="512" height="512" rx="115" fill="#2C66E0"/>
+  <path d="M282 108.3 A150 150 0 1 1 115 204.7" fill="none" stroke="#FFFFFF" stroke-width="64" stroke-linecap="round"/>
+  <circle cx="181" cy="126.1" r="40" fill="#FFB020"/>
+</svg>

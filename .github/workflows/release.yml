@@ -57,5 +57,5 @@ jobs:
             exit 1
           fi
 
-          gh release create "$TAG" --target "$GITHUB_SHA" --title "VéloPulse $TAG" --notes-file notes.md
+          gh release create "$TAG" --target "$GITHUB_SHA" --title "Mox $TAG" --notes-file notes.md
           echo "Release $TAG publiée."

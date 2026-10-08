@@ -220,9 +220,9 @@ describe("Paramètres — Préférences", () => {
       </MemoryRouter>
     );
     fireEvent.click(screen.getByRole("button", { name: "Revoir le tutoriel" }));
-    expect(screen.getByText("Bienvenue sur VéloPulse")).toBeTruthy();
+    expect(screen.getByText("Bienvenue sur Mox")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Arrêter le tutoriel" }));
-    expect(screen.queryByText("Bienvenue sur VéloPulse")).toBeNull();
+    expect(screen.queryByText("Bienvenue sur Mox")).toBeNull();
     expect(fetch.mock.calls.some(([u]) => String(u).endsWith("/api/auth/tutorial"))).toBe(false);
   });
 });
@@ -281,7 +281,7 @@ describe("Paramètres — Notifications", () => {
     push.state = "denied";
     mockApi();
     renderAt(NOTIF);
-    expect(screen.getByText(/bloquées pour VéloPulse/)).toBeTruthy();
+    expect(screen.getByText(/bloquées pour Mox/)).toBeTruthy();
     expect(screen.queryByRole("switch", { name: "Notifications sur cet appareil" })).toBeNull();
   });
 
@@ -306,9 +306,9 @@ describe("Paramètres — partage de l'application", () => {
     navigator.share = vi.fn(async () => {});
     mockApi();
     renderAt("/compte");
-    fireEvent.click(screen.getByRole("button", { name: "Partager VéloPulse" }));
+    fireEvent.click(screen.getByRole("button", { name: "Partager Mox" }));
     await waitFor(() => expect(navigator.share).toHaveBeenCalledTimes(1));
-    expect(navigator.share.mock.calls[0][0]).toMatchObject({ title: "VéloPulse", url: window.location.origin });
+    expect(navigator.share.mock.calls[0][0]).toMatchObject({ title: "Mox", url: window.location.origin });
     delete navigator.share;
   });
 
@@ -317,7 +317,7 @@ describe("Paramètres — partage de l'application", () => {
     Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });
     mockApi();
     renderAt("/compte");
-    fireEvent.click(screen.getByRole("button", { name: "Partager VéloPulse" }));
+    fireEvent.click(screen.getByRole("button", { name: "Partager Mox" }));
     expect(await screen.findByText("Lien copié dans le presse-papiers.")).toBeTruthy();
     expect(writeText).toHaveBeenCalledWith(window.location.origin);
   });
@@ -327,7 +327,7 @@ describe("Confidentialité et inscription", () => {
   test("la page liste les données, les droits et les tiers (Mapbox)", () => {
     mockApi();
     renderAt("/confidentialite");
-    expect(screen.getByText("Ce que VéloPulse enregistre")).toBeTruthy();
+    expect(screen.getByText("Ce que Mox enregistre")).toBeTruthy();
     expect(screen.getByText("Vos droits")).toBeTruthy();
     expect(screen.getByText("Mapbox")).toBeTruthy();
   });

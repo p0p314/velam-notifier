@@ -1,11 +1,12 @@
 {
-  "name": "VéloPulse",
-  "short_name": "VéloPulse",
+  "name": "Mox",
+  "short_name": "Mox",
+  "description": "Vos trains et vos vélos en libre-service, en temps réel, avec des alertes au bon moment.",
   "id": "/",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#ffffff",
-  "theme_color": "#0066cc",
+  "theme_color": "#2C66E0",
   "icons": [
     {
       "src": "/icon-192.png",
@@ -14,19 +15,19 @@
       "purpose": "any"
     },
     {
-      "src": "/icon-192.png",
-      "sizes": "192x192",
-      "type": "image/png",
-      "purpose": "maskable"
-    },
-    {
       "src": "/icon-512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/icon-512.png",
+      "src": "/icon-maskable-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/icon-maskable-512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "maskable"
@@ -49,7 +50,7 @@
     {
       "name": "Carte des stations",
       "short_name": "Carte",
-      "description": "Stations Vélam autour de vous",
+      "description": "Stations de vélos autour de vous",
       "url": "/velos?vue=carte",
       "icons": [
         {

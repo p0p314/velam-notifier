@@ -7,11 +7,12 @@
 export const TUTORIAL_SLIDES = [
   {
     icon: "bike",
-    title: "Bienvenue sur VéloPulse",
+    title: "Bienvenue sur Mox",
     text: "Vos trajets du quotidien en temps réel : les vélos en libre-service de votre ville (Vélam à Amiens, Vélo'v à Lyon…) et les trains SNCF.",
     points: [
       "Vélos mécaniques, électriques et places libres, station par station",
       "Horaires, retards et suppressions des TER, Intercités et TGV",
+      "Mox veut dire « bientôt » en latin : l'app vous prévient juste avant que ça arrive",
     ],
   },
   {

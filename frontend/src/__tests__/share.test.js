@@ -11,7 +11,7 @@ describe("shareApp", () => {
   test("feuille de partage du système", async () => {
     navigator.share = vi.fn(async () => {});
     expect(await shareApp(URL_APP)).toBe("shared");
-    expect(navigator.share).toHaveBeenCalledWith(expect.objectContaining({ url: URL_APP, title: "VéloPulse" }));
+    expect(navigator.share).toHaveBeenCalledWith(expect.objectContaining({ url: URL_APP, title: "Mox" }));
   });
 
   test("partage annulé par l'utilisateur : rien n'est copié", async () => {

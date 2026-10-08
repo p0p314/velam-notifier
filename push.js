@@ -225,20 +225,20 @@ function buildMessage(alerte, ev) {
   const what = describeDeparture(alerte, n);
   if (alerte.comparison === 'at_least') {
     return {
-      title: `✅ VéloPulse — ${alerte.station_name}`,
+      title: `✅ Mox — ${alerte.station_name}`,
       body: alerte.target === 'docks' ? `${what} · C'est le moment` : `${what} disponible${n > 1 ? 's' : ''} · C'est le moment`,
     };
   }
   if (n === 0) {
     return {
-      title: `⚠️ VéloPulse — ${alerte.station_name}`,
+      title: `⚠️ Mox — ${alerte.station_name}`,
       body: alerte.target === 'docks'
         ? 'Plus aucune place libre pour déposer un vélo'
         : `Plus aucun ${bikesLabel(alerte.bike_type, 1).replace(/^1 /, '')} disponible`,
     };
   }
   return {
-    title: `VéloPulse — ${alerte.station_name}`,
+    title: `Mox — ${alerte.station_name}`,
     body: alerte.target === 'docks'
       ? `Plus que ${what} · Pensez à une autre station`
       : `${what} disponible${n > 1 ? 's' : ''} · Réservez vite`,
@@ -330,7 +330,7 @@ function buildSummaryPayload(alerte, statusMap) {
 function buildTestPayload() {
   const base = (process.env.APP_URL || 'https://velam-notifier.onrender.com').replace(/\/$/, '');
   return {
-    title: 'VéloPulse — Notification de test',
+    title: 'Mox — Notification de test',
     body:  'Les notifications fonctionnent sur cet appareil 👍',
     url:   `${base}/alertes`,
     stationId: 'test',

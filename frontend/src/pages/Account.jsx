@@ -411,7 +411,7 @@ function NotificationsTab() {
 
   const hint = {
     unsupported: "Ce navigateur ne permet pas les notifications. Sur iPhone, installez d'abord l'application sur l'écran d'accueil.",
-    denied: "Les notifications sont bloquées pour VéloPulse dans les réglages de votre appareil ou du navigateur : autorisez-les là-bas pour pouvoir les activer.",
+    denied: "Les notifications sont bloquées pour Mox dans les réglages de votre appareil ou du navigateur : autorisez-les là-bas pour pouvoir les activer.",
     default: "Les notifications n'ont pas encore été activées sur cet appareil.",
     off: "Vous avez désactivé les notifications sur cet appareil : vos alertes ne s'y afficheront pas (vos autres appareils les reçoivent toujours).",
     on: "Vos alertes et résumés s'affichent sur cet appareil.",
@@ -474,7 +474,7 @@ function ShareButton() {
   return (
     <div className="share-block">
       <button type="button" className="cancel-btn share-btn" onClick={share}>
-        <Icon name="share" size={16} /> Partager VéloPulse
+        <Icon name="share" size={16} /> Partager Mox
       </button>
       {msg && <div className="form-ok" role="status">{msg}</div>}
     </div>

@@ -191,7 +191,7 @@ describe('rental_apps et cron', () => {
     const res = await api.get('/open');
     assert.match(res.text, /data-store-ios=""/);
     assert.match(res.text, /id="open-app" href="https:\/\/velam\.amiens\.fr/);
-    assert.match(res.text, /Retour à VéloPulse/);
+    assert.match(res.text, /Retour à Mox/);
   });
 
   test('/open.js : store par plateforme, aucune ouverture automatique ni page externe', async () => {

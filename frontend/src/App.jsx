@@ -9,6 +9,7 @@ import BottomNav from "./components/BottomNav";
 import Navbar from "./components/Navbar";
 import Icon from "./components/Icon";
 import Logo from "./components/Logo";
+import Wordmark from "./components/Wordmark";
 import Login from "./pages/Login";
 import MyTrips from "./pages/MyTrips";
 import Bikes from "./pages/Bikes";
@@ -66,7 +67,7 @@ export function Layout() {
       <header className="app-header">
         <div className="brand">
           <span className="brand-logo"><Logo /></span>
-          <span className="brand-name">VéloPulse</span>
+          <Wordmark className="brand-name" />
         </div>
         <div style={{ display: "flex", gap: 8 }}>
           {!isInstalled && (

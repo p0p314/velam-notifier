@@ -11,8 +11,9 @@ export default function Privacy() {
   return (
     <div className="legal-page">
       <h1 className="page-title">Confidentialité et mentions légales</h1>
+      <p>Mox s'appelait VéloPulse jusqu'à la version 1.13 : seul le nom a changé, vos données et vos réglages sont les mêmes.</p>
 
-      <h2>Ce que VéloPulse enregistre</h2>
+      <h2>Ce que Mox enregistre</h2>
       <ul>
         <li><b>Votre compte</b> : un nom d'utilisateur et votre mot de passe <b>chiffré</b> (haché, jamais lisible), si vous avez déjà vu le tutoriel de présentation, les fonctionnalités que vous utilisez (vélos, trains), la ville de vos vélos et les types d'alertes que vous souhaitez recevoir. Aucune adresse e-mail, aucun nom réel.</li>
         <li><b>Vos favoris</b> et le nom que vous leur donnez, ainsi que leur ordre.</li>
@@ -23,7 +24,7 @@ export default function Privacy() {
       </ul>
       <p>Sur votre appareil, l'application garde votre session, vos préférences (thème, type de vélo, page d'ouverture) et la dernière liste des stations et de vos favoris, pour fonctionner hors ligne. Votre position n'est utilisée que sur votre appareil (tri par proximité, « Autour de moi ») et n'est <b>jamais envoyée</b> au serveur.</p>
 
-      <h2>Ce que VéloPulse ne fait pas</h2>
+      <h2>Ce que Mox ne fait pas</h2>
       <ul>
         <li>Aucune publicité, aucun traceur, aucune mesure d'audience.</li>
         <li>Aucune revente ni cession de données.</li>
@@ -38,7 +39,7 @@ export default function Privacy() {
       <p>Depuis <b>Paramètres › Sécurité</b>, vous pouvez changer votre mot de passe, voir et déconnecter vos appareils, <b>télécharger toutes vos données</b> (droit d'accès et à la portabilité) et <b>supprimer votre compte</b> : toutes vos données (favoris, alertes, appareils) sont alors effacées immédiatement et définitivement.</p>
 
       <h2>Hébergement et sources</h2>
-      <p>Application hébergée par Render ; base de données hébergée par Supabase. Les disponibilités des vélos proviennent des flux ouverts (GBFS) des services de vélos en libre-service exploités par Cyclocity (JCDecaux) — Vélam à Amiens, ou la ville que vous choisissez — interrogés par le serveur de VéloPulse. Les horaires et l'information en temps réel des trains proviennent des données ouvertes de SNCF Voyageurs (transport.data.gouv.fr, licence ODbL), interrogées par le serveur de VéloPulse : votre appareil ne contacte jamais la SNCF et aucune donnée vous concernant ne lui est transmise. VéloPulse est un projet indépendant, non affilié à ces services, à JCDecaux ni aux collectivités.</p>
+      <p>Application hébergée par Render ; base de données hébergée par Supabase. Les disponibilités des vélos proviennent des flux ouverts (GBFS) des services de vélos en libre-service exploités par Cyclocity (JCDecaux) — Vélam à Amiens, ou la ville que vous choisissez — interrogés par le serveur de Mox. Les horaires et l'information en temps réel des trains proviennent des données ouvertes de SNCF Voyageurs (transport.data.gouv.fr, licence ODbL), interrogées par le serveur de Mox : votre appareil ne contacte jamais la SNCF et aucune donnée vous concernant ne lui est transmise. Mox est un projet indépendant, non affilié à ces services, à JCDecaux ni aux collectivités.</p>
       <p className="legal-todo">Éditeur et contact : à compléter par le responsable du service.</p>
 
       <p><Link to={isAuthenticated ? "/compte" : "/login"}>← Retour</Link></p>
