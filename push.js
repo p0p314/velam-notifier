@@ -152,6 +152,9 @@ function fallbacksFor(alert, ev, stations, statusMap) {
 // ── Envoi ──────────────────────────────────────────────────────────────────────
 
 /** Envoie à tous les appareils du compte. Renvoie { total, sent }. */
+// Délai maximal d'un envoi : au-delà, l'envoi échoue (l'appareil est ignoré pour ce cycle).
+const PUSH_TIMEOUT_MS = Number(process.env.PUSH_TIMEOUT_MS) || 10_000;
+
 async function sendToUser(userId, payload) {
   const subs = await getSubscriptionsByUser(userId);
   let sent = 0;
@@ -160,6 +163,7 @@ async function sendToUser(userId, payload) {
       await webpush.sendNotification(JSON.parse(row.subscription), JSON.stringify(payload), {
         urgency: 'high', // réveille l'appareil même en veille
         TTL: 300,        // notif valable 5 min max (au-delà, vélos périmés → abandon)
+        timeout: PUSH_TIMEOUT_MS, // un service qui ne répond pas ne doit jamais figer la boucle d'alerte
       });
       sent++;
     } catch (err) {

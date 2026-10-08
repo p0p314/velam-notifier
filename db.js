@@ -307,12 +307,21 @@ async function reorderFavorites(userId, stationIds) {
  * si l'appareil était lié à un autre compte, il passe au compte courant, ce qui
  * évite qu'un téléphone partagé reçoive les alertes de plusieurs utilisateurs.
  */
+const PUSH_DEVICES_MAX = 10; // appareils par compte : au-delà, les plus anciens sont retirés
+
 async function addSubscription(userId, subscription, sessionId = null) {
   const { id } = await dbc.run(
     `INSERT INTO push_subscriptions (user_id, endpoint, subscription, session_id) VALUES (?, ?, ?, ?)
      ON CONFLICT(endpoint) DO UPDATE SET user_id = excluded.user_id, subscription = excluded.subscription,
        session_id = excluded.session_id`,
     [userId, subscription.endpoint, JSON.stringify(subscription), sessionId]
+  );
+  // Plafond : on garde l'appareil courant et les plus récents (les vieux appareils
+  // oubliés ne sont sinon retirés qu'au premier envoi refusé).
+  await dbc.run(
+    `DELETE FROM push_subscriptions WHERE user_id = ? AND endpoint <> ? AND id NOT IN (
+       SELECT id FROM (SELECT id FROM push_subscriptions WHERE user_id = ? AND endpoint <> ? ORDER BY id DESC LIMIT ?) AS recents)`,
+    [userId, subscription.endpoint, userId, subscription.endpoint, PUSH_DEVICES_MAX - 1]
   );
   return id;
 }
@@ -376,6 +385,12 @@ function alertValue(key, value) {
 }
 
 /** Alertes de l'utilisateur ; si `today` est fourni, masque les ponctuelles expirées. */
+/** Nombre d'alertes vélos d'un compte (plafond à la création). */
+async function countUserAlerts(userId) {
+  const row = await dbc.get('SELECT COUNT(*) AS n FROM alerts WHERE user_id = ?', [userId]);
+  return Number(row?.n ?? 0);
+}
+
 async function getAlerts(userId, today = null) {
   const { rows } = await dbc.query(
     `SELECT * FROM alerts WHERE user_id = ? AND (valid_on IS NULL OR valid_on >= ?)
@@ -701,6 +716,7 @@ async function purgeTrainNotifications(before) {
 }
 
 module.exports = {
+  countUserAlerts, PUSH_DEVICES_MAX,
   initialize,
   // stations
   countStations, getStations, getStationCities, saveStations, replaceStations,

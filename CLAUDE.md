@@ -6,7 +6,7 @@ cette convention (commentaires, libellés UI, messages d'erreur).
 
 ## Projet
 
-**Mox** (v1.14, ex-Mox ; latin « bientôt, dans un instant ») — PWA de suivi des vélos en
+**Mox** (v1.14, ex-VéloPulse ; latin « bientôt, dans un instant ») — PWA de suivi des vélos en
 libre-service (Vélam à Amiens et 16 autres villes Cyclocity) et des trains SNCF, en temps réel, avec alertes.
 Identité : voir « Marque » plus bas.
 
@@ -83,6 +83,10 @@ Backend (voir `render.yaml`) :
 - `DATABASE_SSL=false` — désactive SSL vers Postgres (Postgres local / CI uniquement).
 - `SQLITE_PATH` — fichier SQLite (défaut `data/velam.db` ; `:memory:` pour les tests).
 - `RATE_LIMIT_DISABLED=1` — **tests uniquement** : coupe le rate-limit login/register.
+- `TRUST_PROXY` — nombre de proxys devant l'app (défaut 1) : position de l'IP client dans
+  `X-Forwarded-For`, base des limites par IP. À régler d'après la ligne `[proxy]` journalisée au
+  premier appel `/api` après chaque démarrage (nombre d'entrées, jamais les adresses).
+- `PUSH_TIMEOUT_MS` — délai maximal d'un envoi Web Push (défaut 10 000).
 - `TRAINS_*` — module Trains, toutes facultatives (sources SNCF publiques, sans clé) :
   `TRAINS_ENABLED=0` (désactive), `TRAINS_GTFS_URL`, `TRAINS_RT_TRIP_UPDATES_URL`,
   `TRAINS_RT_ALERTS_URL`, `TRAINS_CACHE_DIR` (défaut `data/gtfs`), TTL / délais — voir `docs/TRAINS.md`.
@@ -280,6 +284,16 @@ link `discovery_uri` du flux ne s'ouvrait pas depuis une notification, il n'est 
 (la CSP `script-src 'self'` bloque l'inline), liens passés en `data-*` échappés.
 
 ### Sécurité (backend)
+
+**Web Push** : `POST /api/push/subscribe` n'accepte que les endpoints des services de
+notification des navigateurs (`PUSH_HOSTS` de `routes/push.js` : FCM, Apple, Mozilla, Windows ;
+https, port par défaut) et des clés base64url courtes, et ne stocke que `{ endpoint, keys }` ;
+chaque envoi a un délai maximal (`PUSH_TIMEOUT_MS`) — sinon un compte pourrait faire contacter
+n'importe quelle adresse au serveur ou figer les boucles d'alerte. **Plafonds par compte** :
+50 alertes vélos, 100 favoris (`station_id` ≤ 64, `station_name` ≤ 128), 10 appareils (les plus
+anciens retirés, jamais l'appareil courant), `POST /api/stations/refresh` 5/h ; trains : 30 alertes,
+50 favoris. **Connexion** : 10 tentatives / 15 min par IP, plus 20 échecs / 15 min par compte visé
+(attaques réparties ; les connexions réussies ne comptent pas).
 
 `helmet` avec CSP adaptée au SPA (JS `'self'`+`blob:` pour les workers Mapbox, styles inline
 React, `connectSrc` Mapbox ; polices `'self'` uniquement — Geist auto-hébergée via `@fontsource`). CORS en whitelist. Corps JSON borné à **16 kb**. `express-rate-limit`

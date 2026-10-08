@@ -206,7 +206,7 @@ async function registerUser(api, username = `user${Date.now()}_${++userSeq}`) {
 
 /** Subscription Web Push factice (forme renvoyée par PushManager.subscribe). */
 const fakeSubscription = (id = 'abc') => ({
-  endpoint: `https://push.example.com/send/${id}`,
+  endpoint: `https://fcm.googleapis.com/fcm/send/${id}`,
   expirationTime: null,
   keys: { p256dh: 'cle-p256dh', auth: 'cle-auth' },
 });

@@ -62,6 +62,17 @@ const SESSIONS = [
   { id: "s2", label: "Windows · Edge", created_at: 1, last_seen_at: Date.now() - 86_400_000 * 3, current: false },
 ];
 
+describe("Paramètres — en-tête", () => {
+  test("logotype et slogan tout en haut, avant le titre", async () => {
+    mockApi({ "GET /api/auth/sessions": () => jsonResponse({ ok: true, sessions: SESSIONS }) });
+    renderAt(SECU);
+    const slogan = await screen.findByText("Ton train, ton vélo, dans un instant.");
+    const title = screen.getByRole("heading", { name: "Paramètres" });
+    expect(slogan.compareDocumentPosition(title) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.getAllByRole("img", { name: "Mox" }).length).toBeGreaterThan(0);
+  });
+});
+
 describe("Paramètres — Sécurité", () => {
   test("déconnecter tous les autres appareils : cet appareil garde un jeton neuf", async () => {
     mockApi({

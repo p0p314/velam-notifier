@@ -102,7 +102,7 @@ describe('déclenchement', () => {
     await setBikes(2);
     await checkAlerts(WED_0830);
     assert.equal(sent.length, 1);
-    assert.equal(sent[0].endpoint, 'https://push.example.com/send/tel');
+    assert.equal(sent[0].endpoint, 'https://fcm.googleapis.com/fcm/send/tel');
     assert.equal(sent[0].payload.stationId, '1');
     assert.match(sent[0].payload.body, /^2 vélo/);
   });
@@ -121,7 +121,7 @@ describe('déclenchement', () => {
     await setBikes(0);
     await checkAlerts(WED_0830);
     assert.deepEqual(sent.map((s) => s.endpoint).sort(), [
-      'https://push.example.com/send/pc', 'https://push.example.com/send/tel',
+      'https://fcm.googleapis.com/fcm/send/pc', 'https://fcm.googleapis.com/fcm/send/tel',
     ]);
   });
 });
@@ -177,7 +177,7 @@ describe('robustesse', () => {
     await setBikes(0);
     await checkAlerts(WED_0830);
     const { rows } = await dbc.query('SELECT endpoint FROM push_subscriptions WHERE user_id = ?', [userId]);
-    assert.deepEqual(rows.map((r) => r.endpoint), ['https://push.example.com/send/pc']);
+    assert.deepEqual(rows.map((r) => r.endpoint), ['https://fcm.googleapis.com/fcm/send/pc']);
   });
 
   test('GBFS indisponible → aucune notification, aucune exception', async () => {
@@ -318,7 +318,7 @@ describe('pause globale', () => {
     await setAlertsPause(userId, '2025-09-30');
     await setBikes(0);
     await checkAlerts(WED_0830);
-    assert.deepEqual(sent.map((x) => x.endpoint), ['https://push.example.com/send/autre']);
+    assert.deepEqual(sent.map((x) => x.endpoint), ['https://fcm.googleapis.com/fcm/send/autre']);
   });
 });
 

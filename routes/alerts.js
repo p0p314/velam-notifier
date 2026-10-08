@@ -1,7 +1,7 @@
 // Routes alertes de disponibilité (protégées par JWT) + validation des payloads.
 const express = require('express');
 const { stationCity } = require('../cities');
-const { getAlerts, getAlert, createAlert, updateAlert, deleteAlert, getAlertsPause, setAlertsPause } = require('../db');
+const { getAlerts, getAlert, createAlert, updateAlert, deleteAlert, getAlertsPause, setAlertsPause, countUserAlerts } = require('../db');
 const { nowInTz, addDays } = require('../time');
 const { requireAuth } = require('../auth');
 
@@ -21,6 +21,7 @@ const GROUP_MAX  = 5;   // au-delà, le corps de la notification est tronqué
 const GROUP_NAME_MAX = 40;
 const SEND_TIMES_MAX = 6; // heures d'envoi d'un résumé
 const PAUSE_MAX_DAYS = 365;
+const ALERTS_MAX = 50; // alertes vélos par compte (la boucle de 30 s les évalue toutes)
 const YMD_OK = (v) => typeof v === 'string' && YMD.test(v);
 
 const isInt = (n, min, max) => Number.isInteger(n) && n >= min && n <= max;
@@ -262,6 +263,9 @@ router.post('/api/alerts', requireAuth, async (req, res) => {
     const { fields, errors } = validateAlertPayload(req.body ?? {}, { today: today() });
     if (errors.length) {
       return res.status(400).json({ ok: false, error: `Champs invalides : ${errors.join(', ')}` });
+    }
+    if (await countUserAlerts(req.user.id) >= ALERTS_MAX) {
+      return res.status(400).json({ ok: false, error: `${ALERTS_MAX} alertes vélos au maximum` });
     }
     const alert = await createAlert(req.user.id, fields);
     res.status(201).json({ ok: true, alert });

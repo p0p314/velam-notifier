@@ -16,10 +16,29 @@ const testLimiter = rateLimit({
 
 const router = express.Router();
 
-// Un endpoint Web Push est toujours une URL https:// fournie par le navigateur.
+// Services de notification des navigateurs (Chrome / Android / Edge Chromium / Opera / Samsung :
+// FCM ; Safari : Apple ; Firefox : Mozilla ; Edge historique : Windows). Le serveur n'envoie
+// jamais de requête vers un autre hôte : sans cette liste, un compte pourrait lui faire
+// contacter n'importe quelle adresse (sondage de services, boucle d'alerte bloquée).
+const PUSH_HOSTS = [
+  /^fcm\.googleapis\.com$/,
+  /^(?:[a-z0-9-]+\.)*push\.apple\.com$/,
+  /^(?:[a-z0-9-]+\.)*push\.services\.mozilla\.com$/,
+  /^(?:[a-z0-9-]+\.)*notify\.windows\.com$/,
+];
+
+/** Endpoint Web Push : URL https:// d'un service de notification connu, port par défaut. */
 function isValidEndpoint(endpoint) {
-  return typeof endpoint === 'string' && endpoint.length <= 1024 && endpoint.startsWith('https://');
+  if (typeof endpoint !== 'string' || endpoint.length > 1024) return false;
+  let url;
+  try { url = new URL(endpoint); } catch { return false; }
+  return url.protocol === 'https:' && !url.port && !url.username && !url.password
+    && PUSH_HOSTS.some((re) => re.test(url.hostname));
 }
+
+/** Clés de chiffrement d'une subscription : deux chaînes base64url courtes. */
+const KEY_RE = /^[A-Za-z0-9_-]{8,200}={0,2}$/;
+const isValidKeys = (keys) => !!keys && typeof keys === 'object' && KEY_RE.test(keys.p256dh ?? '') && KEY_RE.test(keys.auth ?? '');
 
 router.get('/api/push/vapid-public-key', (req, res) => {
   res.json({ ok: true, publicKey: getVapidPublicKey() });
@@ -28,10 +47,12 @@ router.get('/api/push/vapid-public-key', (req, res) => {
 router.post('/api/push/subscribe', requireAuth, async (req, res) => {
   try {
     const { subscription } = req.body ?? {};
-    if (!isValidEndpoint(subscription?.endpoint) || typeof subscription.keys !== 'object' || !subscription.keys) {
+    if (!isValidEndpoint(subscription?.endpoint) || !isValidKeys(subscription.keys)) {
       return res.status(400).json({ ok: false, error: 'subscription invalide' });
     }
-    await addSubscription(req.user.id, subscription, req.sessionId);
+    // Seuls l'endpoint et les clés sont conservés (jamais le reste de l'objet envoyé).
+    const clean = { endpoint: subscription.endpoint, keys: { p256dh: subscription.keys.p256dh, auth: subscription.keys.auth } };
+    await addSubscription(req.user.id, clean, req.sessionId);
     res.status(201).json({ ok: true });
   } catch (err) {
     console.error('[POST /api/push/subscribe]', err.message);

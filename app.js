@@ -14,7 +14,26 @@ const ALLOWED_ORIGINS = (process.env.CORS_ORIGIN ?? 'http://localhost:5173,http:
   .filter(Boolean);
 
 const app = express();
-app.set('trust proxy', 1); // derrière le proxy Render → vraie IP client (rate-limit)
+// Nombre de proxys devant l'app (Render) : Express lit l'IP du client à cette position depuis la
+// droite de X-Forwarded-For. Trop bas : tous les clients partagent l'IP du proxy (et donc les
+// limites de tentatives) ; trop haut : un client pourrait forger son IP. TRUST_PROXY (défaut 1),
+// à régler d'après le diagnostic journalisé ci-dessous.
+const TRUST_PROXY = /^\d+$/.test(process.env.TRUST_PROXY ?? '') ? Number(process.env.TRUST_PROXY) : 1;
+app.set('trust proxy', TRUST_PROXY);
+
+// Diagnostic, une fois par démarrage en production et sans aucune adresse : combien de proxys
+// ont ajouté une entrée à X-Forwarded-For (= la bonne valeur de TRUST_PROXY sur une requête
+// normale), et quels en-têtes d'IP client le fournisseur ajoute.
+let proxyChecked = false;
+app.use('/api', (req, res, next) => {
+  if (!proxyChecked && process.env.NODE_ENV === 'production') {
+    proxyChecked = true;
+    const entries = String(req.headers['x-forwarded-for'] ?? '').split(',').filter((s) => s.trim()).length;
+    const extra = ['cf-connecting-ip', 'true-client-ip', 'x-real-ip'].filter((h) => req.headers[h]);
+    console.log(`[proxy] X-Forwarded-For : ${entries} entrée(s) ; trust proxy = ${TRUST_PROXY}${extra.length ? ` ; en-têtes : ${extra.join(', ')}` : ''}`);
+  }
+  next();
+});
 
 // En-têtes de sécurité. CSP adaptée au SPA : JS/CSS bundlés en 'self', styles
 // inline React tolérés, polices Google, API + worker same-origin.

@@ -4,6 +4,15 @@ const { countStations, getStations, getStationCities, saveStations, replaceStati
 const { DEFAULT_CITY, isCity } = require('../cities');
 const { fetchStationInfo, getStationStatus, isFresh } = require('../gbfs');
 const { requireAuth } = require('../auth');
+const rateLimit = require('express-rate-limit');
+
+// Rechargement du référentiel : quelques fois par compte et par heure suffisent.
+const refreshLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, max: 5, standardHeaders: true, legacyHeaders: false,
+  keyGenerator: (req) => `user:${req.user.id}`,
+  skip: () => process.env.RATE_LIMIT_DISABLED === '1',
+  message: { ok: false, error: 'Trop de rechargements, réessayez plus tard.' },
+});
 
 const router = express.Router();
 
@@ -120,7 +129,7 @@ async function refreshStationCatalog(city = null) {
  * Force le rechargement des infos stations depuis l'API GBFS.
  * Protégée : sinon n'importe qui peut déclencher des fetchs GBFS + écritures DB en boucle.
  */
-router.post('/api/stations/refresh', requireAuth, async (req, res) => {
+router.post('/api/stations/refresh', requireAuth, refreshLimiter, async (req, res) => {
   try {
     const city = cityOf(req);
     if (!city) return res.status(400).json({ ok: false, error: 'Ville inconnue' });

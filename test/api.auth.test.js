@@ -148,7 +148,7 @@ test('supprimer son compte efface toutes ses données', async () => {
   await api.post('/api/favorites', { token, body: { station_id: '1', station_name: 'Gare' } });
   await api.post('/api/favorites', { token: other.token, body: { station_id: '1', station_name: 'Gare' } });
   await api.post('/api/alerts', { token, body: { station_id: '1', station_name: 'Gare', time_start: '08:00', time_end: '09:00' } });
-  await api.post('/api/push/subscribe', { token, body: { subscription: { endpoint: 'https://push.example.com/a', keys: { p256dh: 'p', auth: 'a' } } } });
+  await api.post('/api/push/subscribe', { token, body: { subscription: { endpoint: 'https://fcm.googleapis.com/fcm/a', keys: { p256dh: 'cle-p256dh', auth: 'cle-auth' } } } });
 
   assert.equal((await api.delete('/api/auth/me', { token, body: { password: 'faux' } })).status, 403);
   const res = await api.delete('/api/auth/me', { token, body: { password: 'motdepasse1' } });
